@@ -76,13 +76,13 @@ Tras el alta quirúrgica, complicaciones como sangrado, fiebre o dolor no contro
 
 ### Decisión y reporte
 
-- **RF-08 — Motor de decisión determinista.** Reglas clínicas explícitas y configurables (sin LLM) determinan el nivel de riesgo y cuándo alertar. Ejemplos de línea base (⏳ ajustar con el dataset y materiales del 7 de agosto):
+- **RF-08 — Motor de decisión determinista.** Reglas clínicas explícitas — funciones puras con umbrales configurables en YAML, sin LLM ni motor de reglas genérico (ADR-001) — determinan el nivel de riesgo y cuándo alertar. Ejemplos de línea base (⏳ ajustar con el dataset y materiales del 7 de agosto):
   - Dolor > 8 **y** medicación inefectiva → **ALTO**
   - Temperatura > 38.5 °C → **ALTO**
   - Sangrado abundante → **CRÍTICO**
   - Dificultad para respirar → **CRÍTICO**
   - Pérdida de consciencia → **CRÍTICO**
-- **RF-09 — Alerta a personal humano.** Al dispararse una regla ALTO/CRÍTICO, se genera una alerta visible en la consola con paciente, síntomas extraídos, reglas disparadas y transcripción relevante. En nivel CRÍTICO el agente lo comunica al paciente y cierra con instrucción segura.
+- **RF-09 — Alerta a personal humano.** Al dispararse una regla ALTO/CRÍTICO, se genera una alerta visible en la consola con paciente, síntomas extraídos, reglas disparadas y transcripción relevante. En nivel CRÍTICO la respuesta al paciente es un **guion determinista de seguridad** (se descarta la redacción del LLM, ADR-006) y la llamada cierra con instrucción segura.
 - **RF-10 — Resumen estructurado por llamada.** Al finalizar cada conversación se genera un JSON con: paciente, cirugía, duración, síntomas, entidades extraídas, documentos citados, nivel de riesgo, reglas disparadas y recomendación.
 
 ### Consola de administración
@@ -91,7 +91,7 @@ Tras el alta quirúrgica, complicaciones como sangrado, fiebre o dolor no contro
 
 ## 6. Requisitos no funcionales
 
-- **RNF-01 — Reproducibilidad ≤15 min.** `docker compose up` + README con pasos numerados y credenciales de evaluación incluidas. Este es un gate eliminatorio: se ensaya el arranque desde cero en máquina limpia antes de entregar.
+- **RNF-01 — Reproducibilidad ≤15 min.** `docker compose up` con **imágenes preconstruidas publicadas en GHCR** (build local como plan B) + README con pasos numerados y credenciales de evaluación incluidas. Este es un gate eliminatorio: se ensaya el arranque cronometrado desde cero en máquina limpia antes de entregar.
 - **RNF-02 — Latencia de voz.** Objetivo < 1.5 s entre fin de habla del paciente e inicio de respuesta del agente (streaming en STT, LLM y TTS).
 - **RNF-03 — Español colombiano.** Voz TTS con acento colombiano nativo (`es-CO`); prompts y few-shots con regionalismos del dataset.
 - **RNF-04 — Seguridad del paciente y explicabilidad.** El LLM no decide alertas (RF-08); toda salida clínica es auditable (RF-05); ante ambigüedad, el sistema escala en lugar de asumir.
@@ -132,6 +132,6 @@ Explícitamente excluido por el reto:
 |---|---|---|
 | El LLM obligatorio no encaja con el diseño asumido (p. ej., sin streaming o sin API de voz) | Media | ADR-002/003: pipeline STT→LLM→TTS por componentes y adaptador LLM intercambiable; nada asume API realtime nativa |
 | Ventana de 3 días insuficiente | Alta | Esta documentación previa + esqueleto de repo listo; priorizar gates antes que puntos de rúbrica |
-| Latencia de voz alta con el modelo mandatorio | Media | Streaming extremo a extremo; respuestas cortas; frases de relleno ("ajá, cuéntame más") mientras se genera |
+| Latencia de voz alta con el modelo mandatorio | Media | Una sola llamada LLM por turno (ADR-006); streaming extremo a extremo; respuestas cortas; frases de relleno ("ajá, cuéntame más") mientras se genera |
 | Dataset con vocabulario impredecible | Media | Día 1 (7 ago): explorar dataset y ajustar prompts/reglas antes de codificar de más |
 | Fallo del arranque en máquina del evaluador | Baja | RNF-01: ensayo en máquina limpia; Docker Compose sin dependencias del host |

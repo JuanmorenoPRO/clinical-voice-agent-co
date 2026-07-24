@@ -22,7 +22,7 @@ flowchart TB
     subgraph Voz["Pipeline de Voz (Pipecat)"]
         T["Transporte WebRTC"]
         STT["STT streaming (es)"]
-        TTS["TTS es-CO"]
+        TTS["TTS streaming (es)"]
     end
 
     subgraph Backend["Backend (FastAPI)"]
@@ -73,16 +73,17 @@ altavoz (navegador)   ← WebRTC ← TTS streaming  ←  respuesta del LLM
 
 - **Transporte:** WebRTC navegador↔servidor (sin telefonía real, como exige el reto).
 - **Interrupciones (barge-in):** si el paciente habla mientras el agente responde, se cancela el TTS y se procesa la nueva entrada.
-- **Latencia objetivo:** < 1.5 s por turno (RNF-02). STT, LLM y TTS operan en streaming; el TTS comienza con la primera oración generada.
-- **Español colombiano:** STT configurado `es`/`es-CO`; TTS con voz neuronal colombiana nativa (los 5 pts de regionalismo de la rúbrica).
+- **Latencia objetivo:** < 1.5 s por turno (RNF-02). STT, LLM y TTS operan en streaming, el TTS comienza con la primera oración generada, y hay **una sola llamada LLM por turno** (ADR-006) — el presupuesto no sobrevive dos llamadas secuenciales.
+- **Español:** STT configurado `es`/`es-CO`; TTS ElevenLabs `eleven_flash_v2_5` con voz nativa latina/colombiana validada contra el dataset (los 5 pts de regionalismo; plan B: Azure `es-CO`, ver [tech-stack.md](tech-stack.md) y ADR-007).
 
 ## 3. Módulos
 
 ### 3.1 Servicio de Conversación
 - Mantiene el contexto y el turno de la conversación.
 - Hace preguntas adaptativas según lo que reporta el paciente (dolor → escala 0–10; fiebre → temperatura; etc.).
-- Extrae síntomas y entidades de cada turno del paciente (salida estructurada del LLM) y los pasa al Motor de Decisión.
-- Para toda pregunta clínica, consulta al Servicio de Recuperación; **prohibido** responder desde el conocimiento interno del modelo. Sin evidencia suficiente → lo dice y ofrece escalar.
+- **Una sola llamada LLM por turno (ADR-006):** la salida estructurada del modelo contiene `{sintomas, respuesta}` — la extracción de entidades y la redacción de la respuesta salen juntas, no en llamadas separadas.
+- **El Motor de Decisión corre entre el LLM y el TTS:** evalúa `sintomas` antes de emitir audio. Si el nivel es CRÍTICO, la respuesta del LLM **se descarta** y se emite un guion determinista de seguridad (ADR-006).
+- Si el paciente pregunta algo, la evidencia RAG se recupera y se inyecta en la llamada; **prohibido** responder desde el conocimiento interno del modelo. Sin evidencia suficiente → lo dice y ofrece escalar.
 - Prompts como plantillas versionadas en `/prompts` (nunca hardcodeados).
 
 ### 3.2 Servicio de Conocimiento
@@ -104,11 +105,13 @@ Contrato de respuesta:
 ```
 
 - Búsqueda por similitud (pgvector) con umbral de confianza; bajo el umbral → "no tengo evidencia suficiente".
-- Embeddings **multilingües** (el corpus y las consultas son en español) — modelo por confirmar según el LLM obligatorio (⏳, [tech-stack.md](tech-stack.md)).
+- **Sin clasificador previo de turno** (ADR-005): la recuperación corre siempre que el paciente formula una pregunta — pgvector es local y cuesta milisegundos — y el prompt ignora contexto irrelevante. Si el LLM obligatorio soporta tool-calling, el RAG se expone como tool y el propio modelo decide invocarlo.
+- Embeddings **multilingües** (el corpus y las consultas son en español) — modelo por confirmar según el LLM obligatorio (⏳, [tech-stack.md](tech-stack.md)); preferir hosteados (gate de 15 min).
 
 ### 3.4 Motor de Decisión (determinista, sin IA)
-- Reglas configurables (archivo YAML/JSON versionado), evaluadas sobre los síntomas estructurados extraídos por el Servicio de Conversación.
+- Reglas como **funciones Python puras** — una por regla, con nombre y descripción legible — y los **umbrales** (temperatura, escala de dolor) en un YAML pequeño. Deliberadamente **no** es un motor de reglas genérico ni un DSL (ADR-001): la rúbrica premia precisión y explicabilidad, no frameworks.
 - Salida: nivel de riesgo (`NORMAL | ALTO | CRÍTICO`) + reglas disparadas.
+- En CRÍTICO, además selecciona el **guion determinista de seguridad** que reemplaza la respuesta del LLM (ADR-006).
 - 100 % testeable con pruebas unitarias — apunta directo a los 15 pts de "lógica de decisión".
 - ⏳ Las reglas de línea base (ver PRD RF-08) se calibran con el dataset del 7 de agosto.
 
@@ -128,6 +131,7 @@ Al cerrar la llamada genera el reporte estructurado (RF-10):
 - Documentos: subir PDF, eliminar, chunks, estado de embeddings, última actualización.
 - Conversaciones: historial, transcripción, resumen estructurado.
 - Alertas y log de decisiones: reglas disparadas, nivel de riesgo, traza por respuesta.
+- Las alertas se refrescan por **polling** (cada pocos segundos) — sin infraestructura WebSocket adicional para esto.
 
 ## 4. Flujo de decisión del agente
 
@@ -136,24 +140,28 @@ Al cerrar la llamada genera el reporte estructurado (RF-10):
 ```mermaid
 flowchart TB
     A["Agente saluda e inicia chequeo"] --> B["Paciente responde"]
-    B --> C["STT + extracción de síntomas<br/>(salida estructurada)"]
-    C --> D{"¿Pregunta clínica<br/>del paciente?"}
-    D -- "Sí" --> E["RAG: recuperar evidencia"]
-    E --> F{"¿Confianza ≥ umbral?"}
-    F -- "Sí" --> G["Responder citando fuente"]
-    F -- "No" --> H["Decir que no hay evidencia<br/>y ofrecer escalar"]
-    D -- "No" --> I["Motor de Decisión<br/>(reglas deterministas)"]
-    G --> I
-    H --> I
-    I --> J{"Nivel de riesgo"}
-    J -- "CRÍTICO" --> K["Alertar a enfermería YA<br/>+ instrucción segura al paciente<br/>+ cierre de llamada"]
-    J -- "ALTO" --> L["Crear alerta en consola<br/>+ continuar con preguntas dirigidas"]
-    J -- "NORMAL" --> M{"¿Chequeo completo?"}
-    L --> M
-    M -- "No" --> N["Siguiente pregunta adaptativa"] --> B
-    M -- "Sí" --> O["Despedida"] --> P["Resumen estructurado<br/>+ persistir traza completa"]
-    K --> P
+    B --> C["STT streaming"]
+    C --> D{"¿El paciente<br/>pregunta algo?"}
+    D -- "Sí" --> E["RAG: recuperar evidencia<br/>(doc, página, chunk, score)"]
+    D -- "No" --> F
+    E --> F["Llamada LLM ÚNICA<br/>entrada: turno + contexto + evidencia RAG<br/>salida: {sintomas, respuesta}"]
+    F --> G["Motor de Decisión<br/>(funciones puras + umbrales YAML)"]
+    G --> H{"Nivel de riesgo"}
+    H -- "CRÍTICO" --> I["DESCARTAR respuesta del LLM<br/>Emitir guion determinista de seguridad<br/>+ alerta a enfermería + cierre de llamada"]
+    H -- "ALTO" --> J["Crear alerta en consola<br/>+ emitir respuesta (TTS)"]
+    H -- "NORMAL" --> K["Emitir respuesta (TTS)"]
+    J --> L{"¿Chequeo completo?"}
+    K --> L
+    L -- "No" --> M["Siguiente pregunta adaptativa"] --> B
+    L -- "Sí" --> N["Despedida"] --> O["Resumen estructurado<br/>+ persistir traza completa"]
+    I --> O
 ```
+
+Notas del flujo:
+
+- La extracción de síntomas y la respuesta salen de **una sola llamada LLM** (ADR-006); el Motor de Decisión corre **antes** del TTS, de modo que ninguna respuesta llega al paciente sin pasar por las reglas.
+- Si la evidencia recuperada no supera el umbral de confianza, la respuesta generada declara explícitamente que no hay evidencia suficiente y ofrece escalar (ADR-005).
+- En CRÍTICO no se confía ni la redacción al LLM: el guion de seguridad es texto fijo, revisado y testeable.
 
 ## 5. Modelo de datos (esencial)
 
@@ -163,14 +171,13 @@ flowchart TB
 | `documents` | Documento, estado de indexación, nº chunks, timestamps |
 | `chunks` | Texto, embedding (pgvector), documento, página |
 | `conversations` | Llamada: paciente, inicio/fin, estado |
-| `turns` | Turno a turno: audio→texto, respuesta, latencias |
-| `traces` | Por respuesta clínica: pregunta, chunks recuperados, confianza, reglas disparadas, respuesta final (RF-05) |
+| `turns` | Turno a turno: transcripción, respuesta emitida, latencias **y traza completa** — chunks recuperados (doc, página, chunk_id, score), confianza, reglas evaluadas/disparadas, respuesta final y override crítico si aplicó (RF-05) |
 | `alerts` | Nivel, reglas, contexto, estado de atención |
 | `summaries` | JSON del resumen estructurado por llamada |
 
 ## 6. Trazabilidad end-to-end
 
-Cada respuesta clínica persiste en `traces`:
+Cada respuesta clínica persiste en su turno (`turns`):
 
 ```
 pregunta → chunks recuperados (doc, página, chunk_id, score) → confianza
@@ -184,23 +191,29 @@ La consola permite auditar cualquier respuesta hasta su fuente. Esto cubre RF-05
 ```
 /apps
   /frontend        # Next.js: consola admin + cliente de llamada
-  /backend         # FastAPI: servicios + pipeline de voz
-/packages
-  /rag             # ingesta, chunking, embeddings, retrieval
-  /decision_engine # reglas deterministas + tests
-  /shared_types    # contratos (Pydantic / TypeScript)
+                   #   (los ~5 tipos TS que espeja del backend, escritos a mano)
+  /backend         # FastAPI: UNA sola app con módulos internos
+    /app
+      /voice       # pipeline Pipecat (transporte, STT, TTS, turnos)
+      /rag         # ingesta, chunking, embeddings, retrieval
+      /decision    # reglas puras + umbrales YAML + tests
+      /summary     # resúmenes estructurados
 /prompts           # plantillas de prompts versionadas
 /docs              # este directorio
+seed.py            # carga dataset (Delta Share) + PDFs de ejemplo
 docker-compose.yml
 README.md          # arranque en ≤15 min (gate G2)
 LICENSE            # MIT (obligatorio, raíz)
 ```
 
+Deliberadamente **sin `/packages` compartidos** (ADR-008): la modularidad que evalúa la rúbrica se logra con límites de módulo dentro de una app, sin la fricción de paquetes instalables ni codegen de tipos para un proyecto de una persona y 3 días.
+
 ## 8. Despliegue y reproducibilidad
 
 - `docker compose up` levanta: frontend, backend (incluye pipeline de voz), PostgreSQL+pgvector.
+- **Imágenes preconstruidas en GHCR (ADR-009):** el compose de evaluación descarga imágenes ya publicadas en GitHub Container Registry en lugar de compilar — el gate de 15 min se gana en el registry, no en el README. Build desde fuente documentado como plan B. Ensayo cronometrado en máquina limpia el día 3.
 - `.env.example` documentado; credenciales de evaluación incluidas en la entrega (lo permite el reto).
-- Semilla de datos: script que carga pacientes del dataset (⏳ Delta Share, cliente `delta-sharing`) y 1–2 PDFs clínicos de ejemplo, para que el evaluador tenga una demo funcional inmediata.
+- Semilla de datos: **`seed.py`** carga pacientes del dataset (⏳ Delta Share, cliente `delta-sharing`) y 1–2 PDFs clínicos de ejemplo, para que el evaluador tenga una demo funcional inmediata.
 
 ## 9. ⏳ Decisiones abiertas hasta el 7 de agosto
 

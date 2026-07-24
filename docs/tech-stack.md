@@ -17,14 +17,14 @@
 | **Orquestación de voz** | [Pipecat](https://github.com/pipecat-ai/pipecat) | LiveKit Agents, TEN, FastRTC | 🔵 Propuesto | Python, open source, v1.0 (abr 2026). Pipeline-first: STT/LLM/TTS intercambiables en una línea. Mejor experiencia de desarrollo local (clave para 3 días). LiveKit gana en telefonía/escala — irrelevante aquí (sin telefonía real). |
 | **Transporte navegador** | WebRTC (transporte de Pipecat + SDK JS) | WebSockets crudos | 🔵 Propuesto | Cumple "llamada vía navegador" del reto. |
 | **STT (español)** | Deepgram (streaming, `es`) | AssemblyAI, Whisper (local), Azure Speech STT | 🔵 Propuesto | Streaming de baja latencia con buen soporte de español. Verificar el 7 de agosto rendimiento con coloquialismos del dataset; plan B: Azure STT `es-CO`. |
-| **TTS (español colombiano)** | Azure Speech — `es-CO-SalomeNeural` (F) / `es-CO-GonzaloNeural` (M) | ElevenLabs multilingüe, Cartesia | 🔵 Propuesto | Voces colombianas NATIVAS que manejan registro paisa y regionalismos → apunta directo a los 5 pts de naturalidad. ElevenLabs suena bien pero acento menos marcado es-CO. |
-| **Embeddings** | ⏳ Según LLM obligatorio | Voyage AI (`voyage-3`), OpenAI (`text-embedding-3-large`), `multilingual-e5-large` (local, gratis) | ⏳ Bloqueado | Debe ser multilingüe (corpus en español). Si el LLM es Anthropic → Voyage (partner oficial). e5 local elimina un proveedor y costo. |
+| **TTS (español)** | ElevenLabs — modelo `eleven_flash_v2_5` | Azure Speech `es-CO-SalomeNeural`/`GonzaloNeural` (plan B), Cartesia | ✅ Confirmado | Decisión de Juan. ~75 ms de latencia, streaming, integración nativa con Pipecat. ⚠️ Elegir una voz NATIVA latina/colombiana de la Voice Library — las voces por defecto arrastran acento inglés al español — y validarla con vocabulario del dataset (7 ago). Si el acento no convence, plan B: Azure `es-CO` (voces colombianas nativas) por los 5 pts de regionalismo. NO usar `eleven_v3` (calidad expresiva pero latencia alta, no apto para tiempo real). |
+| **Embeddings** | ⏳ Según LLM obligatorio | Voyage AI (`voyage-3`), OpenAI (`text-embedding-3-large`), `multilingual-e5-large` (local, gratis) | ⏳ Bloqueado | Debe ser multilingüe (corpus en español). **Preferir hosteados:** un modelo local implica ~2 GB de descarga que amenazan el gate de arranque ≤15 min en la red del evaluador. Si el LLM es Anthropic → Voyage (partner oficial). |
 | **Backend** | FastAPI + Python 3.12 | — | 🔵 Propuesto | Pipecat es Python; un solo lenguaje en backend. Tipado + Pydantic + inyección de dependencias. |
 | **Base de datos** | PostgreSQL 16 | — | 🔵 Propuesto | Única BD para todo (relacional + vectores). |
 | **Vector store** | pgvector | Qdrant, Chroma, Weaviate | 🔵 Propuesto | Un contenedor menos, borrado transaccional de vectores (gate G5), suficiente a esta escala (ADR-004). |
 | **Frontend / Consola** | Next.js + TypeScript + TailwindCSS | Streamlit (más rápido, menos pulido) | 🔵 Propuesto | Consola admin + cliente de llamada en una sola app. |
-| **Infra local** | Docker Compose | — | 🔵 Propuesto | Gate G2: arranque ≤15 min. |
-| **Dataset** | Cliente `delta-sharing` (Python) | — | ⏳ Bloqueado | Credenciales Delta Share llegan el 7 de agosto. |
+| **Infra local** | Docker Compose + imágenes preconstruidas en GHCR | — | 🔵 Propuesto | Gate G2: el compose de evaluación **descarga** imágenes ya construidas (GitHub Container Registry) en vez de compilarlas; build desde fuente documentado como plan B. Ensayo cronometrado en máquina limpia antes de entregar. |
+| **Dataset** | Cliente `delta-sharing` (Python) | — | ⏳ Bloqueado | Credenciales Delta Share llegan el 7 de agosto. Alcance: **un script único `seed.py`** que carga pacientes y PDFs de ejemplo — no construir un "módulo de ingesta". |
 | **Parseo de PDF** | PyMuPDF | pypdf, unstructured | 🔵 Propuesto | Rápido y conserva nº de página (necesario para trazabilidad RF-05). |
 | **Repo / licencia** | GitHub público + MIT en raíz | — | ✅ Confirmado | Obligatorio por el reto. |
 
@@ -33,6 +33,7 @@
 | Fecha | Cambio |
 |---|---|
 | 2026-07-24 | Versión inicial con propuestas. LLM, embeddings y dataset bloqueados hasta el 7 de agosto. |
+| 2026-07-24 | Revisión de arquitectura aplicada: **TTS confirmado → ElevenLabs `eleven_flash_v2_5`** (decisión de Juan; Azure `es-CO` pasa a plan B). Embeddings hosteados preferidos (gate 15 min). Infra: imágenes preconstruidas en GHCR. Dataset acotado a `seed.py`. Ver ADR-006 a ADR-009. |
 
 ## Checklist del 7 de agosto
 
@@ -40,4 +41,5 @@
 - [ ] Elegir embeddings compatibles → actualizar fila **Embeddings**
 - [ ] Probar credenciales Delta Share y revisar esquema del dataset → actualizar fila **Dataset**
 - [ ] Validar STT propuesto contra el vocabulario real del dataset
+- [ ] Elegir y validar la voz de ElevenLabs (nativa latina/colombiana, sin acento inglés) con frases del dataset; si no convence, activar plan B Azure `es-CO`
 - [ ] Pasar cada fila decidida a `✅ Confirmado`
