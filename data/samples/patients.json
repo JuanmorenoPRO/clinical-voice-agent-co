@@ -1,0 +1,23 @@
+[
+  {
+    "name": "María Restrepo",
+    "surgery": "Colecistectomía laparoscópica",
+    "surgery_date": "2026-08-06",
+    "phone": "+57 300 000 0001",
+    "extra": { "edad": 54, "ciudad": "Medellín" }
+  },
+  {
+    "name": "Jhon Fredy Gómez",
+    "surgery": "Apendicectomía",
+    "surgery_date": "2026-08-06",
+    "phone": "+57 300 000 0002",
+    "extra": { "edad": 29, "ciudad": "Bello" }
+  },
+  {
+    "name": "Luz Dary Ramírez",
+    "surgery": "Cesárea",
+    "surgery_date": "2026-08-05",
+    "phone": "+57 300 000 0003",
+    "extra": { "edad": 31, "ciudad": "Envigado" }
+  }
+]

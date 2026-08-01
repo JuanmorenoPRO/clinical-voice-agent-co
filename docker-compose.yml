@@ -1,0 +1,51 @@
+# Levanta todo el stack: PostgreSQL+pgvector, backend (FastAPI + pipeline de voz),
+# frontend (Next.js). Objetivo: `docker compose up` y demo en ≤15 min (gate G2).
+#
+# ⏳ 7 de agosto: publicar imágenes preconstruidas en GHCR y que el compose de
+# evaluación las DESCARGUE en vez de compilar (ADR-009). Este compose compila
+# desde fuente (plan B documentado).
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: clinical
+      POSTGRES_PASSWORD: clinical
+      POSTGRES_DB: clinical
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clinical"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    env_file: .env
+    environment:
+      # Dentro de la red de compose, la BD es el servicio `db`.
+      DATABASE_URL: postgresql+psycopg://clinical:clinical@db:5432/clinical
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

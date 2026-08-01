@@ -1,0 +1,29 @@
+# Backend — Clinical Voice Agent (FastAPI + Python 3.12)
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-multipart==0.0.20
+
+# Base de datos: PostgreSQL + pgvector (ADR-004)
+SQLAlchemy==2.0.36
+psycopg[binary]==3.2.3
+pgvector==0.3.6
+
+# RAG
+voyageai==0.3.2          # embeddings (simula Databricks en el test)
+PyMuPDF==1.25.1          # parseo de PDF conservando nº de página (RF-05)
+PyYAML==6.0.2            # umbrales del motor de decisión
+
+# LLM provisional (ADR-002). El modelo obligatorio se confirma el 7 de agosto.
+anthropic==0.44.0
+
+# Voz (Pipecat). Se instalan pero el modo voz se activa con credenciales.
+# ⏳ Descomentar/ajustar al integrar el transporte WebRTC el 7 de agosto.
+# pipecat-ai[deepgram,elevenlabs,webrtc]==0.0.60
+
+# Dataset real (⏳ 7 de agosto, Delta Share)
+# delta-sharing==1.3.0
+
+# Tests
+pytest==8.3.4

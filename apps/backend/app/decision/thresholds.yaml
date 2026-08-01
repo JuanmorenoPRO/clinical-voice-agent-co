@@ -1,0 +1,7 @@
+# Umbrales del Motor de Decisión (RF-08).
+# Deliberadamente NO es un motor de reglas genérico ni un DSL (ADR-001):
+# los umbrales viven aquí, la lógica en rules.py como funciones puras.
+# ⏳ 7 de agosto: calibrar estos valores con el dataset real (ADR-013).
+
+pain_high: 8            # dolor > 8 (y medicación inefectiva) -> ALTO
+temperature_high_c: 38.5  # temperatura > 38.5 °C -> ALTO
