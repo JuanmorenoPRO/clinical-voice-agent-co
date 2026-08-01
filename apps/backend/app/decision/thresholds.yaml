@@ -3,5 +3,5 @@
 # los umbrales viven aquí, la lógica en rules.py como funciones puras.
 # ⏳ 7 de agosto: calibrar estos valores con el dataset real (ADR-013).
 
-pain_high: 8            # dolor > 8 (y medicación inefectiva) -> ALTO
+pain_high: 7            # dolor > 7 (y medicación inefectiva) -> ALTO
 temperature_high_c: 38.5  # temperatura > 38.5 °C -> ALTO
