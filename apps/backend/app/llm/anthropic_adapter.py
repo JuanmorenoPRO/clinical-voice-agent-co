@@ -5,10 +5,13 @@ probable — pero ADR-002 exige que nada fuera de este archivo lo asuma. Cuando 
 anuncie el modelo obligatorio, se agrega su adaptador junto a este y se cambia
 LLM_PROVIDER.
 
-Usa salida estructurada (`output_config.format`) para forzar el esquema
-{sintomas, respuesta} en una sola llamada por turno (ADR-006). El modelo por
-defecto (`claude-opus-4-8`) es configurable; para el presupuesto de latencia de
-voz (<1.5s, RNF-02) puede convenir un modelo más rápido vía ANTHROPIC_MODEL.
+La salida estructurada {sintomas, respuesta} (una sola llamada por turno, ADR-006)
+se obtiene pidiendo JSON en el prompt y validándolo contra el esquema, con
+reintento si el modelo no cumple. Es la ruta de degradación que prevé ADR-002 y
+funciona en cualquier versión del SDK `anthropic` (no depende de `output_config`,
+que solo existe en SDKs recientes). El modelo por defecto (`claude-opus-4-8`) es
+configurable; para el presupuesto de latencia de voz (<1.5s, RNF-02) puede
+convenir un modelo más rápido vía ANTHROPIC_MODEL.
 """
 from __future__ import annotations
 
@@ -19,39 +22,39 @@ import anthropic
 from ..config import get_settings
 from ..schemas import LLMTurnOutput
 
-# Esquema JSON de la salida estructurada del turno. Coincide con LLMTurnOutput.
-_TURN_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "sintomas": {
-            "type": "object",
-            "properties": {
-                "pain_level": {"type": ["integer", "null"]},
-                "medication_effective": {"type": ["boolean", "null"]},
-                "temperature_c": {"type": ["number", "null"]},
-                "fever": {"type": ["boolean", "null"]},
-                "heavy_bleeding": {"type": ["boolean", "null"]},
-                "breathing_difficulty": {"type": ["boolean", "null"]},
-                "loss_of_consciousness": {"type": ["boolean", "null"]},
-                "other": {"type": "array", "items": {"type": "string"}},
-            },
-            "required": [
-                "pain_level",
-                "medication_effective",
-                "temperature_c",
-                "fever",
-                "heavy_bleeding",
-                "breathing_difficulty",
-                "loss_of_consciousness",
-                "other",
-            ],
-            "additionalProperties": False,
-        },
-        "respuesta": {"type": "string"},
-    },
-    "required": ["sintomas", "respuesta"],
-    "additionalProperties": False,
+# Instrucción de formato que se añade al system prompt. Coincide con LLMTurnOutput.
+_JSON_INSTRUCTION = """
+Responde ÚNICAMENTE con un objeto JSON válido (sin texto adicional, sin ```),
+con exactamente esta forma:
+{
+  "sintomas": {
+    "pain_level": <entero 0-10 o null>,
+    "medication_effective": <true/false o null>,
+    "temperature_c": <número o null>,
+    "fever": <true/false o null>,
+    "heavy_bleeding": <true/false o null>,
+    "breathing_difficulty": <true/false o null>,
+    "loss_of_consciousness": <true/false o null>,
+    "other": [<strings>]
+  },
+  "respuesta": "<lo que le dirías al paciente en voz alta>"
 }
+Deja en null lo que el paciente no mencionó; no inventes valores.
+"""
+
+
+def _extract_text(response) -> str:
+    return next(b.text for b in response.content if b.type == "text")
+
+
+def _strip_fences(text: str) -> str:
+    text = text.strip()
+    if text.startswith("```"):
+        # quita ```json ... ``` si el modelo los añade igualmente
+        text = text.split("```", 2)[1]
+        if text.lstrip().lower().startswith("json"):
+            text = text.lstrip()[4:]
+    return text.strip("` \n")
 
 
 class AnthropicAdapter:
@@ -60,22 +63,28 @@ class AnthropicAdapter:
         self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
         self._model = settings.anthropic_model
 
-    def turn(self, *, system_prompt: str, user_prompt: str) -> LLMTurnOutput:
+    def _complete(self, *, system_prompt: str, user_prompt: str, max_tokens: int = 1024) -> str:
         response = self._client.messages.create(
             model=self._model,
-            max_tokens=1024,
+            max_tokens=max_tokens,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
-            output_config={"format": {"type": "json_schema", "schema": _TURN_SCHEMA}},
         )
-        text = next(b.text for b in response.content if b.type == "text")
-        return LLMTurnOutput.model_validate(json.loads(text))
+        return _extract_text(response)
+
+    def turn(self, *, system_prompt: str, user_prompt: str) -> LLMTurnOutput:
+        system = system_prompt + "\n\n" + _JSON_INSTRUCTION
+        raw = self._complete(system_prompt=system, user_prompt=user_prompt)
+        try:
+            return LLMTurnOutput.model_validate(json.loads(_strip_fences(raw)))
+        except (json.JSONDecodeError, ValueError):
+            # Reintento con corrección explícita (ADR-002).
+            retry_prompt = (
+                f"{user_prompt}\n\nTu respuesta anterior no fue JSON válido con el "
+                "esquema pedido. Devuelve SOLO el objeto JSON."
+            )
+            raw = self._complete(system_prompt=system, user_prompt=retry_prompt)
+            return LLMTurnOutput.model_validate(json.loads(_strip_fences(raw)))
 
     def summarize(self, *, system_prompt: str, user_prompt: str) -> str:
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=1024,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        return next(b.text for b in response.content if b.type == "text")
+        return self._complete(system_prompt=system_prompt, user_prompt=user_prompt)
