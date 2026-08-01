@@ -1,0 +1,6 @@
+# Dependencias del MODO DE VOZ (Pipecat 1.x). Pesadas — se instalan solo si el
+# build lo pide (Dockerfile ARG INSTALL_VOICE=true). El modo texto NO las necesita.
+#
+# Incluye: transporte SmallWebRTC (aiortc/av), Deepgram STT y ElevenLabs TTS.
+# (Deepgram hace el endpointing/VAD server-side, así que no se necesita Silero local.)
+pipecat-ai[deepgram,elevenlabs,webrtc]>=1.4.0,<2

@@ -26,6 +26,9 @@ services:
     build:
       context: .
       dockerfile: apps/backend/Dockerfile
+      args:
+        # Modo texto por defecto (rápido). Voz: INSTALL_VOICE=true docker compose up --build
+        INSTALL_VOICE: "${INSTALL_VOICE:-false}"
     env_file: .env
     environment:
       # Dentro de la red de compose, la BD es el servicio `db`.

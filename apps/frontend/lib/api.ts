@@ -2,8 +2,9 @@ import type { AlertRow, DocumentRow, TurnResponse } from "./types";
 
 // El backend corre en :8000. En el navegador usamos localhost; configurable
 // vía NEXT_PUBLIC_API_URL para el despliegue.
-const API =
+export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API = API_BASE;
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
