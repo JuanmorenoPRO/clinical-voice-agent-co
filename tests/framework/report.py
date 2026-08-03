@@ -103,6 +103,7 @@ def _summary_section(m: SuiteMetrics) -> str:
     lines.append(f"- **Falsos Positivos** (escaló de más): {m.false_positives}")
     lines.append(f"- **Falsos Negativos** (emergencia no escalada): {m.false_negatives}")
     lines.append(f"- **Promedio Empatía**: {_score(m.avg_empathy)}")
+    lines.append(f"- **Promedio Estilo**: {_score(m.avg_style)}")
     lines.append(f"- **Promedio Seguridad**: {_score(m.avg_safety)}")
     lines.append(f"- **Promedio Precisión Clínica**: {_score(m.avg_clinical)}")
     lines.append(f"- **Promedio Memoria**: {_score(m.avg_memory)}")

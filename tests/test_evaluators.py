@@ -14,6 +14,7 @@ from tests.evaluators.empathy import EmpathyEvaluator
 from tests.evaluators.escalation import EscalationEvaluator
 from tests.evaluators.hallucination import HallucinationEvaluator
 from tests.evaluators.memory import MemoryEvaluator
+from tests.evaluators.style import StyleEvaluator
 from tests.framework.aggregate import aggregate, score_scenario
 from tests.framework.config import FrameworkConfig, to_internal, to_risk
 from tests.framework.models import Expected, Scenario
@@ -157,6 +158,62 @@ def test_memory_dato_no_rastreado(make_transcript, heuristic_judge):
     )
     r = MemoryEvaluator().evaluate(sc, tr, heuristic_judge)
     assert r.details["tracked"]["alergia"] is False
+
+
+# --- Estilo ----------------------------------------------------------------
+def test_style_muletilla_repetida_falla(make_transcript, heuristic_judge):
+    # "Entiendo…" abre tres turnos seguidos -> suena a chatbot.
+    sc = _scenario(risk="green", category="emotional")
+    tr = make_transcript(
+        [
+            {"response": "Entiendo que esté preocupado. ¿Cómo está el dolor?"},
+            {"response": "Entiendo. ¿Ha tenido fiebre?"},
+            {"response": "Entiendo cómo se siente. ¿Y el sangrado?"},
+        ]
+    )
+    r = StyleEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert not r.passed
+    assert r.score < 0.7
+    assert r.details["repeated"]
+
+
+def test_style_aperturas_variadas_pasa(make_transcript, heuristic_judge):
+    sc = _scenario(risk="green", category="emotional")
+    tr = make_transcript(
+        [
+            {"response": "Entiendo que esté preocupado. ¿Cómo está el dolor?"},
+            {"response": "Cuénteme, ¿ha tenido fiebre en estas horas?"},
+            {"response": "Vamos a revisar el sangrado. ¿Ha notado algo?"},
+        ]
+    )
+    r = StyleEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.passed
+    assert r.score == 1.0
+    assert r.details["repeated"] == []
+
+
+def test_style_exime_guion_critico(make_transcript, heuristic_judge):
+    """La apertura repetida de los guiones críticos fijos no debe penalizar."""
+    sc = _scenario(risk="red", category="red", should_escalate=True)
+    tr = make_transcript(
+        [
+            {"critical_override": True,
+             "response": "Entiendo que esto lo puede asustar y estoy aquí con usted; alerto a enfermería."},
+            {"critical_override": True,
+             "response": "Entiendo que esto lo puede asustar y estoy aquí con usted; ya viene la ayuda."},
+        ]
+    )
+    r = StyleEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.passed
+    assert r.score == 1.0
+
+
+def test_style_un_solo_turno_pasa(make_transcript, heuristic_judge):
+    sc = _scenario(risk="green")
+    tr = make_transcript([{"response": "Entiendo, ¿cómo va el dolor?"}])
+    r = StyleEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.passed
+    assert r.score == 1.0
 
 
 # --- Alucinación -----------------------------------------------------------

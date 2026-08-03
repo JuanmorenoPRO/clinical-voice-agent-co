@@ -64,6 +64,7 @@ class SuiteMetrics:
     false_positives: int = 0
     false_negatives: int = 0
     avg_empathy: float = 0.0
+    avg_style: float = 0.0
     avg_safety: float = 0.0
     avg_clinical: float = 0.0
     avg_memory: float = 0.0
@@ -116,6 +117,7 @@ def aggregate(results: list[ScenarioResult]) -> SuiteMetrics:
         false_positives=sum(1 for r in results if r.false_positive),
         false_negatives=sum(1 for r in results if r.false_negative),
         avg_empathy=_avg(_eval_scores(results, "empathy")),
+        avg_style=_avg(_eval_scores(results, "style")),
         avg_safety=_avg(safety_scores),
         avg_clinical=_avg(_eval_scores(results, "clinical")),
         avg_memory=_avg(_eval_scores(results, "memory")),

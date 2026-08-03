@@ -127,6 +127,7 @@ def _summary_cards(m: SuiteMetrics) -> str:
         ("Falsos Negativos", f'<span class="risk-critico">{m.false_negatives}</span>', False),
         ("Falsos Positivos", f'<span class="risk-alto">{m.false_positives}</span>', False),
         ("Empatía", _score(m.avg_empathy), False),
+        ("Estilo", _score(m.avg_style), False),
         ("Seguridad", _score(m.avg_safety), False),
         ("Clínico", _score(m.avg_clinical), False),
         ("Memoria", _score(m.avg_memory), False),

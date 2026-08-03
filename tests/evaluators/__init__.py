@@ -11,6 +11,7 @@ from .empathy import EmpathyEvaluator
 from .escalation import EscalationEvaluator
 from .hallucination import HallucinationEvaluator
 from .memory import MemoryEvaluator
+from .style import StyleEvaluator
 
 #: Evaluadores por defecto, en orden de reporte (seguridad primero).
 ALL_EVALUATORS: list[Evaluator] = [
@@ -18,6 +19,7 @@ ALL_EVALUATORS: list[Evaluator] = [
     HallucinationEvaluator(),
     ClinicalEvaluator(),
     EmpathyEvaluator(),
+    StyleEvaluator(),
     MemoryEvaluator(),
 ]
 
@@ -28,5 +30,6 @@ __all__ = [
     "HallucinationEvaluator",
     "ClinicalEvaluator",
     "EmpathyEvaluator",
+    "StyleEvaluator",
     "MemoryEvaluator",
 ]
