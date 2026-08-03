@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
 from .db import init_db
-from .routers import console, conversation, knowledge
+from .routers import console, conversation, knowledge, voice
 
 settings = get_settings()
 
@@ -27,6 +27,7 @@ app.add_middleware(
 app.include_router(conversation.router)
 app.include_router(knowledge.router)
 app.include_router(console.router)
+app.include_router(voice.router)  # señalización WebRTC (Pipecat se importa perezosamente)
 
 
 @app.on_event("startup")

@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from ..decision import engine
 from ..llm.factory import get_llm
-from ..models import Alert, Conversation, Turn
+from ..models import Alert, Conversation, Patient, Turn
 from ..prompts_loader import load_prompt
 from ..rag import retrieve as rag
 from ..schemas import RagResult, Symptoms, TurnResponse
@@ -113,10 +113,22 @@ def _build_user_prompt(
 
     if evidence is not None:
         if evidence.has_evidence:
+            docs = sorted({s.document for s in evidence.sources})
+            # Le damos al modelo los documentos fuente y le pedimos verificar la
+            # RELEVANCIA temática: la similitud vectorial no distingue "mismo
+            # dominio, procedimiento distinto" (p. ej. una pregunta de cesárea
+            # recupera con alta similitud docs de apendicectomía). El prompt debe
+            # ignorar contexto irrelevante (ADR-005).
             parts.append(
-                "Evidencia recuperada de los documentos (úsala para fundamentar "
-                "la respuesta; NO respondas desde tu conocimiento interno):\n"
-                f"{evidence.answer}"
+                "Evidencia recuperada de estos documentos: "
+                + ", ".join(docs)
+                + ".\nEsos documentos tratan procedimientos o temas específicos. "
+                "Úsalos SOLO si corresponden a lo que pregunta el paciente (mismo "
+                "procedimiento o tema). Si la pregunta es sobre un procedimiento o "
+                "tema que esos documentos NO cubren, NO respondas desde tu "
+                "conocimiento interno: di que no tienes evidencia específica sobre "
+                "eso y ofrece escalar a enfermería.\n\nContenido:\n"
+                + evidence.answer
             )
         else:
             parts.append(
@@ -139,10 +151,16 @@ def process_turn(
     conv = _get_or_create_conversation(session, conversation_id, patient_id)
     prior = _prior_turns(session, conv.id)
 
-    # 1) RAG (solo si el paciente pregunta algo).
+    # 1) RAG (solo si el paciente pregunta algo). Si conocemos al paciente,
+    #    filtramos la evidencia por su procedimiento (grounding determinista).
     evidence: RagResult | None = None
     if _looks_like_question(text):
-        evidence = rag.retrieve(session, text)
+        procedure = None
+        if conv.patient_id:
+            patient = session.get(Patient, conv.patient_id)
+            if patient:
+                procedure = patient.surgery
+        evidence = rag.retrieve(session, text, procedure=procedure)
 
     # 2) Una sola llamada LLM con el HISTORIAL como contexto: {sintomas, respuesta}.
     llm = get_llm()

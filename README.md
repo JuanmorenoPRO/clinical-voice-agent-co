@@ -105,6 +105,57 @@ curl -s localhost:8000/conversation/turn -H 'content-type: application/json' \
   -d '{"text":"Estoy sangrando mucho, no para"}' | jq
 ```
 
+## Modo de voz real (Pipecat + Deepgram + ElevenLabs)
+
+La arquitectura del reto (ADR-003/007): navegador ↔ WebRTC → Deepgram STT (es) →
+**la misma lógica clínica** (`process_turn`: RAG + decisión + guion CRÍTICO) →
+ElevenLabs TTS (voz es-CO). El modo consola de texto se conserva en paralelo.
+
+Las deps de voz son pesadas, así que van **detrás de un flag** (`INSTALL_VOICE`)
+para no afectar el arranque del modo texto.
+
+**Claves en `.env`:**
+```
+DEEPGRAM_API_KEY=...        # ya lo tienes
+ELEVENLABS_API_KEY=...      # permisos: Text to Speech + Voices (read)
+ELEVENLABS_VOICE_ID=...     # voz NATIVA es-CO/latina de la Voice Library
+```
+
+### ⚠️ La voz NO funciona con el backend en Docker en Mac
+
+WebRTC usa **puertos UDP** aparte del HTTP para el audio; Docker Desktop en Mac no
+los reenvía, así que la llamada se queda "Estableciendo conexión…" y nunca conecta
+(el ICE no llega). **Para el modo de voz, corre el backend de forma NATIVA** (la
+base de datos y el frontend pueden seguir en Docker):
+
+```bash
+# 1) Solo la base de datos en Docker
+docker compose up -d db
+
+# 2) Backend NATIVO con deps de voz
+cd apps/backend
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt -r requirements-voice.txt
+cd ../.. && python seed.py                       # siembra (si no lo has hecho)
+cd apps/backend
+export $(grep -v '^#' ../../.env | xargs)        # carga las claves de .env
+export DATABASE_URL=postgresql+psycopg://clinical:clinical@localhost:5432/clinical
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 3) Frontend (Docker o local) apuntando a http://localhost:8000
+#    -> pestaña "Voz (real)" -> permitir micrófono.
+```
+
+> En Linux sí puedes usar Docker para la voz añadiendo `network_mode: host` al
+> servicio `backend`; en Mac esa opción no es fiable, por eso se recomienda nativo.
+
+**Modo texto en Docker** sigue igual (`INSTALL_VOICE=true docker compose up --build`
+también instala la voz, pero el audio no conectará en Mac por lo anterior).
+
+Diagnóstico rápido: `GET http://localhost:8000/voice/status` indica si faltan
+claves o si Pipecat no está instalado. Si el modo de voz no está listo, el modo
+texto sigue funcionando igual.
+
 ## Tests
 
 ```bash

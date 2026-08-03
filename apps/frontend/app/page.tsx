@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "../lib/api";
+import { api, API_BASE } from "../lib/api";
 import type { AlertRow, DocumentRow, TurnResponse } from "../lib/types";
 
-type Tab = "call" | "documents" | "alerts";
+type Tab = "voice" | "call" | "documents" | "alerts";
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("call");
@@ -16,6 +16,9 @@ export default function Home() {
         decisión + resumen) sin audio. La voz (Pipecat) se activa con credenciales.
       </p>
       <div className="tabs">
+        <button className={`tab ${tab === "voice" ? "active" : ""}`} onClick={() => setTab("voice")}>
+          Voz (real)
+        </button>
         <button className={`tab ${tab === "call" ? "active" : ""}`} onClick={() => setTab("call")}>
           Llamada (texto)
         </button>
@@ -26,6 +29,7 @@ export default function Home() {
           Alertas
         </button>
       </div>
+      {tab === "voice" && <VoicePanel />}
       {tab === "call" && <CallPanel />}
       {tab === "documents" && <DocumentsPanel />}
       {tab === "alerts" && <AlertsPanel />}
@@ -35,6 +39,149 @@ export default function Home() {
 
 function RiskBadge({ level }: { level: string }) {
   return <span className={`badge ${level}`}>{level}</span>;
+}
+
+function VoicePanel() {
+  const [state, setState] = useState<"idle" | "connecting" | "live" | "error">("idle");
+  const [msg, setMsg] = useState<string>("");
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  async function start() {
+    setState("connecting");
+    setMsg("Solicitando micrófono…");
+    try {
+      // Chequeo de disponibilidad del backend de voz.
+      const status = await fetch(`${API_BASE}/voice/status`).then((r) => r.json());
+      if (!status.ready) {
+        const why = !status.pipecat_installed
+          ? "las dependencias de voz no están instaladas (reconstruye con INSTALL_VOICE=true)"
+          : `faltan variables en .env: ${status.missing_config.join(", ")}`;
+        setState("error");
+        setMsg(`El modo de voz no está listo: ${why}.`);
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      });
+      pcRef.current = pc;
+
+      pc.ontrack = (e) => {
+        if (audioRef.current) audioRef.current.srcObject = e.streams[0];
+      };
+      pc.oniceconnectionstatechange = () =>
+        console.log("[voz] ICE:", pc.iceConnectionState);
+      pc.onconnectionstatechange = () => {
+        console.log("[voz] conexión:", pc.connectionState);
+        if (pc.connectionState === "connected") {
+          setState("live");
+          setMsg("En llamada. Hable con el agente.");
+        } else if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
+          if (state !== "error") {
+            setState("error");
+            setMsg(
+              "No se estableció el audio (ICE " + pc.iceConnectionState + "). " +
+              "Si el backend corre en Docker en Mac, los puertos UDP de WebRTC no " +
+              "son alcanzables: corre el backend nativo para voz (ver README)."
+            );
+          }
+        }
+      };
+
+      // addTrack ya crea un transceptor sendrecv (enviamos mic y recibimos al agente).
+      stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      // Sin trickle: esperamos a reunir todos los candidatos ICE (suficiente en localhost).
+      setMsg("Estableciendo conexión…");
+      await new Promise<void>((resolve) => {
+        if (pc.iceGatheringState === "complete") return resolve();
+        const check = () => {
+          if (pc.iceGatheringState === "complete") {
+            pc.removeEventListener("icegatheringstatechange", check);
+            resolve();
+          }
+        };
+        pc.addEventListener("icegatheringstatechange", check);
+        setTimeout(resolve, 3000); // tope por si algún candidato tarda
+      });
+
+      const res = await fetch(`${API_BASE}/voice/offer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sdp: pc.localDescription!.sdp, type: pc.localDescription!.type }),
+      });
+      if (!res.ok) {
+        setState("error");
+        setMsg(`Error del servidor: ${await res.text()}`);
+        return;
+      }
+      const answer = await res.json();
+      await pc.setRemoteDescription(answer);
+      setMsg("Negociando audio…");
+
+      // Watchdog: si en 15s no conecta, casi siempre es el bloqueo de UDP de
+      // WebRTC en Docker (Mac). Avisamos en vez de quedarnos colgados.
+      setTimeout(() => {
+        if (pcRef.current === pc && pc.connectionState !== "connected") {
+          setState("error");
+          setMsg(
+            "La conexión de audio no se estableció (probable bloqueo de puertos " +
+            "UDP de WebRTC en Docker en Mac). Corre el backend de forma nativa " +
+            "para el modo voz (ver README → Modo de voz real)."
+          );
+        }
+      }, 15000);
+    } catch (e) {
+      setState("error");
+      setMsg(`No se pudo iniciar la llamada: ${String(e)}`);
+    }
+  }
+
+  function hangup() {
+    pcRef.current?.close();
+    pcRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setState("idle");
+    setMsg("");
+  }
+
+  return (
+    <div>
+      <h2>Llamada de voz en tiempo real</h2>
+      <p className="muted">
+        WebRTC → Deepgram (STT es) → lógica clínica → ElevenLabs (TTS es-CO). El
+        agente saluda al conectar; háblele como el paciente. Requiere el backend
+        con voz activada (INSTALL_VOICE=true) y las 3 claves en .env.
+      </p>
+      <div className="card row" style={{ gap: 12 }}>
+        {state !== "live" ? (
+          <button onClick={start} disabled={state === "connecting"}>
+            {state === "connecting" ? "Conectando…" : "📞 Iniciar llamada"}
+          </button>
+        ) : (
+          <button className="danger" onClick={hangup}>
+            Colgar
+          </button>
+        )}
+        <span className="muted">{msg}</span>
+      </div>
+      <audio ref={audioRef} autoPlay />
+      <p className="muted">
+        Consejo: para probar el escalamiento, di "tengo dolor 9 y la medicación no
+        me sirve" (→ ALTO) o "estoy sangrando mucho" (→ guion CRÍTICO). Revisa la
+        pestaña Alertas.
+      </p>
+    </div>
+  );
 }
 
 function CallPanel() {
@@ -104,6 +251,7 @@ function CallPanel() {
 
 function DocumentsPanel() {
   const [docs, setDocs] = useState<DocumentRow[]>([]);
+  const [procedure, setProcedure] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function refresh() {
@@ -116,8 +264,9 @@ function DocumentsPanel() {
   async function upload() {
     const file = fileRef.current?.files?.[0];
     if (!file) return;
-    await api.uploadDocument(file);
+    await api.uploadDocument(file, procedure.trim() || undefined);
     if (fileRef.current) fileRef.current.value = "";
+    setProcedure("");
     await refresh();
   }
 
@@ -126,12 +275,22 @@ function DocumentsPanel() {
       <h2>Documentos indexados</h2>
       <div className="card row">
         <input type="file" ref={fileRef} accept=".pdf,.md,.txt" />
+        <input
+          value={procedure}
+          onChange={(e) => setProcedure(e.target.value)}
+          placeholder="procedimiento (opcional, ej: cesarea)"
+        />
         <button onClick={upload}>Subir e indexar</button>
       </div>
+      <p className="muted">
+        El procedimiento etiqueta el documento: el agente solo lo usa con pacientes
+        de ese procedimiento. Vacío = conocimiento general (para todos).
+      </p>
       {docs.map((d) => (
         <div key={d.id} className="card row" style={{ justifyContent: "space-between" }}>
           <div>
             <strong>{d.filename}</strong>
+            {d.procedure && <span className="badge NORMAL" style={{ marginLeft: 8 }}>{d.procedure}</span>}
             <div className="muted">
               {d.n_chunks} chunks · {d.status} · {new Date(d.updated_at).toLocaleString()}
             </div>

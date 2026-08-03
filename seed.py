@@ -72,8 +72,11 @@ def seed_documents(session) -> int:
         exists = session.query(Document).filter(Document.filename == filename).first()
         if exists:
             continue
-        doc = ingest.ingest_file(session, path, filename=filename)
-        print(f"  ingestado: {filename} -> {doc.n_chunks} chunks")
+        # El nombre del archivo de ejemplo es el procedimiento (colecistectomia.md,
+        # apendicectomia.md) -> etiqueta para la recuperación filtrada.
+        procedure = os.path.splitext(filename)[0]
+        doc = ingest.ingest_file(session, path, filename=filename, procedure=procedure)
+        print(f"  ingestado: {filename} (procedimiento={procedure}) -> {doc.n_chunks} chunks")
         created += 1
     return created
 

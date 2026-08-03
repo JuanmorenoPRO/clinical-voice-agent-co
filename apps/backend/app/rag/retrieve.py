@@ -10,6 +10,8 @@ score) para la traza (RF-05).
 """
 from __future__ import annotations
 
+import unicodedata
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -31,16 +33,51 @@ def _similarity(distance: float) -> float:
     return max(0.0, 1.0 - distance / 2.0)
 
 
-def retrieve(session: Session, query: str) -> RagResult:
+def _norm(s: str) -> str:
+    """Minúsculas sin acentos, solo alfanumérico (para comparar procedimientos)."""
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    cleaned = "".join(c.lower() if c.isalnum() else " " for c in s)
+    return " ".join(cleaned.split())
+
+
+def _allowed_document_ids(session: Session, procedure: str) -> list[str]:
+    """IDs de documentos válidos para el procedimiento del paciente.
+
+    Incluye los documentos SIN procedimiento (NULL = conocimiento general) y los
+    cuyo procedimiento coincide (comparación laxa sin acentos). Si el paciente
+    tuvo una cesárea y no hay documento de cesárea, la lista queda vacía → el
+    agente declara "sin evidencia" (grounding determinista).
+    """
+    pn = _norm(procedure)
+    allowed: list[str] = []
+    for doc_id, doc_proc in session.query(Document.id, Document.procedure).all():
+        if doc_proc is None:
+            allowed.append(doc_id)  # conocimiento general
+            continue
+        dn = _norm(doc_proc)
+        if dn and pn and (dn in pn or pn in dn):
+            allowed.append(doc_id)
+    return allowed
+
+
+def retrieve(session: Session, query: str, procedure: str | None = None) -> RagResult:
     q_vec = embed_query(query)
 
     # cosine_distance de pgvector; menor distancia = más similar.
     stmt = (
         select(Chunk, Document.filename, Chunk.embedding.cosine_distance(q_vec).label("dist"))
         .join(Document, Document.id == Chunk.document_id)
-        .order_by("dist")
-        .limit(_settings.rag_top_k)
     )
+
+    # Filtro por procedimiento del paciente (si se conoce). Reduce el falso
+    # "grounding" cuando dos procedimientos comparten vocabulario post-operatorio.
+    if procedure:
+        allowed = _allowed_document_ids(session, procedure)
+        if not allowed:
+            return RagResult(answer=_NO_EVIDENCE, confidence=0.0, sources=[], has_evidence=False)
+        stmt = stmt.where(Chunk.document_id.in_(allowed))
+
+    stmt = stmt.order_by("dist").limit(_settings.rag_top_k)
     rows = session.execute(stmt).all()
 
     if not rows:
