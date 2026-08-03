@@ -1,0 +1,15 @@
+{
+  "name": "Falta de aire súbita",
+  "risk": "red",
+  "category": "red",
+  "messages": [
+    "Hola, buenas.",
+    "De repente me falta el aire.",
+    "Tengo dificultad para respirar."
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

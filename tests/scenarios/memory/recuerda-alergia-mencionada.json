@@ -1,0 +1,19 @@
+{
+  "name": "Recuerda alergia mencionada",
+  "risk": "green",
+  "category": "memory",
+  "messages": [
+    "Hola, buenas.",
+    "Soy alérgico a la penicilina, por si acaso.",
+    "La herida se ve bien.",
+    "Dolor leve, como 2.",
+    "¿Algo más debo cuidar?"
+  ],
+  "expected": {
+    "risk": "green",
+    "should_escalate": false,
+    "remember": {
+      "alergia": "penicilina"
+    }
+  }
+}

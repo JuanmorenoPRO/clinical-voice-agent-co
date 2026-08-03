@@ -1,0 +1,15 @@
+{
+  "name": "Dificultad para respirar",
+  "risk": "red",
+  "category": "red",
+  "messages": [
+    "Hola, buenas.",
+    "No puedo respirar bien.",
+    "Siento que me ahogo."
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

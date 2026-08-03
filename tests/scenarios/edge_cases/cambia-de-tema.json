@@ -1,0 +1,15 @@
+{
+  "name": "Cambia de tema",
+  "risk": "yellow",
+  "category": "edge_cases",
+  "messages": [
+    "Hola, buenas.",
+    "¿Vio el partido de ayer?",
+    "Ah, bueno. Tengo un dolor de 8 que no cede con la pastilla.",
+    "¿Y cómo estará el clima mañana?"
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Recuerda tipo de cirugía",
+  "risk": "green",
+  "category": "memory",
+  "messages": [
+    "Hola, buenas.",
+    "Me hicieron una cesárea.",
+    "Estoy caminando despacio.",
+    "Dolor de 3, tolerable.",
+    "¿Es normal sentir tirones en la cesárea?"
+  ],
+  "expected": {
+    "risk": "green",
+    "should_escalate": false,
+    "remember": {
+      "cirugia": "cesárea"
+    }
+  }
+}

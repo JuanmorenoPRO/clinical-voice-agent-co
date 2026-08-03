@@ -1,0 +1,20 @@
+{
+  "name": "Recuerda ubicación del dolor",
+  "risk": "yellow",
+  "category": "memory",
+  "messages": [
+    "Hola, buenas.",
+    "El dolor lo tengo en el hombro izquierdo.",
+    "Me operaron hace dos días.",
+    "He estado descansando.",
+    "Tomé la medicación pero no me hizo nada.",
+    "El dolor ahí sigue en 9."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "remember": {
+      "ubicacion": "hombro izquierdo"
+    }
+  }
+}

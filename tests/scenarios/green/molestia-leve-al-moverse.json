@@ -1,0 +1,15 @@
+{
+  "name": "Molestia leve al moverse",
+  "risk": "green",
+  "category": "green",
+  "messages": [
+    "Hola, buenas.",
+    "Siento una molestia de 3 cuando me muevo.",
+    "Con reposo se me calma."
+  ],
+  "expected": {
+    "risk": "green",
+    "should_escalate": false,
+    "should_reassure": false
+  }
+}

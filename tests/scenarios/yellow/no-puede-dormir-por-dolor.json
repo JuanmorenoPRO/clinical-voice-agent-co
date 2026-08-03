@@ -1,0 +1,15 @@
+{
+  "name": "No puede dormir por dolor",
+  "risk": "yellow",
+  "category": "yellow",
+  "messages": [
+    "Hola, buenas.",
+    "No pude dormir en toda la noche.",
+    "El dolor es un 8 y no me quita con nada."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

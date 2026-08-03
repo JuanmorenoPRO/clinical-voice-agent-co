@@ -1,0 +1,15 @@
+{
+  "name": "Solo responde sí",
+  "risk": "green",
+  "category": "edge_cases",
+  "messages": [
+    "Hola, buenas.",
+    "Sí.",
+    "Sí.",
+    "Sí."
+  ],
+  "expected": {
+    "risk": "green",
+    "should_escalate": false
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Herida con buen aspecto",
+  "risk": "green",
+  "category": "green",
+  "messages": [
+    "Hola, buenas.",
+    "La herida se ve limpia y seca.",
+    "No tengo dolor fuerte, como un 1."
+  ],
+  "expected": {
+    "risk": "green",
+    "should_escalate": false,
+    "should_reassure": false
+  }
+}
