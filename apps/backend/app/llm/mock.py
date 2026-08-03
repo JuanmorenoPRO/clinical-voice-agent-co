@@ -50,6 +50,18 @@ def extract_symptoms_heuristic(text: str) -> Symptoms:
     if any(w in t for w in ("me desmay", "perdí el conocimiento", "inconsciente")):
         sym.loss_of_consciousness = True
 
+    if "pecho" in t and any(
+        w in t for w in ("dolor", "duele", "opres", "aprieta", "apretad", "presión", "presion")
+    ):
+        sym.chest_pain = True
+
+    if any(w in t for w in ("confundid", "desorientad", "no sé dónde estoy",
+                            "no logro pensar", "no pienso bien")):
+        sym.altered_mental_status = True
+
+    if any(w in t for w in ("convulsi", "convulsión", "me temblaba todo", "ataque epiléptic")):
+        sym.seizure = True
+
     if "maluco" in t or "revuelto" in t:
         sym.other.append(text.strip())
 

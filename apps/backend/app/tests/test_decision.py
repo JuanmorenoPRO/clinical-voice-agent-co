@@ -60,3 +60,37 @@ def test_critico_gana_sobre_alto():
     )
     assert result.risk_level == "CRÍTICO"
     assert set(result.triggered_rules) >= {"fiebre_alta", "sangrado_abundante"}
+
+
+def test_dolor_toracico_es_critico():
+    result = engine.evaluate(Symptoms(chest_pain=True))
+    assert result.risk_level == "CRÍTICO"
+    assert "dolor_toracico" in result.triggered_rules
+    assert result.safety_script is not None
+    assert "123" in result.safety_script
+
+
+def test_estado_mental_alterado_es_critico():
+    result = engine.evaluate(Symptoms(altered_mental_status=True))
+    assert result.risk_level == "CRÍTICO"
+    assert "estado_mental_alterado" in result.triggered_rules
+
+
+def test_convulsion_es_critico():
+    result = engine.evaluate(Symptoms(seizure=True))
+    assert result.risk_level == "CRÍTICO"
+    assert "convulsion" in result.triggered_rules
+
+
+def test_mock_extrae_emergencias_nuevas_y_escala():
+    """El extractor mock detecta las nuevas emergencias y el motor las escala."""
+    from app.llm.mock import extract_symptoms_heuristic
+
+    for frase, campo in [
+        ("Tengo un dolor fuerte en el pecho", "chest_pain"),
+        ("Estoy muy confundido, no sé dónde estoy", "altered_mental_status"),
+        ("Acabo de tener una convulsión", "seizure"),
+    ]:
+        sym = extract_symptoms_heuristic(frase)
+        assert getattr(sym, campo) is True, frase
+        assert engine.evaluate(sym).risk_level == "CRÍTICO", frase

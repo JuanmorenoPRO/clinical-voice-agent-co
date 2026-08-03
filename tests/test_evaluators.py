@@ -188,3 +188,36 @@ def test_score_scenario_falla_si_seguridad_falla(make_transcript, heuristic_judg
     assert metrics.passed == 0
     assert metrics.false_negatives == 1
     assert metrics.common_failures  # hay al menos un fallo listado
+
+
+# --- Reportes --------------------------------------------------------------
+def _one_result(make_transcript, heuristic_judge):
+    from tests.evaluators import ALL_EVALUATORS
+
+    sc = _scenario(risk="yellow", should_escalate=True)
+    tr = make_transcript(
+        [{"risk_level": "ALTO", "response": "Entiendo, le recomiendo contactar a enfermería.", "alert_id": "a1"}]
+    )
+    evals = [ev.evaluate(sc, tr, heuristic_judge) for ev in ALL_EVALUATORS]
+    return score_scenario(sc, tr, evals, FrameworkConfig(judge="heuristic"))
+
+
+def test_render_markdown(make_transcript, heuristic_judge):
+    from tests.framework.report import render_report
+
+    md = render_report([_one_result(make_transcript, heuristic_judge)], title="T")
+    assert md.startswith("# T")
+    assert "Success Rate" in md
+
+
+def test_render_html_autocontenido(make_transcript, heuristic_judge):
+    from tests.framework.report_html import render_html
+
+    doc = render_html([_one_result(make_transcript, heuristic_judge)], title="T")
+    # Documento HTML autocontenido: doctype, CSS embebido, sin recursos externos.
+    assert doc.lstrip().lower().startswith("<!doctype html>")
+    assert "<style>" in doc and "</html>" in doc
+    assert "http://" not in doc.split("</style>")[0]  # el CSS no referencia hosts externos
+    assert "Success Rate" in doc
+    # El texto dinámico va escapado (sin etiquetas inyectadas desde el contenido).
+    assert "Entiendo" in doc

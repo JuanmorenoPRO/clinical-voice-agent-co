@@ -49,7 +49,7 @@ tests/
     escalation.py  hallucination.py  clinical.py  empathy.py  memory.py
   scenarios/                # casos de prueba (.json) por categoría
     green/ yellow/ red/ emotional/ edge_cases/ memory/ colombian_language/
-  reports/                  # salida .md (ignorada por git)
+  reports/                  # salida .md / .html / .json (ignorada por git)
   test_evaluators.py        # unit tests deterministas (sin BD ni LLM)
   test_scenarios.py         # validación de archivos + integración (skip si no hay BD)
 ```
@@ -129,8 +129,19 @@ python tests/runner.py                          # todos los escenarios
 python tests/runner.py --category red green     # subconjunto
 python tests/runner.py --limit 5                # smoke rápido
 ```
-El reporte se escribe en `tests/reports/report-<timestamp>.md`. El proceso retorna
-código de salida **2** si hubo algún falso negativo (emergencia no escalada).
+Cada corrida escribe **tres** archivos con el mismo nombre base
+`tests/reports/report-<timestamp>`:
+
+- `.md`   — lectura rápida en terminal / diffs.
+- `.html` — visualización rica (tarjetas de métricas, conversación como chat,
+  tema claro/oscuro automático). Autocontenido: ábrelo con doble clic, sin servidor.
+- `.json` — datos crudos; permite re-generar el HTML sin re-correr el agente:
+  ```bash
+  python -m tests.framework.report_html tests/reports/report-<timestamp>.json
+  ```
+
+El proceso retorna código de salida **2** si hubo algún falso negativo (emergencia
+no escalada).
 
 ### 4. Smoke offline (sin claves)
 ```bash

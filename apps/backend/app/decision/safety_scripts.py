@@ -32,6 +32,23 @@ _BY_RULE: dict[str, str] = {
         "enfermería ahora mismo. Si hay alguien con usted, pídale que se quede a su "
         "lado; si vuelve a desvanecerse, deben llamar a emergencias al 123."
     ),
+    "dolor_toracico": (
+        "Un dolor en el pecho después de la cirugía es una señal de alarma que hay que "
+        "atender de inmediato. Estoy alertando ahora mismo al personal de enfermería. "
+        "Por favor quédese quieto y sentado; si el dolor aumenta, se irradia al brazo o "
+        "le falta el aire, llame de una vez a emergencias al 123."
+    ),
+    "estado_mental_alterado": (
+        "La confusión o desorientación tras la cirugía es una señal seria y su seguridad "
+        "es lo primero. Voy a avisar de inmediato al personal de enfermería. Si hay "
+        "alguien con usted, pídale que se quede a su lado y, si empeora, que llame a "
+        "emergencias al 123."
+    ),
+    "convulsion": (
+        "Una convulsión es una emergencia. Estoy alertando al personal de enfermería en "
+        "este momento. Si alguien está con usted, que lo recueste de lado en un lugar "
+        "seguro, que no le sujete la lengua ni la boca, y que llame ya a emergencias al 123."
+    ),
 }
 
 

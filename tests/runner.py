@@ -38,6 +38,7 @@ from tests.framework.judge import build_judge  # noqa: E402
 from tests.framework.loader import load_scenarios  # noqa: E402
 from tests.framework.models import Scenario, ScenarioResult  # noqa: E402
 from tests.framework.report import render_report  # noqa: E402
+from tests.framework.report_html import render_html  # noqa: E402
 
 REPORTS_DIR = _REPO_ROOT / "tests" / "reports"
 
@@ -76,14 +77,37 @@ def run_suite(
     return results
 
 
-def write_report(results: list[ScenarioResult], *, out_dir: Path = REPORTS_DIR) -> Path:
-    """Escribe el reporte markdown y devuelve su ruta."""
+def write_report(results: list[ScenarioResult], *, out_dir: Path = REPORTS_DIR) -> dict[str, Path]:
+    """Escribe el reporte en markdown, HTML y JSON. Devuelve las rutas por formato.
+
+    - `.md`   : lectura rápida en terminal / control de versiones.
+    - `.html` : visualización rica (tarjetas, chat, tema claro/oscuro).
+    - `.json` : datos crudos, permite re-generar el HTML sin re-correr el agente
+                (`python -m tests.framework.report_html <archivo>.json`).
+    """
+    import json
+
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    path = out_dir / f"report-{stamp}.md"
     title = f"Reporte de evaluación — {stamp}"
-    path.write_text(render_report(results, title=title), encoding="utf-8")
-    return path
+    base = out_dir / f"report-{stamp}"
+
+    md_path = base.with_suffix(".md")
+    md_path.write_text(render_report(results, title=title), encoding="utf-8")
+
+    html_path = base.with_suffix(".html")
+    html_path.write_text(render_html(results, title=title), encoding="utf-8")
+
+    json_path = base.with_suffix(".json")
+    json_path.write_text(
+        json.dumps(
+            {"title": title, "results": [r.model_dump() for r in results]},
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return {"md": md_path, "html": html_path, "json": json_path}
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -108,10 +132,12 @@ def main(argv: list[str] | None = None) -> int:
         print("No se evaluó ningún escenario.", file=sys.stderr)
         return 1
 
-    path = write_report(results)
+    paths = write_report(results)
     passed = sum(1 for r in results if r.passed)
     print(f"\n✅ {passed}/{len(results)} escenarios pasaron.")
-    print(f"📄 Reporte: {path}")
+    print(f"📄 Markdown: {paths['md']}")
+    print(f"🌐 HTML:     {paths['html']}")
+    print(f"🗄️  JSON:     {paths['json']}")
     # Código de salida distinto de cero si hubo falsos negativos (fallo de seguridad).
     false_negatives = sum(1 for r in results if r.false_negative)
     return 2 if false_negatives else 0

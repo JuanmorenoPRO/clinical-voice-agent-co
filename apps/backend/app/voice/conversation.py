@@ -69,15 +69,12 @@ def _merge_symptoms(base: Symptoms, new: Symptoms) -> Symptoms:
     escalar). `other` se une sin duplicar.
     """
     merged = base.model_copy(deep=True)
-    for field in (
-        "pain_level",
-        "medication_effective",
-        "temperature_c",
-        "fever",
-        "heavy_bleeding",
-        "breathing_difficulty",
-        "loss_of_consciousness",
-    ):
+    # Recorre TODOS los campos escalares del esquema (menos `other`, que es lista y
+    # se une aparte). Dinámico a propósito: al añadir un síntoma nuevo en `Symptoms`
+    # (p.ej. el 7 de agosto) no hay que tocar este merge para que se acumule.
+    for field in Symptoms.model_fields:
+        if field == "other":
+            continue
         value = getattr(new, field)
         if value is not None:
             setattr(merged, field, value)

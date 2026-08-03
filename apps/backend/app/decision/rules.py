@@ -45,6 +45,18 @@ def _loss_of_consciousness(s: Symptoms, t: dict) -> bool:
     return s.loss_of_consciousness is True
 
 
+def _chest_pain(s: Symptoms, t: dict) -> bool:
+    return s.chest_pain is True
+
+
+def _altered_mental_status(s: Symptoms, t: dict) -> bool:
+    return s.altered_mental_status is True
+
+
+def _seizure(s: Symptoms, t: dict) -> bool:
+    return s.seizure is True
+
+
 # Reglas de línea base (PRD RF-08). ⏳ calibrar el 7 de agosto.
 RULES: list[Rule] = [
     Rule(
@@ -76,5 +88,23 @@ RULES: list[Rule] = [
         description="Pérdida de consciencia",
         level="CRÍTICO",
         predicate=_loss_of_consciousness,
+    ),
+    Rule(
+        name="dolor_toracico",
+        description="Dolor en el pecho / torácico",
+        level="CRÍTICO",
+        predicate=_chest_pain,
+    ),
+    Rule(
+        name="estado_mental_alterado",
+        description="Confusión, desorientación o estado mental alterado",
+        level="CRÍTICO",
+        predicate=_altered_mental_status,
+    ),
+    Rule(
+        name="convulsion",
+        description="Convulsión / crisis convulsiva",
+        level="CRÍTICO",
+        predicate=_seizure,
     ),
 ]
