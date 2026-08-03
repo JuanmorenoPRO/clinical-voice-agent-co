@@ -30,9 +30,10 @@ export const api = {
     return json(await fetch(`${API}/knowledge/documents`));
   },
 
-  async uploadDocument(file: File): Promise<unknown> {
+  async uploadDocument(file: File, procedure?: string): Promise<unknown> {
     const form = new FormData();
     form.append("file", file);
+    if (procedure) form.append("procedure", procedure);
     return json(
       await fetch(`${API}/knowledge/documents`, { method: "POST", body: form })
     );

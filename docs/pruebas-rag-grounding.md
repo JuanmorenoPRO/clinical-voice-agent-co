@@ -49,7 +49,7 @@ Temas clínicos que **no** están en los dos documentos sembrados:
 | B2 | ¿Cuándo puedo volver a conducir el carro? |
 | B3 | ¿Cuándo puedo tener relaciones sexuales de nuevo? |
 | B4 | ¿Puedo tomar ibuprofeno si estoy con un anticoagulante? |
-| B5 | ¿Qué cuidados debo tener después de mi cesárea? *(no hay documento de cesárea)* |
+| B5 | ¿Qué cuidados debo tener después de mi cesárea? *(no hay doc de cesárea — caso "cercano", ver nota)* |
 | B6 | ¿Es normal que se me esté cayendo el cabello después de la cirugía? |
 | B7 | ¿Puedo viajar en avión la próxima semana? |
 | B8 | ¿Me puedo poner la vacuna de la gripe ahora? |
@@ -57,6 +57,30 @@ Temas clínicos que **no** están en los dos documentos sembrados:
 | B10 | ¿Cuándo me quitan los puntos? |
 | B11 | ¿Puedo fumar después de la operación? |
 | B12 | ¿Qué crema o pomada uso para que la cicatriz no quede marcada? |
+
+> **Nota sobre casos "cercanos" (B5, cesárea).** La búsqueda vectorial pura da
+> similitud **alta** (~0.7) a una pregunta de cesárea contra los docs de
+> apendicectomía/colecistectomía porque comparten vocabulario post-operatorio.
+> Hay **dos capas** que lo resuelven:
+>
+> 1. **Filtro determinista por procedimiento** (activo cuando se conoce al
+>    paciente): la recuperación solo usa documentos etiquetados con el
+>    procedimiento del paciente (o generales, sin etiqueta). Un paciente de
+>    cesárea sin documento de cesárea ⇒ evidencia vacía ⇒ "sin evidencia",
+>    **sin depender del umbral ni del LLM**.
+> 2. **Verificación de relevancia por el LLM** (siempre): al prompt se le pasan
+>    los nombres de los documentos fuente y se le pide usarlos solo si el tema
+>    coincide (ADR-005). Cubre el modo texto sin paciente.
+>
+> **Cómo probar la capa 1 (determinista):** pasa el `patient_id` de una paciente
+> de cesárea (la semilla incluye a "Luz Dary Ramírez", cirugía *Cesárea*):
+> ```bash
+> PID=$(curl -s localhost:8000/console/patients | jq -r '.[] | select(.surgery|test("[Cc]es")) | .id')
+> curl -s localhost:8000/conversation/turn -H 'content-type: application/json' \
+>   -d "{\"patient_id\":\"$PID\",\"text\":\"¿Qué cuidados debo tener después de mi cesárea?\"}" | jq '{response, sources}'
+> ```
+> → `sources` vacío y respuesta "sin evidencia". La solución aún más robusta
+> (reranking / híbrida) sigue siendo mejora del 7 de agosto.
 
 ## C) Casos LÍMITE (para calibrar el umbral `RAG_MIN_CONFIDENCE`)
 

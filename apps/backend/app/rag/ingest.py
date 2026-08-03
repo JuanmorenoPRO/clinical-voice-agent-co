@@ -68,10 +68,19 @@ def load_and_chunk(path: str) -> list[PageText]:
     return chunks
 
 
-def ingest_file(session: Session, path: str, filename: str | None = None) -> Document:
-    """Parsea, trocea, vectoriza (Voyage) e indexa en pgvector. Devuelve el Document."""
+def ingest_file(
+    session: Session,
+    path: str,
+    filename: str | None = None,
+    procedure: str | None = None,
+) -> Document:
+    """Parsea, trocea, vectoriza (Voyage) e indexa en pgvector. Devuelve el Document.
+
+    `procedure` etiqueta el documento para la recuperación filtrada por
+    procedimiento (NULL = conocimiento general, válido para todos).
+    """
     filename = filename or os.path.basename(path)
-    doc = Document(filename=filename, status="indexing")
+    doc = Document(filename=filename, procedure=procedure, status="indexing")
     session.add(doc)
     session.flush()  # obtener doc.id
 

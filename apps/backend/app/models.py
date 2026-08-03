@@ -53,6 +53,10 @@ class Document(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
     filename: Mapped[str] = mapped_column(String, nullable=False)
+    # Procedimiento al que aplica el documento (p. ej. "colecistectomia").
+    # NULL = conocimiento general, válido para cualquier paciente. Permite
+    # recuperación filtrada por el procedimiento del paciente (grounding).
+    procedure: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, default="indexed")  # indexing|indexed|error
     n_chunks: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

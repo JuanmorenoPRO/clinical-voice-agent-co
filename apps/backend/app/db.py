@@ -26,6 +26,10 @@ def init_db() -> None:
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(engine)
+    # Migración ligera idempotente: añade columnas nuevas a tablas ya existentes
+    # (create_all no altera tablas creadas antes). Postgres soporta IF NOT EXISTS.
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE documents ADD COLUMN IF NOT EXISTS procedure VARCHAR"))
 
 
 def get_session() -> Iterator[Session]:

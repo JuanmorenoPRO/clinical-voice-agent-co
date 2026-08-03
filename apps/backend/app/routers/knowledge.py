@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import tempfile
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from ..db import get_session
@@ -28,6 +28,7 @@ def list_documents(session: Session = Depends(get_session)) -> list[dict]:
         {
             "id": d.id,
             "filename": d.filename,
+            "procedure": d.procedure,
             "status": d.status,
             "n_chunks": d.n_chunks,
             "created_at": d.created_at.isoformat(),
@@ -39,17 +40,29 @@ def list_documents(session: Session = Depends(get_session)) -> list[dict]:
 
 @router.post("/documents")
 async def upload_document(
-    file: UploadFile, session: Session = Depends(get_session)
+    file: UploadFile,
+    # Opcional: procedimiento al que aplica el documento (p. ej. "cesarea").
+    # Vacío = conocimiento general (válido para cualquier paciente).
+    procedure: str | None = Form(default=None),
+    session: Session = Depends(get_session),
 ) -> dict:
     suffix = os.path.splitext(file.filename or "doc")[1] or ".txt"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(await file.read())
         tmp_path = tmp.name
     try:
-        doc = ingest.ingest_file(session, tmp_path, filename=file.filename)
+        doc = ingest.ingest_file(
+            session, tmp_path, filename=file.filename, procedure=procedure or None
+        )
     finally:
         os.unlink(tmp_path)
-    return {"id": doc.id, "filename": doc.filename, "n_chunks": doc.n_chunks, "status": doc.status}
+    return {
+        "id": doc.id,
+        "filename": doc.filename,
+        "procedure": doc.procedure,
+        "n_chunks": doc.n_chunks,
+        "status": doc.status,
+    }
 
 
 @router.delete("/documents/{document_id}")

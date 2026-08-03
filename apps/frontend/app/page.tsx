@@ -251,6 +251,7 @@ function CallPanel() {
 
 function DocumentsPanel() {
   const [docs, setDocs] = useState<DocumentRow[]>([]);
+  const [procedure, setProcedure] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function refresh() {
@@ -263,8 +264,9 @@ function DocumentsPanel() {
   async function upload() {
     const file = fileRef.current?.files?.[0];
     if (!file) return;
-    await api.uploadDocument(file);
+    await api.uploadDocument(file, procedure.trim() || undefined);
     if (fileRef.current) fileRef.current.value = "";
+    setProcedure("");
     await refresh();
   }
 
@@ -273,12 +275,22 @@ function DocumentsPanel() {
       <h2>Documentos indexados</h2>
       <div className="card row">
         <input type="file" ref={fileRef} accept=".pdf,.md,.txt" />
+        <input
+          value={procedure}
+          onChange={(e) => setProcedure(e.target.value)}
+          placeholder="procedimiento (opcional, ej: cesarea)"
+        />
         <button onClick={upload}>Subir e indexar</button>
       </div>
+      <p className="muted">
+        El procedimiento etiqueta el documento: el agente solo lo usa con pacientes
+        de ese procedimiento. Vacío = conocimiento general (para todos).
+      </p>
       {docs.map((d) => (
         <div key={d.id} className="card row" style={{ justifyContent: "space-between" }}>
           <div>
             <strong>{d.filename}</strong>
+            {d.procedure && <span className="badge NORMAL" style={{ marginLeft: 8 }}>{d.procedure}</span>}
             <div className="muted">
               {d.n_chunks} chunks · {d.status} · {new Date(d.updated_at).toLocaleString()}
             </div>

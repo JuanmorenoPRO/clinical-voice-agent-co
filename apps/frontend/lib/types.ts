@@ -25,6 +25,7 @@ export interface TurnResponse {
 export interface DocumentRow {
   id: string;
   filename: string;
+  procedure: string | null;
   status: string;
   n_chunks: number;
   created_at: string;
