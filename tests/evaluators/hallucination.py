@@ -47,11 +47,13 @@ class HallucinationEvaluator:
             else "El agente no citó ninguna evidencia RAG en esta conversación."
         )
 
-        # Excluir los turnos de guion determinista (RF-09/ADR-006): no son salida
-        # del LLM y no deben juzgarse por grounding (RF-04). Si NINGÚN turno del
-        # agente fue generado por el LLM, no hay nada que pueda alucinar.
-        llm_responses = [t.response for t in transcript.turns if not t.critical_override]
-        if not any(r.strip() for r in llm_responses):
+        # Excluir POR COMPLETO los turnos de guion determinista (RF-09/ADR-006): no
+        # son salida del LLM y no deben juzgarse por grounding (RF-04). Se omiten
+        # enteros (no se dejan marcadores) para no confundir al juez, que
+        # interpretaría un marcador como "el agente no respondió" y penalizaría.
+        # Si NINGÚN turno del agente fue generado por el LLM, no hay nada que alucinar.
+        llm_turns = [t for t in transcript.turns if not t.critical_override]
+        if not any(t.response.strip() for t in llm_turns):
             return result(
                 self.name,
                 score=1.0,
@@ -66,12 +68,9 @@ class HallucinationEvaluator:
             )
 
         lines: list[str] = []
-        for t in transcript.turns:
+        for t in llm_turns:
             lines.append(f"Paciente: {t.patient_text}")
-            if t.critical_override:
-                lines.append("Agente: [guion determinista de seguridad — excluido (RF-09)]")
-            else:
-                lines.append(f"Agente: {t.response}")
+            lines.append(f"Agente: {t.response}")
         conversation = "\n".join(lines) + "\n\n[Evidencia] " + sources_note
         question = (
             "¿El agente inventó algún síntoma, antecedente o dato médico no dicho por "

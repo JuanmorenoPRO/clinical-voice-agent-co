@@ -205,8 +205,8 @@ def test_hallucination_ignora_contenido_de_turno_override(make_transcript):
     )
     spy = SpyJudge()
     HallucinationEvaluator().evaluate(sc, tr, spy)
-    assert "GUION_CRITICO_SECRETO" not in spy.seen  # el guion se excluyó
-    assert "excluido (RF-09)" in spy.seen
+    assert "GUION_CRITICO_SECRETO" not in spy.seen  # el turno override se omitió entero
+    assert "sigamos el chequeo" in spy.seen  # el turno del LLM sí se evalúa
 
 
 # --- Agregación ------------------------------------------------------------
