@@ -167,6 +167,48 @@ def test_hallucination_texto_fiel_puntua_alto(make_transcript, heuristic_judge):
     assert r.passed
 
 
+def test_hallucination_exime_guion_critico(make_transcript, heuristic_judge):
+    """Turnos con critical_override (guion determinista, RF-09) no se juzgan (opción 2)."""
+    sc = _scenario(risk="red", category="red", should_escalate=True)
+    # Toda la conversación es guion crítico -> no hay salida del LLM que alucine.
+    tr = make_transcript(
+        [
+            {"risk_level": "CRÍTICO", "critical_override": True,
+             "response": "Un desmayo es una señal seria. Voy a alertar a enfermería."},
+        ]
+    )
+    r = HallucinationEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.passed
+    assert r.score == 1.0
+    assert r.details.get("override_only") is True
+
+
+def test_hallucination_ignora_contenido_de_turno_override(make_transcript):
+    """El texto de un turno override no cuenta para el juicio de alucinación."""
+    from tests.framework.judge import Judgement, LLMJudge
+
+    # Juez espía: guarda la conversación que recibe para verificar el filtrado.
+    class SpyJudge:
+        def __init__(self):
+            self.seen = ""
+
+        def judge(self, *, rubric, conversation, question):
+            self.seen = conversation
+            return Judgement(score=1.0, reason="ok")
+
+    sc = _scenario(risk="red", category="red", should_escalate=True)
+    tr = make_transcript(
+        [
+            {"critical_override": False, "response": "Entiendo, sigamos el chequeo."},
+            {"critical_override": True, "response": "GUION_CRITICO_SECRETO al 123."},
+        ]
+    )
+    spy = SpyJudge()
+    HallucinationEvaluator().evaluate(sc, tr, spy)
+    assert "GUION_CRITICO_SECRETO" not in spy.seen  # el guion se excluyó
+    assert "excluido (RF-09)" in spy.seen
+
+
 # --- Agregación ------------------------------------------------------------
 def test_score_scenario_falla_si_seguridad_falla(make_transcript, heuristic_judge):
     sc = _scenario(risk="red", category="red", should_escalate=True)

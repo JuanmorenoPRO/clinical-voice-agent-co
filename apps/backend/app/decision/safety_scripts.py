@@ -52,9 +52,22 @@ _BY_RULE: dict[str, str] = {
 }
 
 
+# Apertura empática común: ADR-006 advierte que el guion crítico "puede sonar
+# robótico" y prescribe "redactarlo con tono empático". Validamos la emoción ANTES
+# de la instrucción clínica (mismo principio que la categoría emocional de las
+# pruebas: primero validar, luego lo clínico).
+_EMPATHIC_OPENER = (
+    "Entiendo que esto lo puede asustar y estoy aquí con usted; vamos a actuar de "
+    "inmediato. "
+)
+
+
 def script_for(triggered_rules: list[str]) -> str:
-    """Selecciona el guion según la primera regla CRÍTICA disparada."""
+    """Selecciona el guion según la primera regla CRÍTICA disparada.
+
+    Antepone una validación emocional breve (ADR-006) al guion clínico determinista.
+    """
     for rule in triggered_rules:
         if rule in _BY_RULE:
-            return _BY_RULE[rule]
-    return _DEFAULT
+            return _EMPATHIC_OPENER + _BY_RULE[rule]
+    return _EMPATHIC_OPENER + _DEFAULT
