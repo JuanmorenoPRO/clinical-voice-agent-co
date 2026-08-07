@@ -1,6 +1,6 @@
 {
   "name": "Recuerda ubicación del dolor",
-  "risk": "yellow",
+  "risk": "red",
   "category": "memory",
   "messages": [
     "Hola, buenas.",
@@ -11,7 +11,7 @@
     "El dolor ahí sigue en 9."
   ],
   "expected": {
-    "risk": "yellow",
+    "risk": "red",
     "should_escalate": true,
     "remember": {
       "ubicacion": "hombro izquierdo"

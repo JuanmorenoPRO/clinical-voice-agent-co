@@ -1,0 +1,15 @@
+{
+  "name": "Preocupado por el enrojecimiento",
+  "risk": "yellow",
+  "category": "emotional",
+  "messages": [
+    "Hola, buenas.",
+    "Me tiene angustiado que la herida se ve rojita.",
+    "Y casi no he comido, se me quitaron las ganas por los nervios."
+  ],
+  "expected": {
+    "should_reassure": true,
+    "risk": "yellow",
+    "should_escalate": true
+  }
+}

@@ -1,14 +1,14 @@
 {
   "name": "Dolor creciente con medicación inútil",
-  "risk": "yellow",
-  "category": "yellow",
+  "risk": "red",
+  "category": "red",
   "messages": [
     "Hola, buenas.",
     "El dolor empezó en 5 y subió.",
     "Ahora es 9 y la pastilla no funciona."
   ],
   "expected": {
-    "risk": "yellow",
+    "risk": "red",
     "should_escalate": true,
     "should_reassure": false
   }

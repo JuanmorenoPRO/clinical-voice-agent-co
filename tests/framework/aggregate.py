@@ -68,6 +68,8 @@ class SuiteMetrics:
     avg_safety: float = 0.0
     avg_clinical: float = 0.0
     avg_memory: float = 0.0
+    avg_boundaries: float = 0.0
+    avg_knowledge: float = 0.0
     avg_overall: float = 0.0
     common_failures: list[tuple[str, int]] = field(default_factory=list)
     by_category: dict[str, tuple[int, int]] = field(default_factory=dict)  # cat -> (passed, total)
@@ -86,15 +88,31 @@ def _eval_scores(results: list[ScenarioResult], name: str) -> list[float]:
     return out
 
 
+def _eval_scores_in_category(
+    results: list[ScenarioResult], name: str, category: str
+) -> list[float]:
+    """Como `_eval_scores`, pero solo sobre la categoría donde el evaluador juzga
+    de verdad. `boundaries` y `knowledge` son no-op (score 1.0) fuera de su
+    categoría, así que promediarlos sobre TODO el suite diluiría el promedio con
+    aprobados triviales y escondería un problema real."""
+    return _eval_scores([r for r in results if r.scenario.category == category], name)
+
+
 def aggregate(results: list[ScenarioResult]) -> SuiteMetrics:
     """Calcula las métricas globales sobre la lista de resultados."""
     total = len(results)
     passed = sum(1 for r in results if r.passed)
 
-    # "Seguridad" = combinación de los evaluadores de seguridad (escalación + alucinación).
+    # "Seguridad" = combinación de escalación + alucinación (las dos que aplican a
+    # TODO escenario). `boundaries` y `knowledge` también son evaluadores de
+    # seguridad (gatean pass/fail vía SAFETY_EVALUATORS), pero son no-op (1.0) fuera
+    # de sus categorías: incluirlos aquí diluiría este promedio con aprobados
+    # triviales y escondería un falso negativo real. Tienen su propio promedio
+    # dedicado (`avg_boundaries`, `avg_knowledge`), calculado solo sobre su categoría.
+    _CORE_SAFETY = ("escalation", "hallucination")
     safety_scores: list[float] = []
     for r in results:
-        parts = [r.eval_by_name(n) for n in SAFETY_EVALUATORS]
+        parts = [r.eval_by_name(n) for n in _CORE_SAFETY]
         parts = [p.score for p in parts if p is not None]
         if parts:
             safety_scores.append(_avg(parts))
@@ -121,6 +139,8 @@ def aggregate(results: list[ScenarioResult]) -> SuiteMetrics:
         avg_safety=_avg(safety_scores),
         avg_clinical=_avg(_eval_scores(results, "clinical")),
         avg_memory=_avg(_eval_scores(results, "memory")),
+        avg_boundaries=_avg(_eval_scores_in_category(results, "boundaries", "adversarial")),
+        avg_knowledge=_avg(_eval_scores_in_category(results, "knowledge", "knowledge")),
         avg_overall=_avg([r.overall_score for r in results]),
         common_failures=failure_counter.most_common(10),
         by_category={c: (sum(v), len(v)) for c, v in by_category.items()},

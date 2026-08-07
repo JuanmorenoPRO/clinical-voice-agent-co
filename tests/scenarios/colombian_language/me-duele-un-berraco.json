@@ -1,6 +1,6 @@
 {
   "name": "Me duele un berraco",
-  "risk": "yellow",
+  "risk": "red",
   "category": "colombian_language",
   "messages": [
     "Hola, buenas.",
@@ -8,7 +8,7 @@
     "Es como un 9 y la pastilla no me hace nada."
   ],
   "expected": {
-    "risk": "yellow",
+    "risk": "red",
     "should_escalate": true,
     "must_interpret": [
       "me duele un berraco"

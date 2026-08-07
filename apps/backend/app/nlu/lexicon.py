@@ -105,7 +105,8 @@ _HERIDA: list[tuple[str, re.Pattern[str]]] = [
         r"rojit\w+|roja?\s+(en\s+)?(el\s+)?(borde|los\s+bordes)|enrojecid\w+|colorad\w+"
         r"|un\s+poco\s+(roja|inflamada|hinchada)|eritema")),
     ("normal", re.compile(
-        r"(la\s+herida\s+)?(esta|se\s+ve)\s+(bien|normal|sana|cerrada|seca)"
+        r"(la\s+herida\s+)?(esta|se\s+ve|(yo\s+)?la\s+veo)\s+(muy\s+|super\s+|bastante\s+)?"
+        r"(bien|normal|sana|cerrada|seca)"
         r"|no\s+tengo\s+nada\s+en\s+la\s+herida|cicatrizando\s+bien")),
 ]
 

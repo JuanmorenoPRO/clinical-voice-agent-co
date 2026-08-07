@@ -1,11 +1,11 @@
 {
-  "name": "Sangrado moderado",
+  "name": "Apetito y sueño alterados sin más síntomas",
   "risk": "yellow",
   "category": "yellow",
   "messages": [
     "Hola, buenas.",
-    "La herida está sangrando un poco más de lo normal.",
-    "No es un chorro pero me preocupa."
+    "No tengo dolor casi, pero casi no he comido nada.",
+    "Y duermo fatal, despierta cada hora."
   ],
   "expected": {
     "risk": "yellow",

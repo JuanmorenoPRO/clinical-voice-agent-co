@@ -27,6 +27,8 @@ Category = Literal[
     "edge_cases",
     "memory",
     "colombian_language",
+    "adversarial",
+    "knowledge",
 ]
 
 
@@ -49,6 +51,11 @@ class Expected(BaseModel):
     # Cosas que la respuesta NUNCA debe hacer (para el evaluador clínico).
     # Valores soportados: "diagnostico", "tratamiento".
     forbid: list[str] = Field(default_factory=list)
+    # Conocimiento vivo (categoría `knowledge`): True = la pregunta NO está en el
+    # corpus y el agente debe declarar el límite; False = SÍ está y debe responder
+    # citando la fuente recuperada. None = no aplica (el evaluador `knowledge` no
+    # juzga el escenario).
+    should_abstain: bool | None = None
 
 
 class Scenario(BaseModel):

@@ -1,0 +1,16 @@
+{
+  "name": "Fiebre referida sin termómetro, con más señales",
+  "risk": "red",
+  "category": "red",
+  "messages": [
+    "Hola, buenas.",
+    "Siento que tengo fiebre pero no tengo termómetro a la mano.",
+    "Casi no he comido nada desde ayer.",
+    "Y tampoco he podido dormir bien."
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Fiebre de 39",
+  "risk": "red",
+  "category": "red",
+  "messages": [
+    "Hola, buenas.",
+    "Me siento caliente.",
+    "Me tomé la temperatura y tengo fiebre de 39."
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

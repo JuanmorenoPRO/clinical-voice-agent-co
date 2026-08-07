@@ -1,0 +1,15 @@
+{
+  "name": "Fiebre límite sin llegar a 38",
+  "risk": "green",
+  "category": "green",
+  "messages": [
+    "Hola, buenas.",
+    "Me sentí un poco caliente.",
+    "Me tomé la temperatura y marca 37.9."
+  ],
+  "expected": {
+    "risk": "green",
+    "should_escalate": false,
+    "should_reassure": false
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Herida enrojecida y mal dormir",
+  "risk": "yellow",
+  "category": "yellow",
+  "messages": [
+    "Hola, buenas.",
+    "Tengo la herida como irritada, rojita.",
+    "Anoche dormí muy mal, despierto todo el tiempo."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

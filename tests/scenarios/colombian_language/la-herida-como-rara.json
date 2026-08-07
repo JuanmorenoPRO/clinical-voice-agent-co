@@ -1,6 +1,6 @@
 {
   "name": "La herida como rara",
-  "risk": "yellow",
+  "risk": "red",
   "category": "colombian_language",
   "messages": [
     "Hola, buenas.",
@@ -8,7 +8,7 @@
     "Está sangrando harto y no para."
   ],
   "expected": {
-    "risk": "yellow",
+    "risk": "red",
     "should_escalate": true,
     "must_interpret": [
       "tengo la herida como rara"

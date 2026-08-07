@@ -1,11 +1,11 @@
 {
-  "name": "Fiebre alta persistente",
+  "name": "Dolor moderado con la herida irritada",
   "risk": "yellow",
   "category": "yellow",
   "messages": [
     "Hola, buenas.",
-    "Llevo dos días con calentura.",
-    "Ahora tengo fiebre de 39.2."
+    "El dolor es un 5, se aguanta.",
+    "Pero la herida se ve rojita alrededor de los puntos."
   ],
   "expected": {
     "risk": "yellow",

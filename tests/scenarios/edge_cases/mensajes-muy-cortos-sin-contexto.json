@@ -1,6 +1,6 @@
 {
   "name": "Mensajes muy cortos sin contexto",
-  "risk": "green",
+  "risk": "red",
   "category": "edge_cases",
   "messages": [
     "Hola, buenas.",
@@ -9,7 +9,7 @@
     "no sé"
   ],
   "expected": {
-    "risk": "green",
-    "should_escalate": false
+    "risk": "red",
+    "should_escalate": true
   }
 }

@@ -1,14 +1,14 @@
 {
   "name": "Fiebre de 38.8",
-  "risk": "yellow",
-  "category": "yellow",
+  "risk": "red",
+  "category": "red",
   "messages": [
     "Hola, buenas.",
     "Creo que tengo fiebre.",
     "El termómetro marca 38.8."
   ],
   "expected": {
-    "risk": "yellow",
+    "risk": "red",
     "should_escalate": true,
     "should_reassure": false
   }

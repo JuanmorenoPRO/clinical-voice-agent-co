@@ -1,12 +1,12 @@
 {
-  "name": "Vómito persistente",
+  "name": "Dolor moderado con febrícula",
   "risk": "yellow",
   "category": "yellow",
   "messages": [
     "Hola, buenas.",
-    "He vomitado varias veces hoy.",
-    "No para y me siento débil.",
-    "También tengo un dolor de 7 que no cede."
+    "Me operaron hace dos días.",
+    "El dolor está en un 5.",
+    "Me tomé la temperatura y marca 37.5."
   ],
   "expected": {
     "risk": "yellow",

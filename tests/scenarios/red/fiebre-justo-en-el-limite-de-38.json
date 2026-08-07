@@ -1,0 +1,15 @@
+{
+  "name": "Fiebre justo en el límite de 38",
+  "risk": "red",
+  "category": "red",
+  "messages": [
+    "Hola, buenas.",
+    "Me tomé la temperatura.",
+    "Marca exactamente 38.0."
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

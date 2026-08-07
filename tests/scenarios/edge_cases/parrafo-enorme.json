@@ -1,6 +1,6 @@
 {
   "name": "Párrafo enorme",
-  "risk": "yellow",
+  "risk": "red",
   "category": "edge_cases",
   "messages": [
     "Hola, buenas.",
@@ -8,7 +8,7 @@
     "¿Qué hago?"
   ],
   "expected": {
-    "risk": "yellow",
+    "risk": "red",
     "should_escalate": true
   }
 }

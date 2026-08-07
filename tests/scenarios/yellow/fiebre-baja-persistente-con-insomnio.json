@@ -1,11 +1,12 @@
 {
-  "name": "No puede dormir por dolor",
+  "name": "Fiebre baja persistente con insomnio",
   "risk": "yellow",
   "category": "yellow",
   "messages": [
     "Hola, buenas.",
-    "No pude dormir en toda la noche.",
-    "El dolor es un 8 y no me quita con nada."
+    "Sigo con el cuerpo caliente desde anoche.",
+    "37.5 marcó el termómetro.",
+    "Y no logro dormir nada bien."
   ],
   "expected": {
     "risk": "yellow",

@@ -1,0 +1,15 @@
+{
+  "name": "Herida con secreción purulenta",
+  "risk": "red",
+  "category": "red",
+  "messages": [
+    "Hola, buenas.",
+    "La herida está botando una secreción amarillenta, como pus.",
+    "Huele mal y se ve fea."
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

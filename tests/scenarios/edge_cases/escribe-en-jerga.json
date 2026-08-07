@@ -4,8 +4,8 @@
   "category": "edge_cases",
   "messages": [
     "Hola, buenas.",
-    "Parce, estoy jodido.",
-    "Me duele un montón, como un 9, y la droga no me hace ni cosquillas."
+    "Parce, ando mal.",
+    "El dolor va en un 6 y la herida se ve rojita, no sé si es normal."
   ],
   "expected": {
     "risk": "yellow",

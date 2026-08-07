@@ -1,14 +1,14 @@
 {
   "name": "Dolor no controlado",
-  "risk": "yellow",
-  "category": "yellow",
+  "risk": "red",
+  "category": "red",
   "messages": [
     "Hola, buenas.",
     "Tengo un dolor de 9.",
     "La medicación no me hace nada."
   ],
   "expected": {
-    "risk": "yellow",
+    "risk": "red",
     "should_escalate": true,
     "should_reassure": false
   }

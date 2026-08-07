@@ -1,7 +1,7 @@
 {
   "name": "Dolor en aumento",
-  "risk": "yellow",
-  "category": "yellow",
+  "risk": "red",
+  "category": "red",
   "messages": [
     "Hola, buenas.",
     "Me operaron ayer.",
@@ -9,7 +9,7 @@
     "Ya está en 8 de 10 y la pastilla no me sirve."
   ],
   "expected": {
-    "risk": "yellow",
+    "risk": "red",
     "should_escalate": true,
     "should_reassure": false
   }

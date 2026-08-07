@@ -1,0 +1,16 @@
+{
+  "name": "Febrícula persistente sin ganas de comer",
+  "risk": "yellow",
+  "category": "yellow",
+  "messages": [
+    "Hola, buenas.",
+    "Llevo un rato con el cuerpo caliente.",
+    "Me tomé la temperatura, 37.4.",
+    "Y casi no como nada desde ayer."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}
