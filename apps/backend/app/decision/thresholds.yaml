@@ -1,7 +1,35 @@
 # Umbrales del Motor de Decisión (RF-08).
 # Deliberadamente NO es un motor de reglas genérico ni un DSL (ADR-001):
 # los umbrales viven aquí, la lógica en rules.py como funciones puras.
-# ⏳ 7 de agosto: calibrar estos valores con el dataset real (ADR-013).
+#
+# Calibrados el 7-ago-2026 contra las 160 trayectorias de
+# `trayectorias_postop_silver.xlsx` y su `label_ground_truth`. La derivación y las
+# métricas resultantes están en docs/calibracion-triage.md y se verifican en
+# app/tests/test_triage_from_trajectories.py.
 
-pain_high: 7            # dolor > 7 (y medicación inefectiva) -> ALTO
-temperature_high_c: 38.5  # temperatura > 38.5 °C -> ALTO
+rojo:
+  # Cualquiera de estas cuatro condiciones -> rojo.
+  # Sobre los 160 casos: 12/12 de recall, 0 falsos positivos. Separación perfecta.
+  temperature_c: 38.0        # >=
+  pain_nrs: 8                # >=
+  # herida = secrecion_purulenta  y  movilidad = incapacitante_nueva son categóricos
+
+amarillo:
+  # Score aditivo de señales; >= score_min -> amarillo.
+  # Sobre los 160 casos: 25/25 de recall, 8/123 falsos positivos sobre verde.
+  score_min: 2
+  pain_nrs: 5                # >=
+  temperature_c: 37.3        # >=
+  # + herida = eritema_leve, apetito = muy_disminuido, sueno = muy_alterado
+
+legacy:
+  # Regla previa que se conserva: dolor alto Y medicación que no lo controla.
+  # Cubre al paciente que reporta 7 con analgesia inefectiva, por debajo del rojo.
+  pain_high: 7               # >
+
+incertidumbre:
+  # Si la llamada termina con menos de esta fracción de los 6 slots respondidos,
+  # o con un slot capaz de disparar rojo sin responder habiendo ya una señal
+  # amarilla, se fuerza ALTO. Compramos un falso positivo para cerrar una vía de
+  # falso negativo, que es la asimetría que premia la rúbrica.
+  min_completeness: 0.5

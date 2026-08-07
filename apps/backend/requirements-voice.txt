@@ -1,6 +1,15 @@
-# Dependencias del MODO DE VOZ (Pipecat 1.x). Pesadas — se instalan solo si el
-# build lo pide (Dockerfile ARG INSTALL_VOICE=true). El modo texto NO las necesita.
+# Voz — Pipecat con los tres servicios de primera parte que necesitamos.
 #
-# Incluye: transporte SmallWebRTC (aiortc/av), Deepgram STT y ElevenLabs TTS.
-# (Deepgram hace el endpointing/VAD server-side, así que no se necesita Silero local.)
-pipecat-ai[deepgram,elevenlabs,webrtc]>=1.4.0,<2
+#   groq    -> GroqSTTService, modelo por defecto whisper-large-v3-turbo.
+#              Hereda de BaseWhisperSTTService, que trabaja por segmentos y por
+#              tanto EXIGE un VAD en el transporte (SileroVADAnalyzer, ya incluido
+#              vía el onnxruntime del core).
+#   kokoro  -> KokoroTTSService sobre kokoro-onnx. Sin PyTorch, y espeak-ng viaja
+#              dentro del wheel de espeakng-loader: el jurado no instala nada del
+#              sistema. Voz es: ef_dora.
+#   webrtc  -> SmallWebRTCTransport (aiortc).
+#
+# El LLM no va aquí: Ollama expone API compatible con OpenAI y el SDK `openai` ya
+# está en el core de Pipecat.
+
+pipecat-ai[groq,kokoro,webrtc]>=1.7,<2

@@ -1,8 +1,7 @@
 """Configuración central — lee variables de entorno (.env).
 
-Única fuente de configuración del backend. Todo lo que es "bloqueado hasta el
-7 de agosto" (modelo LLM, dataset Delta Share) se controla desde aquí para que
-ajustarlo sea cambiar una variable, no reescribir código (ADR-002).
+Única fuente de configuración del backend. Cambiar de modelo, de voz o de umbral
+del RAG es cambiar una variable, no reescribir código (ADR-002).
 """
 from __future__ import annotations
 
@@ -14,45 +13,61 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # --- Base de datos (ADR-004: PostgreSQL + pgvector, única BD) ---
-    database_url: str = "postgresql+psycopg://clinical:clinical@localhost:5432/clinical"
+    # --- Estado de la conversación (ADR-014: SQLite, sin servidor) ---
+    # Se abandonó PostgreSQL+pgvector: los vectores viven en Chroma y quitar el
+    # servidor de base de datos elimina Docker de la ruta crítica del arranque,
+    # que es donde más aprieta la compuerta de 15 minutos.
+    database_url: str = "sqlite:///./data/clinical.db"
 
-    # --- LLM (ADR-002: adaptador intercambiable) ---
-    # mock  -> determinista, sin API key (por defecto, corre sin credenciales)
-    # anthropic -> implementación provisional hasta que se anuncie el modelo (7 ago)
-    llm_provider: str = "mock"
-    anthropic_api_key: str | None = None
-    # Default mandado por el skill claude-api. Para el presupuesto de latencia de
-    # voz (<1.5s, RNF-02) se puede cambiar a un modelo más rápido vía esta variable.
-    anthropic_model: str = "claude-opus-4-8"
+    # --- LLM (ADR-002 / ADR-010) — compuerta G3 ---
+    # ollama -> llama3.2:3b, el modelo del agente. Está en la lista permitida.
+    # mock   -> extractor determinista, para tests sin Ollama levantado.
+    llm_provider: str = "ollama"
+    llm_model: str = "llama3.2:3b"
+    ollama_host: str = "http://localhost:11434"
+    # Si el modelo tarda más que esto, el turno se completa con el léxico
+    # determinista y se marca degradado. Medido: la extracción va en ~325 ms.
+    llm_timeout_s: float = 2.5
+    # Mantiene el modelo en RAM entre turnos. Sin esto, el primer turno tras una
+    # pausa cuesta ~24 s de recarga.
+    llm_keep_alive: str = "60m"
 
-    # --- Embeddings (RAG). Voyage AI para simular Databricks en el test ---
-    # ⏳ 7 ago: confirmar el modelo definitivo según el LLM obligatorio (ADR-011).
-    voyage_api_key: str | None = None
-    embedding_model: str = "voyage-3"
-    embedding_dim: int = 1024  # voyage-3 = 1024. Configurable: el modelo puede cambiar el 7 ago.
+    # --- Embeddings (ADR-011): bge-m3 servido por el mismo Ollama ---
+    # Mismo modelo multilingüe elegido, cuantizado a 1.2 GB, 1024 dims, 8K ctx.
+    # Reutilizar el runtime de Ollama evita añadir fastembed/onnxruntime aparte.
+    embedding_model: str = "bge-m3"
+    embedding_dim: int = 1024
 
-    # --- Voz (Pipecat). Necesarias solo para el modo de voz real ---
-    deepgram_api_key: str | None = None
-    elevenlabs_api_key: str | None = None
-    elevenlabs_voice_id: str | None = None  # ⏳ elegir voz nativa es-CO (ADR-007)
-    elevenlabs_model: str = "eleven_flash_v2_5"
+    # --- Voz ---
+    # STT: Groq Whisper. G3 restringe el modelo que razona, no el reconocimiento
+    # de voz, así que usarlo no compromete la compuerta.
+    groq_api_key: str | None = None
+    stt_model: str = "whisper-large-v3-turbo"
+    # TTS: Kokoro local. Voces en español: ef_dora (F), em_alex (M), em_santa (M).
+    tts_voice: str = "ef_dora"
+    # Detección de fin de turno. 0.7 s protege al paciente mayor de ser cortado a
+    # media frase; es la palanca dominante del presupuesto de latencia.
+    vad_stop_secs: float = 0.7
 
-    # --- RAG: umbral de confianza para "no tengo evidencia suficiente" (ADR-005) ---
+    # --- RAG: umbral de "no tengo evidencia suficiente" (ADR-005) ---
     rag_top_k: int = 4
+    # Se sobre-recuperan candidatos y luego se filtran de forma determinista
+    # (fuera de alcance, duplicados, máximo por documento) hasta dejar top_k.
+    rag_fetch_k: int = 12
+    # ⚠️ Calibrar con scripts/calibrate_rag.py. El 0.55 anterior venía de voyage-3
+    # y no transfiere: con bge-m3 las similitudes observadas van de 0.75 a 0.79,
+    # así que 0.55 dejaría pasar cualquier cosa.
     rag_min_confidence: float = 0.55
+    chroma_dir: str = "data/chroma"
+    chroma_collection: str = "clinical_knowledge"
 
-    # --- Chunking ---
-    chunk_size: int = 800
-    chunk_overlap: int = 150
+    # --- Chunking (debe coincidir con scripts/build_index.py) ---
+    chunk_size: int = 900
+    chunk_overlap: int = 180
 
-    # --- Prompts versionados fuera del código (/prompts, RNF-05) ---
+    # --- Prompts y datos versionados fuera del código (RNF-05) ---
     prompts_dir: str = "prompts"
-
-    # --- Datos de ejemplo (stand-in de Delta Share hasta el 7 de agosto) ---
-    samples_dir: str = "data/samples"
-    # ⏳ 7 ago: credenciales Delta Share (ADR-012). Hoy no se usan.
-    databricks_share_profile: str | None = None
+    seed_dir: str = "data/seed"
 
 
 @lru_cache

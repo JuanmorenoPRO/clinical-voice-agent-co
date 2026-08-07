@@ -4,15 +4,26 @@ Una función por regla, con nombre y descripción legible, 100% testeable. El LL
 NUNCA dispara alertas: solo extrae síntomas; estas funciones deciden. Los
 umbrales viven en thresholds.yaml.
 
-⏳ 7 de agosto: agregar/ajustar reglas por procedimiento con el dataset real
-(ADR-013). Añadir una regla nueva es escribir una función y registrarla en RULES.
+Las reglas se organizan en tres estratos:
+
+  EMERGENCIA  banderas que exigen el 123. No están en el dataset (que solo describe
+              el curso postoperatorio esperable) pero sí en los escenarios que el
+              jurado interpreta en vivo. Se conservan de la versión anterior.
+  ROJO        derivado del ground truth de las 160 trayectorias: 12/12 de recall
+              con 0 falsos positivos. Escala a enfermería con prioridad.
+  AMARILLO    score aditivo de cinco señales; >=2 -> vigilancia. 25/25 de recall
+              con 8/123 falsos positivos sobre verde.
+
+Principio transversal: **un slot en None nunca reduce el nivel de riesgo.** Los
+predicados son igualdad explícita o `is True`, jamás `not x`, porque el paciente
+evasivo simplemente no contesta y la ausencia no es normalidad.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable
 
-from ..schemas import RiskLevel, Symptoms
+from ..schemas import EscalationAction, RiskLevel, Symptoms
 
 
 @dataclass(frozen=True)
@@ -21,17 +32,10 @@ class Rule:
     description: str
     level: RiskLevel
     predicate: Callable[[Symptoms, dict], bool]
+    action: EscalationAction = "seguimiento"
 
 
-def _pain_uncontrolled(s: Symptoms, t: dict) -> bool:
-    return s.pain_level is not None and s.pain_level > t["pain_high"] and s.medication_effective is False
-
-
-def _high_fever(s: Symptoms, t: dict) -> bool:
-    if s.temperature_c is not None:
-        return s.temperature_c > t["temperature_high_c"]
-    return False
-
+# --- Estrato EMERGENCIA -------------------------------------------------------
 
 def _heavy_bleeding(s: Symptoms, t: dict) -> bool:
     return s.heavy_bleeding is True
@@ -57,54 +61,83 @@ def _seizure(s: Symptoms, t: dict) -> bool:
     return s.seizure is True
 
 
-# Reglas de línea base (PRD RF-08). ⏳ calibrar el 7 de agosto.
+# --- Estrato ROJO (derivado del dataset) --------------------------------------
+
+def _fever_red(s: Symptoms, t: dict) -> bool:
+    return s.temperature_c is not None and s.temperature_c >= t["rojo"]["temperature_c"]
+
+
+def _severe_pain(s: Symptoms, t: dict) -> bool:
+    return s.pain_level is not None and s.pain_level >= t["rojo"]["pain_nrs"]
+
+
+def _purulent_wound(s: Symptoms, t: dict) -> bool:
+    return s.wound == "secrecion_purulenta"
+
+
+def _incapacitating_mobility(s: Symptoms, t: dict) -> bool:
+    return s.mobility == "incapacitante_nueva"
+
+
+# --- Estrato AMARILLO ---------------------------------------------------------
+
+def yellow_signals(s: Symptoms, t: dict) -> list[str]:
+    """Las cinco señales que suman al score. Pública: el resumen las enumera."""
+    y = t["amarillo"]
+    fired = []
+    if s.pain_level is not None and s.pain_level >= y["pain_nrs"]:
+        fired.append("dolor_moderado")
+    if s.temperature_c is not None and s.temperature_c >= y["temperature_c"]:
+        fired.append("febricula")
+    if s.wound == "eritema_leve":
+        fired.append("eritema_herida")
+    if s.appetite == "muy_disminuido":
+        fired.append("inapetencia")
+    if s.sleep == "muy_alterado":
+        fired.append("sueno_alterado")
+    return fired
+
+
+def _multiple_yellow_signals(s: Symptoms, t: dict) -> bool:
+    return len(yellow_signals(s, t)) >= t["amarillo"]["score_min"]
+
+
+def _pain_uncontrolled(s: Symptoms, t: dict) -> bool:
+    return (
+        s.pain_level is not None
+        and s.pain_level > t["legacy"]["pain_high"]
+        and s.medication_effective is False
+    )
+
+
 RULES: list[Rule] = [
-    Rule(
-        name="dolor_no_controlado",
-        description="Dolor > 8 y medicación inefectiva",
-        level="ALTO",
-        predicate=_pain_uncontrolled,
-    ),
-    Rule(
-        name="fiebre_alta",
-        description="Temperatura > 38.5 °C",
-        level="ALTO",
-        predicate=_high_fever,
-    ),
-    Rule(
-        name="sangrado_abundante",
-        description="Sangrado abundante",
-        level="CRÍTICO",
-        predicate=_heavy_bleeding,
-    ),
-    Rule(
-        name="dificultad_respiratoria",
-        description="Dificultad para respirar",
-        level="CRÍTICO",
-        predicate=_breathing_difficulty,
-    ),
-    Rule(
-        name="perdida_consciencia",
-        description="Pérdida de consciencia",
-        level="CRÍTICO",
-        predicate=_loss_of_consciousness,
-    ),
-    Rule(
-        name="dolor_toracico",
-        description="Dolor en el pecho / torácico",
-        level="CRÍTICO",
-        predicate=_chest_pain,
-    ),
-    Rule(
-        name="estado_mental_alterado",
-        description="Confusión, desorientación o estado mental alterado",
-        level="CRÍTICO",
-        predicate=_altered_mental_status,
-    ),
-    Rule(
-        name="convulsion",
-        description="Convulsión / crisis convulsiva",
-        level="CRÍTICO",
-        predicate=_seizure,
-    ),
+    # --- EMERGENCIA: llamar al 123 -------------------------------------------
+    Rule("sangrado_abundante", "Sangrado abundante",
+         "CRÍTICO", _heavy_bleeding, "emergencia_123"),
+    Rule("dificultad_respiratoria", "Dificultad para respirar",
+         "CRÍTICO", _breathing_difficulty, "emergencia_123"),
+    Rule("perdida_consciencia", "Pérdida de consciencia",
+         "CRÍTICO", _loss_of_consciousness, "emergencia_123"),
+    Rule("dolor_toracico", "Dolor en el pecho / torácico",
+         "CRÍTICO", _chest_pain, "emergencia_123"),
+    Rule("estado_mental_alterado", "Confusión, desorientación o estado mental alterado",
+         "CRÍTICO", _altered_mental_status, "emergencia_123"),
+    Rule("convulsion", "Convulsión / crisis convulsiva",
+         "CRÍTICO", _seizure, "emergencia_123"),
+
+    # --- ROJO: enfermería con prioridad ---------------------------------------
+    Rule("fiebre_38", "Temperatura ≥ 38.0 °C",
+         "CRÍTICO", _fever_red, "enfermeria_prioritaria"),
+    Rule("herida_purulenta", "Secreción purulenta en la herida quirúrgica",
+         "CRÍTICO", _purulent_wound, "enfermeria_prioritaria"),
+    Rule("movilidad_incapacitante", "Pérdida nueva de la capacidad de moverse",
+         "CRÍTICO", _incapacitating_mobility, "enfermeria_prioritaria"),
+    Rule("dolor_severo", "Dolor ≥ 8 en escala 0–10",
+         "CRÍTICO", _severe_pain, "enfermeria_prioritaria"),
+
+    # --- AMARILLO: vigilancia y seguimiento -----------------------------------
+    Rule("vigilancia_multiples_signos", "Dos o más señales de alarma leves simultáneas",
+         "ALTO", _multiple_yellow_signals, "seguimiento"),
+    Rule("dolor_no_controlado", "Dolor > 7 y medicación inefectiva",
+         "ALTO", _pain_uncontrolled, "seguimiento"),
 ]

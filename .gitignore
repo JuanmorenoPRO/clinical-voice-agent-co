@@ -17,3 +17,13 @@ apps/frontend/node_modules/
 
 # Sistema
 .DS_Store
+
+# Kit oficial del reto (dataset + PDFs, 127 MB) — no se versiona
+ParticipantArtifacts/
+
+# Indice RAG generado
+data/chroma/
+dist/
+
+# Logs y metricas
+logs/

@@ -1,8 +1,9 @@
 """Prueba de ida y vuelta del RAG: ingesta -> recuperación.
 
-Requiere VOYAGE_API_KEY y una BD PostgreSQL+pgvector accesible (DATABASE_URL).
-Si faltan, la prueba se salta (skip) — así el resto de la suite corre en cualquier
-máquina sin credenciales (gate: los tests deterministas siempre pasan).
+⚠️ Escrita para el stack anterior (Voyage AI + PostgreSQL/pgvector), que ya no
+existe: los embeddings los sirve Ollama con bge-m3 y los vectores viven en
+ChromaDB. Queda desactivada hasta que la migración del RAG la reescriba, junto
+con el test de conocimiento vivo (alta/baja en caliente) que exige la compuerta G5.
 """
 from __future__ import annotations
 
@@ -10,27 +11,9 @@ import os
 import tempfile
 
 import pytest
-from sqlalchemy import text
 
-from app.config import get_settings
-
-_settings = get_settings()
-
-
-def _db_available() -> bool:
-    try:
-        from app.db import engine
-
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        return True
-    except Exception:
-        return False
-
-
-pytestmark = pytest.mark.skipif(
-    not _settings.voyage_api_key or not _db_available(),
-    reason="Requiere VOYAGE_API_KEY y PostgreSQL+pgvector (DATABASE_URL).",
+pytestmark = pytest.mark.skip(
+    reason="Pendiente de reescritura para ChromaDB + bge-m3 (migración del RAG)."
 )
 
 

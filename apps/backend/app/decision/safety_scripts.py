@@ -62,11 +62,62 @@ _EMPATHIC_OPENER = (
 )
 
 
-def script_for(triggered_rules: list[str]) -> str:
-    """Selecciona el guion según la primera regla CRÍTICA disparada.
+# Los rojos derivados del dataset (fiebre ≥38, herida purulenta, movilidad
+# incapacitante, dolor ≥8) son complicaciones postoperatorias reales, no emergencias
+# vitales. Escalan igual de rápido, pero el guion no puede sonar a infarto: alarmar
+# de más a un paciente que lo que necesita es una consulta hoy también es un daño.
+_PRIORITARIA: dict[str, str] = {
+    "fiebre_38": (
+        "Esa fiebre después de la cirugía sí hay que revisarla hoy mismo, no es algo "
+        "para esperar. Voy a pedir que enfermería la contacte en las próximas horas. "
+        "Mientras tanto tome abundante líquido y vuelva a medirse la temperatura en un "
+        "par de horas. Si pasa de 39, le da dificultad para respirar o se siente "
+        "desorientada, llame al 123 sin esperar la llamada."
+    ),
+    "herida_purulenta": (
+        "Esa secreción en la herida hay que valorarla hoy, porque puede ser una "
+        "infección que necesita tratamiento. Voy a pedir que enfermería lo contacte en "
+        "las próximas horas. No se aplique cremas ni destape la herida; cúbrala con una "
+        "gasa limpia y seca. Si aparece fiebre alta o el enrojecimiento se extiende, "
+        "llame al 123."
+    ),
+    "movilidad_incapacitante": (
+        "Que de un momento a otro no pueda moverse como antes es un cambio que hay que "
+        "revisar hoy. Voy a pedir que enfermería lo contacte en las próximas horas. "
+        "Evite forzarse y pida ayuda para levantarse. Si siente la pierna hinchada, "
+        "caliente o le falta el aire, llame al 123 de inmediato."
+    ),
+    "dolor_severo": (
+        "Un dolor de esa intensidad a estas alturas no es lo esperado y hay que "
+        "revisarlo hoy. Voy a pedir que enfermería lo contacte en las próximas horas. "
+        "Tome la analgesia como se la formularon y quédese en reposo. Si el dolor sigue "
+        "subiendo, aparece fiebre o vomita, llame al 123."
+    ),
+}
 
-    Antepone una validación emocional breve (ADR-006) al guion clínico determinista.
+_PRIORITARIA_DEFAULT = (
+    "Lo que me cuenta hay que revisarlo hoy mismo. Voy a pedir que el personal de "
+    "enfermería lo contacte en las próximas horas para valorarlo. Si mientras tanto "
+    "empeora de forma marcada, no espere la llamada y comuníquese al 123."
+)
+
+# Apertura más contenida para la vía de enfermería: reconoce sin dramatizar.
+_CALM_OPENER = "Gracias por contármelo, hizo bien en decírmelo. "
+
+
+def script_for(triggered_rules: list[str], action: str = "emergencia_123") -> str:
+    """Selecciona el guion determinista según la vía de escalamiento y la regla.
+
+    Antepone una validación emocional breve (ADR-006) al guion clínico. El tono lo
+    fija `action`: el 123 abre reconociendo el susto; enfermería prioritaria abre
+    agradeciendo el reporte, porque no es una emergencia vital.
     """
+    if action == "enfermeria_prioritaria":
+        for rule in triggered_rules:
+            if rule in _PRIORITARIA:
+                return _CALM_OPENER + _PRIORITARIA[rule]
+        return _CALM_OPENER + _PRIORITARIA_DEFAULT
+
     for rule in triggered_rules:
         if rule in _BY_RULE:
             return _EMPATHIC_OPENER + _BY_RULE[rule]
