@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_session
 from ..models import Conversation
-from ..summary.service import build_summary
+from ..summary.service import close_conversation
 from ..agent import orchestrator as convo
 from ..schemas import TurnRequest, TurnResponse
 
@@ -30,12 +30,7 @@ def turn(req: TurnRequest, session: Session = Depends(get_session)) -> TurnRespo
 
 @router.post("/{conversation_id}/close")
 def close(conversation_id: str, session: Session = Depends(get_session)) -> dict:
-    conv = session.get(Conversation, conversation_id)
-    if conv is None:
+    if session.get(Conversation, conversation_id) is None:
         raise HTTPException(404, "Conversación no encontrada")
-    from datetime import datetime, timezone
-
-    conv.status = "closed"
-    conv.ended_at = datetime.now(timezone.utc)
-    session.commit()
-    return {"conversation_id": conversation_id, "summary": build_summary(session, conversation_id)}
+    return {"conversation_id": conversation_id,
+            "summary": close_conversation(session, conversation_id)}

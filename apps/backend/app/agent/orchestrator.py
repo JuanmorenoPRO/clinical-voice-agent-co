@@ -148,9 +148,18 @@ async def process_turn_async(
     recientes = _aperturas_recientes(prior)
     evidence: RagResult | None = None
 
-    if critico:
+    if critico and action.kind == "escalar":
+        # Primer turno crítico: se entrega el guion de seguridad completo.
         # Ruta crítica: no pasa por el modelo ni por el RAG.
         final = decision.safety_script or phrasing.cierre(nombre, escalado=True)
+    elif critico:
+        # El cuadro crítico sigue en `acumulado` para siempre —no se puede
+        # "des-escalar" dentro de la llamada—, así que sin este segundo caso
+        # `critico` seguiría siendo True en cada turno y el guion completo se
+        # repetiría palabra por palabra mientras el paciente siga hablando.
+        # `script.next_action` ya lo convirtió en `action.kind == "cerrar"`; aquí
+        # se cierra la llamada de verdad en vez de repetir el guion.
+        final = phrasing.cierre_tras_escalamiento(nombre)
     elif extraccion.intent == "fuera_de_mision":
         final = phrasing.FUERA_DE_MISION
     elif extraccion.intent == "rechazo":
@@ -213,6 +222,11 @@ async def process_turn_async(
     # --- alerta, deduplicada por reglas nuevas -------------------------------
     alert_id = _crear_alerta_si_procede(session, conv, decision, acumulado, text)
 
+    # La llamada termina aquí: es el segundo turno tras un escalamiento crítico
+    # (el primero entregó el guion; este solo confirma y cierra). El pipeline de
+    # voz usa `call_ended` para colgar de verdad después de decir el cierre.
+    call_ended = critico and action.kind == "cerrar"
+
     sources = evidence.sources if evidence else []
     turn = Turn(
         conversation_id=conv.id,
@@ -235,6 +249,14 @@ async def process_turn_async(
     session.add(turn)
     session.commit()
 
+    if call_ended:
+        # Cierra la conversación y genera el resumen (RF-10) en el mismo turno
+        # que la cierra, para que quede listo sin depender de una llamada
+        # aparte a /conversation/{id}/close.
+        from ..summary.service import close_conversation
+
+        close_conversation(session, conv.id)
+
     return TurnResponse(
         conversation_id=conv.id,
         turn_id=turn.id,
@@ -245,6 +267,7 @@ async def process_turn_async(
         sources=sources,
         critical_override=critico,
         alert_id=alert_id,
+        call_ended=call_ended,
     )
 
 

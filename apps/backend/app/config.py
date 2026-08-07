@@ -60,8 +60,27 @@ class Settings(BaseSettings):
     # de voz, así que usarlo no compromete la compuerta.
     groq_api_key: str | None = None
     stt_model: str = "whisper-large-v3-turbo"
-    # TTS: Kokoro local. Voces en español: ef_dora (F), em_alex (M), em_santa (M).
-    tts_voice: str = "ef_dora"
+
+    # TTS: piper (por defecto) o kokoro.
+    #
+    # Se probaron ambos con la misma frase clínica, sintetizados y verificados
+    # transcribiéndolos de vuelta con Whisper (docs/spikes-7-agosto.md). Kokoro es
+    # un modelo centrado en inglés que cubre español por fonemización de
+    # respaldo (espeak-ng): suena a acento anglosajón hablando español, no a
+    # español latino. Piper tiene modelos entrenados nativamente por idioma;
+    # `es_MX-claude-high` resultó además 5 veces más rápido en caliente
+    # (RTF 0.05 frente al 0.24 de Kokoro) y es el acento que más se reconoce
+    # como "neutro latinoamericano" a un oído colombiano frente a las
+    # alternativas del catálogo (es_ES peninsular, es_AR con voseo marcado).
+    #
+    # `piper-tts` es GPL-3.0 (ver LICENSE-PIPER.md); se declara explícitamente
+    # en el informe. No arrastra PyTorch: solo onnxruntime, igual que Kokoro.
+    tts_provider: str = "piper"
+    # Voces Kokoro en español: ef_dora (F), em_alex (M), em_santa (M).
+    # Voces Piper en español: es_MX-claude-high, es_AR-daniela-high, es_ES-*.
+    tts_voice: str = "es_MX-claude-high"
+    piper_voices_dir: str = "data/piper-voices"
+
     # Detección de fin de turno. 0.7 s protege al paciente mayor de ser cortado a
     # media frase; es la palanca dominante del presupuesto de latencia.
     vad_stop_secs: float = 0.7
@@ -93,6 +112,7 @@ def get_settings() -> Settings:
     # Se normalizan a absoluto después de leer el entorno, para que funcione igual
     # lanzado desde la raíz, desde apps/backend/ o desde un servicio del sistema.
     s.chroma_dir = _abs(s.chroma_dir)
+    s.piper_voices_dir = _abs(s.piper_voices_dir)
     s.prompts_dir = _abs(s.prompts_dir)
     s.seed_dir = _abs(s.seed_dir)
     if s.database_url.startswith("sqlite:///./"):

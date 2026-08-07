@@ -324,8 +324,13 @@ $("#vIniciar").onclick = async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    // Un solo canal de audio, bidireccional (sendrecv): manda el micrófono Y
+    // recibe la voz del agente sobre el MISMO canal. El backend de Pipecat
+    // (SmallWebRTCConnection) asume por contrato exactamente dos canales —
+    // "índice 0 = audio, índice 1 = vídeo"— y añadir aquí un segundo canal de
+    // audio "solo escuchar" ocupa el lugar reservado para vídeo y deja el
+    // micrófono sin llegar nunca al reconocimiento de voz.
     stream.getTracks().forEach(t => pc.addTrack(t, stream));
-    pc.addTransceiver("audio", { direction: "recvonly" });
 
     const audio = new Audio();
     audio.autoplay = true;

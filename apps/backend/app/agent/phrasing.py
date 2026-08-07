@@ -150,6 +150,18 @@ def acuse(semilla: str, usadas: list[str] | None = None, *, preocupante: bool = 
     return _rotar(banco, semilla, usadas or [])
 
 
+def cierre_tras_escalamiento(nombre: str | None) -> str:
+    """El segundo turno después de un guion de seguridad, y el último.
+
+    El guion completo (con las instrucciones de primeros auxilios) ya se dio en
+    el turno anterior; repetirlo aquí sonaría a robot atascado. Esto solo
+    confirma que quedó registrado y cierra, sin reabrir la conversación clínica.
+    """
+    saludo = f"{nombre}, " if nombre else ""
+    return (f"Ya quedó registrado lo que me contó, {saludo}y enfermería está al "
+            "tanto. Vamos a colgar aquí; si empeora, no espere, llame al 123.")
+
+
 def cierre(nombre: str | None, escalado: bool) -> str:
     saludo = f"{nombre}, " if nombre else ""
     if escalado:

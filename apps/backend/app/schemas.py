@@ -128,3 +128,8 @@ class TurnResponse(BaseModel):
     sources: list[Source]
     critical_override: bool
     alert_id: str | None = None
+    # True cuando este turno cerró la llamada (segundo turno tras un
+    # escalamiento crítico: ver app/agent/orchestrator.py). El pipeline de voz
+    # lo usa para colgar de verdad después de decir el cierre; el modo texto lo
+    # usa para dejar de aceptar turnos nuevos en esta conversación.
+    call_ended: bool = False

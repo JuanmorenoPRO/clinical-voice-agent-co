@@ -7,6 +7,8 @@ MÁXIMO alcanzado en la llamada (determinista, no lo decide el LLM).
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
 
 from ..models import Conversation, Patient, Summary, Turn
@@ -18,6 +20,29 @@ _RECOMMENDATION: dict[str, str] = {
     "ALTO": "Contactar al paciente en las próximas horas; revisar síntomas reportados.",
     "CRÍTICO": "Atención inmediata: el agente ya generó alerta y emitió guion de seguridad.",
 }
+
+
+def _as_utc(dt: datetime) -> datetime:
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+def close_conversation(session: Session, conversation_id: str) -> dict:
+    """Marca la llamada como cerrada y genera su resumen (RF-10).
+
+    Único punto que hace esto: lo usan tanto `POST /conversation/{id}/close`
+    (cierre explícito desde la consola) como el orquestador (cierre automático
+    tras un escalamiento crítico, ver `agent/orchestrator.py`). Es idempotente
+    — cerrar una conversación ya cerrada solo regenera el resumen — porque
+    ambos caminos pueden llegar a la misma conversación.
+    """
+    conv = session.get(Conversation, conversation_id)
+    if conv is None:
+        raise ValueError(f"Conversación {conversation_id} no existe")
+    if conv.status != "closed":
+        conv.status = "closed"
+        conv.ended_at = datetime.now(timezone.utc)
+        session.commit()
+    return build_summary(session, conversation_id)
 
 
 def build_summary(session: Session, conversation_id: str) -> dict:
@@ -56,7 +81,13 @@ def build_summary(session: Session, conversation_id: str) -> dict:
 
     duration_s = None
     if conv.ended_at and conv.started_at:
-        duration_s = int((conv.ended_at - conv.started_at).total_seconds())
+        # SQLite no guarda huso horario: lo que se escribe como aware (_now()
+        # en models.py usa datetime.now(timezone.utc)) vuelve naive al releerlo,
+        # mientras que un valor recién asignado en memoria (como `ended_at` en
+        # close_conversation, más abajo) sigue aware hasta el próximo refresco.
+        # Restar un aware con un naive lanza TypeError; se normalizan los dos a
+        # aware asumiendo UTC, que es lo único que este código escribe.
+        duration_s = int((_as_utc(conv.ended_at) - _as_utc(conv.started_at)).total_seconds())
 
     data = {
         "patient": patient.name if patient else None,

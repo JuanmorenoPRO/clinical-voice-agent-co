@@ -4,15 +4,25 @@ Cadena por componentes en streaming, transporte WebRTC al navegador (sin telefon
 real). El MISMO orquestador del modo texto lleva la lógica del turno; aquí solo se
 enchufan la entrada y la salida de audio.
 
-    micrófono ──WebRTC──▶ Silero VAD ──▶ Groq Whisper ──▶ orquestador ──▶ Kokoro ──WebRTC──▶ altavoz
+    micrófono ──WebRTC──▶ Silero VAD ──▶ Groq Whisper ──▶ orquestador ──▶ TTS ──WebRTC──▶ altavoz
 
-Los tres servicios son de primera parte de Pipecat, así que no hay que escribir
-ningún `STTService`/`TTSService` a medida. Dos detalles que no son obvios:
+Todos los servicios son de primera parte de Pipecat, así que no hay que escribir
+ningún `STTService`/`TTSService` a medida. Detalles que no son obvios:
 
   - `GroqSTTService` hereda de `BaseWhisperSTTService`, que trabaja por segmentos:
     **exige un VAD en el transporte**. Sin `SileroVADAnalyzer` no transcribe nada.
-  - Nada de esto arrastra PyTorch. `pipecat-ai[kokoro]` depende de `kokoro-onnx`, y
-    Silero corre sobre el `onnxruntime` que ya trae el core.
+  - **El VAD no se pasa como parámetro del transporte.** `TransportParams` no
+    declara ningún campo `vad_analyzer`, y Pydantic descarta ese kwarg en
+    silencio sin avisar: el resultado es una llamada que se conecta y hasta
+    saluda, pero jamás detecta que el paciente terminó de hablar. Es un
+    `FrameProcessor` propio (`VADProcessor`) que va explícito en la cadena.
+  - **TTS por defecto: Piper, no Kokoro.** Kokoro es un modelo centrado en
+    inglés que cubre español por fonemización de respaldo (espeak-ng): suena a
+    acento anglosajón hablando español. Piper entrena un modelo por idioma;
+    `es_MX-claude-high` además resultó 5× más rápido en caliente. Ver
+    `TTS_PROVIDER` en `config.py` y la medición en `docs/spikes-7-agosto.md`.
+  - Nada de esto arrastra PyTorch. `pipecat-ai[kokoro]` depende de `kokoro-onnx`
+    y `piper-tts` solo de `onnxruntime`; Silero corre sobre el mismo runtime.
 
 ⚠️ Importa Pipecat a nivel de módulo, así que SOLO debe importarse de forma
 perezosa (desde el router de voz), para que la app arranque en modo texto sin las
@@ -22,11 +32,13 @@ from __future__ import annotations
 
 import asyncio
 import time
+from pathlib import Path
 
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import (
+    EndFrame,
     Frame,
     TranscriptionFrame,
     TTSSpeakFrame,
@@ -35,9 +47,9 @@ from pipecat.frames.frames import (
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
+from pipecat.processors.audio.vad_processor import VADProcessor
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.groq.stt import GroqSTTService
-from pipecat.services.kokoro.tts import KokoroTTSService
 from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import TransportParams
 from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
@@ -45,6 +57,7 @@ from pipecat.workers.runner import WorkerRunner
 
 from ..agent.orchestrator import process_turn
 from ..agent.phrasing import APERTURA
+from ..schemas import TurnResponse
 from ..config import get_settings
 from ..db import SessionLocal
 
@@ -75,7 +88,7 @@ class ClinicalProcessor(FrameProcessor):
         self._patient_id = patient_id
         self._t_fin_habla: float | None = None
 
-    def _run_turn(self, text: str) -> str:
+    def _run_turn(self, text: str) -> TurnResponse:
         session = SessionLocal()
         try:
             result = process_turn(
@@ -85,7 +98,7 @@ class ClinicalProcessor(FrameProcessor):
                 patient_id=self._patient_id,
             )
             self._conversation_id = result.conversation_id
-            return result.response
+            return result
         finally:
             session.close()
 
@@ -94,23 +107,55 @@ class ClinicalProcessor(FrameProcessor):
 
         if isinstance(frame, UserStartedSpeakingFrame):
             self._t_fin_habla = None
+            logger.info("[voz] VAD: el paciente empezó a hablar")
         elif isinstance(frame, UserStoppedSpeakingFrame):
             self._t_fin_habla = time.perf_counter()
+            logger.info("[voz] VAD: el paciente dejó de hablar")
+        elif isinstance(frame, TranscriptionFrame) and not frame.text.strip():
+            # Groq transcribió pero no oyó nada inteligible (silencio, ruido).
+            # Sin este log, esto se ve idéntico a que el micrófono nunca llegó.
+            logger.warning("[voz] Groq devolvió una transcripción vacía")
 
         if isinstance(frame, TranscriptionFrame) and frame.text and frame.text.strip():
             text = frame.text.strip()
             logger.info(f"[voz] paciente: {text}")
             # El orquestador toca la base de datos: se corre en un hilo para no
             # bloquear el event loop del pipeline de audio.
-            response = await asyncio.to_thread(self._run_turn, text)
+            result = await asyncio.to_thread(self._run_turn, text)
             if self._t_fin_habla is not None:
                 ms = (time.perf_counter() - self._t_fin_habla) * 1000
                 logger.info(f"[voz] latencia fin-de-habla → respuesta: {ms:.0f} ms")
-            logger.info(f"[voz] agente: {response}")
-            await self.push_frame(TTSSpeakFrame(response))
+            logger.info(f"[voz] agente: {result.response}")
+            await self.push_frame(TTSSpeakFrame(result.response))
+            if result.call_ended:
+                # Segundo turno tras un escalamiento crítico: el guion ya se dio,
+                # esto solo confirma y cuelga. `EndFrame` es un frame de control
+                # —se procesa en orden—, así que solo dispara el cierre después
+                # de que el TTS del cierre haya terminado de sonar; no corta la
+                # frase a la mitad.
+                logger.info("[voz] llamada cerrada tras escalamiento crítico")
+                await self.push_frame(EndFrame(reason="cierre_por_escalamiento"))
             return
 
         await self.push_frame(frame, direction)
+
+
+def _build_tts(s):
+    """Construye el servicio de TTS según `TTS_PROVIDER`.
+
+    `piper` es el proveedor por defecto (ver el porqué en el docstring del
+    módulo). `kokoro` se mantiene disponible: importa Pipecat perezosamente
+    porque este módulo entero ya se importa perezosamente desde el router, así
+    que el import extra no le cuesta nada a quien nunca activa la voz.
+    """
+    if s.tts_provider == "kokoro":
+        from pipecat.services.kokoro.tts import KokoroTTSService
+
+        return KokoroTTSService(voice_id=s.tts_voice)
+
+    from pipecat.services.piper.tts import PiperTTSService
+
+    return PiperTTSService(voice_id=s.tts_voice, download_dir=Path(s.piper_voices_dir))
 
 
 async def run_bot(webrtc_connection, patient_id: str | None = None) -> None:
@@ -123,20 +168,26 @@ async def run_bot(webrtc_connection, patient_id: str | None = None) -> None:
             audio_in_enabled=True,
             audio_out_enabled=True,
             audio_out_10ms_chunks=2,
-            # Obligatorio: Groq Whisper transcribe por segmentos y necesita que
-            # alguien le diga dónde termina cada uno.
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(
-                # 0.7 s de silencio antes de dar el turno por terminado. Es la
-                # palanca dominante de la latencia (la mitad del presupuesto) y
-                # está alta a propósito: cortar a un paciente de 80 años a media
-                # frase es peor que responder medio segundo más tarde.
-                stop_secs=s.vad_stop_secs,
-                start_secs=0.2,
-                confidence=0.7,
-                min_volume=0.6,
-            )),
         ),
     )
+
+    # El VAD es un FrameProcessor propio en esta versión de Pipecat (1.7), no un
+    # parámetro del transporte. `TransportParams` (base_transport.py) no declara
+    # ningún campo `vad_analyzer` — pasarlo ahí no lanza error, pydantic lo
+    # descarta en silencio, y el resultado es un transporte que nunca detecta
+    # cuándo el paciente deja de hablar: el audio entra, pero `GroqSTTService`
+    # (que transcribe por segmentos) jamás recibe la señal de "ya terminó" y no
+    # transcribe nada, aunque la llamada parezca conectada y funcionando.
+    vad = VADProcessor(vad_analyzer=SileroVADAnalyzer(params=VADParams(
+        # 0.7 s de silencio antes de dar el turno por terminado. Es la palanca
+        # dominante de la latencia (la mitad del presupuesto) y está alta a
+        # propósito: cortar a un paciente de 80 años a media frase es peor que
+        # responder medio segundo más tarde.
+        stop_secs=s.vad_stop_secs,
+        start_secs=0.2,
+        confidence=0.7,
+        min_volume=0.6,
+    )))
 
     stt = GroqSTTService(
         api_key=s.groq_api_key,
@@ -145,10 +196,11 @@ async def run_bot(webrtc_connection, patient_id: str | None = None) -> None:
         prompt=_PROMPT_STT,
     )
 
-    tts = KokoroTTSService(voice_id=s.tts_voice)   # ef_dora, español
+    tts = _build_tts(s)
 
     pipeline = Pipeline([
         transport.input(),
+        vad,
         stt,
         ClinicalProcessor(patient_id=patient_id),
         tts,

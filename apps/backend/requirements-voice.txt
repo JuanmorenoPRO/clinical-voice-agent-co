@@ -1,15 +1,26 @@
-# Voz — Pipecat con los tres servicios de primera parte que necesitamos.
+# Voz — Pipecat con los servicios de primera parte que necesitamos.
 #
 #   groq    -> GroqSTTService, modelo por defecto whisper-large-v3-turbo.
 #              Hereda de BaseWhisperSTTService, que trabaja por segmentos y por
 #              tanto EXIGE un VAD en el transporte (SileroVADAnalyzer, ya incluido
-#              vía el onnxruntime del core).
-#   kokoro  -> KokoroTTSService sobre kokoro-onnx. Sin PyTorch, y espeak-ng viaja
-#              dentro del wheel de espeakng-loader: el jurado no instala nada del
-#              sistema. Voz es: ef_dora.
+#              vía el onnxruntime del core). El VAD se cablea como su propio
+#              FrameProcessor (VADProcessor) en app/voice/pipeline.py, no como
+#              parámetro del transporte — ver el docstring de ese módulo.
+#   piper   -> PiperTTSService, proveedor de TTS por defecto (TTS_PROVIDER=piper).
+#              Modelo es_MX-claude-high: entrenado nativamente en español, no por
+#              fonemización de respaldo como Kokoro, y medido 5x más rápido en
+#              caliente. Sin PyTorch, solo onnxruntime.
+#              ⚠️ piper-tts es GPL-3.0. Se declara en el informe final; no relicencia
+#              el resto del repo (MIT), pero si se distribuye la app empaquetada
+#              con esta dependencia en proceso, ese binario queda bajo GPL.
+#   kokoro  -> KokoroTTSService, disponible con TTS_PROVIDER=kokoro. Se mantiene
+#              cableado como alternativa sin GPL, aunque su español suena a acento
+#              anglosajón (es un modelo centrado en inglés con fallback de
+#              fonemización). Sin PyTorch: pipecat-ai[kokoro] depende de
+#              kokoro-onnx, no del paquete `kokoro`.
 #   webrtc  -> SmallWebRTCTransport (aiortc).
 #
 # El LLM no va aquí: Ollama expone API compatible con OpenAI y el SDK `openai` ya
 # está en el core de Pipecat.
 
-pipecat-ai[groq,kokoro,webrtc]>=1.7,<2
+pipecat-ai[groq,kokoro,piper,webrtc]>=1.7,<2

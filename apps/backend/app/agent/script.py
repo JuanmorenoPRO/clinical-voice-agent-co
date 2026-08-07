@@ -116,7 +116,17 @@ def next_action(state: CallState, symptoms: Symptoms, *, escalar: bool = False) 
     `escalar` lo impone el motor de decisión desde fuera; cuando llega, corta el
     guion sin importar en qué punto esté. Una emergencia no espera a que terminen
     las preguntas.
+
+    Una vez escalado, el cuadro crítico queda en `symptoms` para siempre —no hay
+    forma de "des-escalar" dentro de la llamada—, así que `escalar` seguiría
+    siendo True en todos los turnos siguientes. Sin este corte, `next_action`
+    devolvería `escalar` una y otra vez y el guion de seguridad se repetiría
+    palabra por palabra mientras el paciente siga hablando. El guion solo se
+    entrega una vez; el turno después de entregarlo cierra la llamada.
     """
+    if state.phase in (Phase.ESCALAMIENTO, Phase.TERMINADA):
+        return Action(kind="cerrar", phase=Phase.TERMINADA)
+
     if escalar:
         return Action(kind="escalar", phase=Phase.ESCALAMIENTO)
 

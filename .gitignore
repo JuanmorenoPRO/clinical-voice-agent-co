@@ -25,6 +25,9 @@ ParticipantArtifacts/
 data/chroma/
 dist/
 
+# Voces de Piper (se descargan solas al primer arranque de la voz)
+data/piper-voices/
+
 # Logs y metricas
 logs/
 
