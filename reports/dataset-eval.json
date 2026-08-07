@@ -1,13 +1,13 @@
 [
   {
     "caso_id": "caso_tray_pac_42_00000_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
     "completitud": 1.0,
     "sintomas": {
-      "pain_level": 1,
+      "pain_level": 2,
       "temperature_c": 37.5,
       "fever": true,
       "mobility": "normal",
@@ -35,22 +35,22 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "llm_calls": 1,
+    "tokens_in": 420,
+    "tokens_out": 13,
     "latencias": [
-      11,
-      1,
-      1,
+      966,
+      2,
       1,
       0,
+      1,
       1
     ],
-    "segundos": 0.03
+    "segundos": 0.98
   },
   {
     "caso_id": "caso_tray_pac_42_00000_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "rojo",
     "reglas": [
@@ -87,21 +87,21 @@
     },
     "turnos": 6,
     "llm_calls": 1,
-    "tokens_in": 493,
-    "tokens_out": 11,
+    "tokens_in": 501,
+    "tokens_out": 15,
     "latencias": [
-      3102,
-      2166,
-      4777,
-      3,
+      1676,
+      1435,
+      2343,
+      5,
       2,
-      2
+      1
     ],
-    "segundos": 10.06
+    "segundos": 5.49
   },
   {
     "caso_id": "caso_tray_pac_42_00000_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "amarillo",
     "reglas": [
@@ -136,30 +136,31 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 821,
-    "tokens_out": 31,
+    "llm_calls": 3,
+    "tokens_in": 1284,
+    "tokens_out": 43,
     "latencias": [
       0,
-      3794,
-      2518,
-      5572,
-      2518,
-      5953
+      1403,
+      603,
+      2042,
+      4,
+      1896
     ],
-    "segundos": 20.37
+    "segundos": 5.97
   },
   {
     "caso_id": "caso_tray_pac_42_00000_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "amarillo",
+    "predicho": "rojo",
     "reglas": [
+      "dolor_severo",
       "vigilancia_multiples_signos"
     ],
     "completitud": 0.833,
     "sintomas": {
-      "pain_level": 2,
+      "pain_level": 9,
       "temperature_c": 37.7,
       "fever": true,
       "mobility": null,
@@ -176,7 +177,7 @@
       "day_postop": null,
       "sources": {
         "wound": "lexicon",
-        "pain_level": "lexicon",
+        "pain_level": "llm",
         "temperature_c": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
@@ -184,29 +185,30 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1817,
-    "tokens_out": 64,
+    "turnos": 7,
+    "llm_calls": 1,
+    "tokens_in": 508,
+    "tokens_out": 14,
     "latencias": [
-      6424,
+      838,
+      3,
       2,
-      13300,
-      5578,
-      2392,
-      5303
+      1,
+      2,
+      1,
+      2
     ],
-    "segundos": 33.01
+    "segundos": 0.87
   },
   {
     "caso_id": "caso_tray_pac_42_00001_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
-      "pain_level": 2,
+      "pain_level": null,
       "temperature_c": 37.1,
       "fever": true,
       "mobility": "normal",
@@ -222,7 +224,6 @@
       "seizure": null,
       "day_postop": null,
       "sources": {
-        "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
@@ -233,23 +234,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 7,
+    "llm_calls": 4,
+    "tokens_in": 1606,
+    "tokens_out": 53,
     "latencias": [
+      460,
+      650,
+      542,
       1,
-      0,
-      2520,
-      1,
+      491,
       1,
       1
     ],
-    "segundos": 2.54
+    "segundos": 2.16
   },
   {
     "caso_id": "caso_tray_pac_42_00001_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -282,36 +284,38 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1791,
-    "tokens_out": 141,
+    "turnos": 8,
+    "llm_calls": 6,
+    "tokens_in": 3469,
+    "tokens_out": 278,
     "latencias": [
-      11801,
-      3458,
-      2384,
-      16282,
-      2413,
-      12208
+      570,
+      5090,
+      1550,
+      1586,
+      4478,
+      1297,
+      523,
+      4776
     ],
-    "segundos": 48.56
+    "segundos": 19.89
   },
   {
     "caso_id": "caso_tray_pac_42_00001_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "rojo",
     "reglas": [
       "fiebre_referida_con_signos",
       "vigilancia_multiples_signos"
     ],
-    "completitud": 0.833,
+    "completitud": 1.0,
     "sintomas": {
       "pain_level": 5,
       "temperature_c": null,
       "fever": true,
       "mobility": "normal",
-      "wound": null,
+      "wound": "normal",
       "appetite": "normal",
       "sleep": "muy_alterado",
       "medication_effective": null,
@@ -326,6 +330,7 @@
         "pain_level": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
+        "wound": "llm",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
@@ -333,35 +338,36 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 1348,
-    "tokens_out": 148,
+    "llm_calls": 4,
+    "tokens_in": 2386,
+    "tokens_out": 235,
     "latencias": [
-      5315,
-      5236,
-      2,
-      15182,
-      16576,
-      2531
+      3863,
+      1601,
+      1,
+      5943,
+      5076,
+      1
     ],
-    "segundos": 44.86
+    "segundos": 16.51
   },
   {
     "caso_id": "caso_tray_pac_42_00001_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
-    "predicho": "amarillo",
+    "predicho": "rojo",
     "reglas": [
+      "fiebre_referida_con_signos",
       "vigilancia_multiples_signos"
     ],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 5,
-      "temperature_c": 37.4,
+      "temperature_c": null,
       "fever": true,
       "mobility": "limitada_esperada",
       "wound": "eritema_leve",
-      "appetite": "levemente_disminuido",
+      "appetite": null,
       "sleep": "levemente_alterado",
       "medication_effective": null,
       "heavy_bleeding": null,
@@ -374,35 +380,35 @@
       "sources": {
         "wound": "lexicon",
         "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
+        "fever": "llm",
         "mobility": "lexicon",
-        "appetite": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 1427,
-    "tokens_out": 107,
+    "llm_calls": 3,
+    "tokens_in": 1612,
+    "tokens_out": 57,
     "latencias": [
-      7569,
-      3170,
-      4556,
-      7822,
-      13713,
-      5320
+      3637,
+      1413,
+      1602,
+      830,
+      1,
+      1
     ],
-    "segundos": 42.17
+    "segundos": 7.5
   },
   {
     "caso_id": "caso_tray_pac_42_00002_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
+    "predicho": "amarillo",
+    "reglas": [
+      "vigilancia_multiples_signos"
+    ],
     "completitud": 1.0,
     "sintomas": {
       "pain_level": 3,
@@ -411,7 +417,7 @@
       "mobility": "limitada_esperada",
       "wound": "normal",
       "appetite": "normal",
-      "sleep": "normal",
+      "sleep": "muy_alterado",
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -427,32 +433,33 @@
         "fever": "lexicon",
         "mobility": "lexicon",
         "appetite": "lexicon",
-        "sleep": "lexicon"
+        "sleep": "llm"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 691,
-    "tokens_out": 80,
+    "turnos": 7,
+    "llm_calls": 4,
+    "tokens_in": 2202,
+    "tokens_out": 189,
     "latencias": [
-      2967,
-      3530,
-      13569,
-      2,
-      2867,
-      5274
+      1763,
+      1579,
+      5339,
+      1,
+      1240,
+      1323,
+      4652
     ],
-    "segundos": 28.23
+    "segundos": 15.92
   },
   {
     "caso_id": "caso_tray_pac_42_00002_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 4,
       "temperature_c": 37.0,
@@ -460,7 +467,7 @@
       "mobility": "normal",
       "wound": "normal",
       "appetite": "normal",
-      "sleep": "normal",
+      "sleep": null,
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -475,40 +482,39 @@
         "fever": "lexicon",
         "mobility": "llm",
         "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
+        "appetite": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 400,
-    "tokens_out": 14,
+    "llm_calls": 2,
+    "tokens_in": 792,
+    "tokens_out": 27,
     "latencias": [
-      2,
       1,
-      2289,
       2,
-      2,
-      1
+      1384,
+      1,
+      1,
+      561
     ],
-    "segundos": 2.31
+    "segundos": 1.96
   },
   {
     "caso_id": "caso_tray_pac_42_00002_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
       "informacion_insuficiente"
     ],
-    "completitud": 0.833,
+    "completitud": 0.667,
     "sintomas": {
       "pain_level": 5,
       "temperature_c": null,
       "fever": true,
-      "mobility": "normal",
+      "mobility": null,
       "wound": null,
       "appetite": "levemente_disminuido",
       "sleep": "normal",
@@ -523,30 +529,30 @@
       "sources": {
         "pain_level": "lexicon",
         "fever": "llm",
-        "mobility": "llm",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1567,
-    "tokens_out": 93,
+    "turnos": 7,
+    "llm_calls": 4,
+    "tokens_in": 1926,
+    "tokens_out": 89,
     "latencias": [
-      12699,
-      5338,
-      2,
-      7249,
+      4538,
+      1459,
+      1,
+      556,
+      2155,
       1,
       1
     ],
-    "segundos": 25.31
+    "segundos": 8.73
   },
   {
     "caso_id": "caso_tray_pac_42_00002_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -554,7 +560,7 @@
     "sintomas": {
       "pain_level": 4,
       "temperature_c": 37.1,
-      "fever": true,
+      "fever": null,
       "mobility": "limitada_esperada",
       "wound": "normal",
       "appetite": "normal",
@@ -571,41 +577,41 @@
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "mobility": "lexicon",
-        "fever": "llm",
         "wound": "lexicon",
-        "appetite": "lexicon",
+        "appetite": "llm",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 411,
-    "tokens_out": 12,
+    "turnos": 7,
+    "llm_calls": 4,
+    "tokens_in": 1865,
+    "tokens_out": 121,
     "latencias": [
+      0,
+      0,
+      693,
+      555,
       1,
-      2521,
-      2215,
-      1,
-      1,
-      14906
+      0,
+      5603
     ],
-    "segundos": 19.66
+    "segundos": 6.86
   },
   {
     "caso_id": "caso_tray_pac_42_00003_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
     "completitud": 0.833,
     "sintomas": {
-      "pain_level": 2,
+      "pain_level": null,
       "temperature_c": 37.2,
       "fever": true,
       "mobility": "normal",
-      "wound": null,
+      "wound": "normal",
       "appetite": "normal",
       "sleep": "normal",
       "medication_effective": null,
@@ -617,33 +623,35 @@
       "seizure": null,
       "day_postop": null,
       "sources": {
-        "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
+        "wound": "llm",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 388,
-    "tokens_out": 13,
+    "turnos": 8,
+    "llm_calls": 5,
+    "tokens_in": 1984,
+    "tokens_out": 62,
     "latencias": [
-      1,
       0,
-      2516,
+      1510,
+      577,
+      489,
       1,
-      2517,
-      2188
+      545,
+      492,
+      1
     ],
-    "segundos": 7.23
+    "segundos": 3.64
   },
   {
     "caso_id": "caso_tray_pac_42_00003_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -676,23 +684,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 0,
     "tokens_in": 0,
     "tokens_out": 0,
     "latencias": [
+      4,
       1,
       1,
-      1,
-      1,
-      1,
+      0,
+      0,
+      0,
       1
     ],
-    "segundos": 0.01
+    "segundos": 0.02
   },
   {
     "caso_id": "caso_tray_pac_42_00003_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "rojo",
     "reglas": [
@@ -717,8 +726,9 @@
       "seizure": null,
       "day_postop": null,
       "sources": {
-        "pain_level": "lexicon",
+        "pain_level": "llm",
         "temperature_c": "lexicon",
+        "fever": "llm",
         "mobility": "lexicon",
         "wound": "lexicon",
         "appetite": "lexicon",
@@ -727,36 +737,38 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 8,
+    "llm_calls": 5,
+    "tokens_in": 2681,
+    "tokens_out": 109,
     "latencias": [
-      5202,
-      6801,
-      241,
-      3,
+      6099,
+      1451,
+      2500,
+      153,
+      619,
+      1,
       1,
       1
     ],
-    "segundos": 12.26
+    "segundos": 10.84
   },
   {
     "caso_id": "caso_tray_pac_42_00003_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "amarillo",
     "reglas": [
       "vigilancia_multiples_signos"
     ],
-    "completitud": 0.833,
+    "completitud": 1.0,
     "sintomas": {
       "pain_level": 6,
       "temperature_c": 37.6,
       "fever": true,
       "mobility": "normal",
       "wound": "normal",
-      "appetite": null,
+      "appetite": "muy_disminuido",
       "sleep": "levemente_alterado",
       "medication_effective": null,
       "heavy_bleeding": null,
@@ -772,6 +784,7 @@
         "fever": "lexicon",
         "mobility": "llm",
         "wound": "llm",
+        "appetite": "llm",
         "sleep": "lexicon"
       },
       "unanswered": [],
@@ -779,31 +792,178 @@
     },
     "turnos": 6,
     "llm_calls": 3,
-    "tokens_in": 1203,
-    "tokens_out": 40,
+    "tokens_in": 1249,
+    "tokens_out": 42,
     "latencias": [
-      3,
-      1,
-      2070,
-      1316,
-      2522,
-      1280
+      0,
+      0,
+      657,
+      606,
+      693,
+      1
     ],
-    "segundos": 7.21
+    "segundos": 1.97
   },
   {
     "caso_id": "caso_tray_pac_42_00004_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 2,
       "temperature_c": 36.9,
       "fever": true,
       "mobility": "limitada_esperada",
       "wound": "normal",
+      "appetite": null,
+      "sleep": "normal",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "temperature_c": "lexicon",
+        "fever": "lexicon",
+        "mobility": "lexicon",
+        "wound": "lexicon",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 6,
+    "llm_calls": 2,
+    "tokens_in": 788,
+    "tokens_out": 26,
+    "latencias": [
+      1,
+      0,
+      0,
+      538,
+      615,
+      1
+    ],
+    "segundos": 1.16
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00004_14",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "amarillo",
+    "reglas": [
+      "informacion_insuficiente"
+    ],
+    "completitud": 0.5,
+    "sintomas": {
+      "pain_level": 5,
+      "temperature_c": null,
+      "fever": true,
+      "mobility": "limitada_esperada",
+      "wound": null,
+      "appetite": null,
+      "sleep": null,
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "mobility": "lexicon",
+        "fever": "llm"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 5,
+    "tokens_in": 2088,
+    "tokens_out": 63,
+    "latencias": [
+      1,
+      623,
+      588,
+      608,
+      648,
+      585,
+      1
+    ],
+    "segundos": 3.07
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00004_3",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "verde",
+    "reglas": [],
+    "completitud": 1.0,
+    "sintomas": {
+      "pain_level": 3,
+      "temperature_c": null,
+      "fever": true,
+      "mobility": "limitada_esperada",
+      "wound": "normal",
+      "appetite": "normal",
+      "sleep": "normal",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "fever": "llm",
+        "mobility": "lexicon",
+        "wound": "lexicon",
+        "appetite": "lexicon",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 1,
+    "tokens_in": 391,
+    "tokens_out": 12,
+    "latencias": [
+      0,
+      555,
+      0,
+      0,
+      0,
+      1,
+      1
+    ],
+    "segundos": 0.57
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00004_7",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "rojo",
+    "reglas": [
+      "herida_purulenta"
+    ],
+    "completitud": 1.0,
+    "sintomas": {
+      "pain_level": 3,
+      "temperature_c": 37.1,
+      "fever": true,
+      "mobility": "normal",
+      "wound": "secrecion_purulenta",
       "appetite": "normal",
       "sleep": "normal",
       "medication_effective": null,
@@ -826,177 +986,36 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 413,
-    "tokens_out": 12,
+    "turnos": 7,
+    "llm_calls": 2,
+    "tokens_in": 843,
+    "tokens_out": 41,
     "latencias": [
+      0,
+      0,
+      0,
+      557,
+      1173,
       1,
-      1,
-      1,
-      2392,
-      2528,
-      1
+      0
     ],
-    "segundos": 4.94
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00004_14",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "rojo",
-    "reglas": [
-      "no_se_pudo_evaluar"
-    ],
-    "completitud": 0.333,
-    "sintomas": {
-      "pain_level": 5,
-      "temperature_c": null,
-      "fever": null,
-      "mobility": "limitada_esperada",
-      "wound": null,
-      "appetite": null,
-      "sleep": null,
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "mobility": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 427,
-    "tokens_out": 13,
-    "latencias": [
-      1,
-      2483,
-      2527,
-      2503,
-      2532,
-      1
-    ],
-    "segundos": 10.06
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00004_3",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 3,
-      "temperature_c": 37.1,
-      "fever": false,
-      "mobility": "limitada_esperada",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
-    "latencias": [
-      1,
-      1,
-      1,
-      1,
-      1,
-      1
-    ],
-    "segundos": 0.01
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00004_7",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 3,
-      "temperature_c": 37.1,
-      "fever": true,
-      "mobility": "normal",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
-    "latencias": [
-      1,
-      1,
-      1,
-      2522,
-      19,
-      3
-    ],
-    "segundos": 2.58
+    "segundos": 1.74
   },
   {
     "caso_id": "caso_tray_pac_42_00005_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
+    "predicho": "rojo",
+    "reglas": [
+      "herida_purulenta"
+    ],
     "completitud": 0.667,
     "sintomas": {
       "pain_level": null,
       "temperature_c": 36.5,
       "fever": true,
       "mobility": "normal",
-      "wound": "normal",
+      "wound": "secrecion_purulenta",
       "appetite": null,
       "sleep": "levemente_alterado",
       "medication_effective": null,
@@ -1011,35 +1030,39 @@
         "temperature_c": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
-        "wound": "lexicon",
+        "wound": "llm",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 1097,
-    "tokens_out": 82,
+    "turnos": 8,
+    "llm_calls": 5,
+    "tokens_in": 2399,
+    "tokens_out": 143,
     "latencias": [
       1,
-      6613,
-      7816,
+      657,
+      2233,
+      1376,
       1,
-      18880,
-      2538
+      5422,
+      1957,
+      1
     ],
-    "segundos": 35.88
+    "segundos": 11.66
   },
   {
     "caso_id": "caso_tray_pac_42_00005_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
+    "predicho": "amarillo",
+    "reglas": [
+      "informacion_insuficiente"
+    ],
     "completitud": 1.0,
     "sintomas": {
-      "pain_level": 2,
+      "pain_level": 5,
       "temperature_c": null,
       "fever": true,
       "mobility": "normal",
@@ -1059,29 +1082,29 @@
         "pain_level": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
-        "wound": "lexicon",
-        "sleep": "lexicon"
+        "wound": "llm",
+        "sleep": "llm"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 1150,
-    "tokens_out": 65,
+    "llm_calls": 3,
+    "tokens_in": 1593,
+    "tokens_out": 72,
     "latencias": [
-      13374,
-      3,
-      3961,
-      2444,
-      2521,
+      4415,
+      2,
+      1459,
+      1569,
+      578,
       1
     ],
-    "segundos": 22.32
+    "segundos": 8.04
   },
   {
     "caso_id": "caso_tray_pac_42_00005_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -1114,23 +1137,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 401,
-    "tokens_out": 16,
+    "turnos": 7,
+    "llm_calls": 2,
+    "tokens_in": 787,
+    "tokens_out": 30,
     "latencias": [
-      2,
+      0,
+      551,
       1,
       1,
       1,
-      1195,
+      664,
       1
     ],
-    "segundos": 1.22
+    "segundos": 1.23
   },
   {
     "caso_id": "caso_tray_pac_42_00005_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -1156,89 +1180,39 @@
         "temperature_c": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
+        "wound": "llm",
         "appetite": "lexicon",
-        "wound": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 690,
-    "tokens_out": 33,
+    "llm_calls": 3,
+    "tokens_in": 1562,
+    "tokens_out": 85,
     "latencias": [
       1,
       1,
-      2522,
+      716,
       1,
-      10777,
+      5285,
       1
     ],
-    "segundos": 13.32
+    "segundos": 6.02
   },
   {
     "caso_id": "caso_tray_pac_42_00006_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 3,
       "temperature_c": null,
       "fever": true,
       "mobility": "normal",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
-    "latencias": [
-      1,
-      1,
-      3,
-      1,
-      1,
-      3
-    ],
-    "segundos": 0.02
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00006_14",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "amarillo",
-    "reglas": [
-      "informacion_insuficiente"
-    ],
-    "completitud": 0.833,
-    "sintomas": {
-      "pain_level": 5,
-      "temperature_c": null,
-      "fever": true,
-      "mobility": "limitada_esperada",
       "wound": "normal",
       "appetite": "normal",
       "sleep": null,
@@ -1260,23 +1234,74 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 7,
+    "llm_calls": 2,
+    "tokens_in": 812,
+    "tokens_out": 24,
     "latencias": [
+      1398,
       1,
-      1,
-      2992,
-      2,
-      1,
-      2
+      0,
+      0,
+      0,
+      0,
+      479
     ],
-    "segundos": 3.01
+    "segundos": 1.89
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00006_14",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "rojo",
+    "reglas": [
+      "herida_purulenta"
+    ],
+    "completitud": 0.833,
+    "sintomas": {
+      "pain_level": 5,
+      "temperature_c": null,
+      "fever": true,
+      "mobility": "limitada_esperada",
+      "wound": "secrecion_purulenta",
+      "appetite": "normal",
+      "sleep": null,
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "fever": "lexicon",
+        "mobility": "lexicon",
+        "wound": "llm",
+        "appetite": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1199,
+    "tokens_out": 43,
+    "latencias": [
+      0,
+      1,
+      531,
+      1571,
+      638,
+      735,
+      1
+    ],
+    "segundos": 3.5
   },
   {
     "caso_id": "caso_tray_pac_42_00006_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "amarillo",
     "reglas": [
@@ -1311,23 +1336,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 7,
+    "llm_calls": 1,
+    "tokens_in": 398,
+    "tokens_out": 13,
     "latencias": [
       1,
+      570,
+      1,
+      0,
       1,
       1,
-      1,
-      2,
-      1
+      0
     ],
-    "segundos": 0.02
+    "segundos": 0.58
   },
   {
     "caso_id": "caso_tray_pac_42_00006_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "amarillo",
     "reglas": [
@@ -1367,18 +1393,18 @@
     "tokens_in": 0,
     "tokens_out": 0,
     "latencias": [
-      2534,
+      1487,
       1,
-      2474,
-      2,
+      1421,
+      1,
       1,
       1
     ],
-    "segundos": 5.03
+    "segundos": 2.93
   },
   {
     "caso_id": "caso_tray_pac_42_00007_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -1410,27 +1436,29 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 1139,
-    "tokens_out": 95,
+    "turnos": 8,
+    "llm_calls": 7,
+    "tokens_in": 3791,
+    "tokens_out": 293,
     "latencias": [
-      10764,
-      3458,
-      18940,
-      2,
-      19282,
-      6313
+      5330,
+      1636,
+      7124,
+      3,
+      1430,
+      5815,
+      1465,
+      1486
     ],
-    "segundos": 58.78
+    "segundos": 24.31
   },
   {
     "caso_id": "caso_tray_pac_42_00007_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 0.833,
+    "completitud": 1.0,
     "sintomas": {
       "pain_level": 0,
       "temperature_c": 36.2,
@@ -1438,7 +1466,7 @@
       "mobility": "normal",
       "wound": "normal",
       "appetite": "normal",
-      "sleep": null,
+      "sleep": "muy_alterado",
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -1453,28 +1481,29 @@
         "fever": "lexicon",
         "mobility": "lexicon",
         "wound": "lexicon",
-        "appetite": "lexicon"
+        "appetite": "lexicon",
+        "sleep": "llm"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "llm_calls": 1,
+    "tokens_in": 391,
+    "tokens_out": 14,
     "latencias": [
       1,
+      0,
+      0,
       1,
-      1,
-      1,
-      2,
-      2523
+      0,
+      596
     ],
-    "segundos": 2.54
+    "segundos": 0.61
   },
   {
     "caso_id": "caso_tray_pac_42_00007_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -1508,23 +1537,25 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 659,
-    "tokens_out": 25,
+    "turnos": 8,
+    "llm_calls": 2,
+    "tokens_in": 836,
+    "tokens_out": 26,
     "latencias": [
       1,
-      5334,
-      2450,
-      4291,
-      8518,
-      2
+      673,
+      1889,
+      1517,
+      1559,
+      684,
+      1920,
+      1517
     ],
-    "segundos": 20.61
+    "segundos": 9.78
   },
   {
     "caso_id": "caso_tray_pac_42_00007_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -1549,31 +1580,32 @@
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "fever": "lexicon",
+        "mobility": "llm",
         "wound": "lexicon",
-        "mobility": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 682,
-    "tokens_out": 36,
+    "turnos": 7,
+    "llm_calls": 5,
+    "tokens_in": 2702,
+    "tokens_out": 154,
     "latencias": [
-      17171,
-      2,
-      12003,
-      4826,
-      5110,
+      5347,
+      1534,
+      1,
+      5081,
+      1502,
+      2981,
       1
     ],
-    "segundos": 39.13
+    "segundos": 16.47
   },
   {
     "caso_id": "caso_tray_pac_42_00008_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -1607,32 +1639,32 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 792,
-    "tokens_out": 25,
+    "llm_calls": 3,
+    "tokens_in": 1222,
+    "tokens_out": 40,
     "latencias": [
-      2,
       1,
-      2526,
-      2182,
-      932,
-      1
+      0,
+      743,
+      636,
+      536,
+      4
     ],
-    "segundos": 5.66
+    "segundos": 1.93
   },
   {
     "caso_id": "caso_tray_pac_42_00008_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 0.833,
+    "completitud": 1.0,
     "sintomas": {
       "pain_level": 2,
       "temperature_c": null,
       "fever": true,
       "mobility": "normal",
-      "wound": null,
+      "wound": "normal",
       "appetite": "normal",
       "sleep": "normal",
       "medication_effective": null,
@@ -1647,6 +1679,7 @@
         "pain_level": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
+        "wound": "llm",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
@@ -1655,21 +1688,21 @@
     },
     "turnos": 6,
     "llm_calls": 1,
-    "tokens_in": 426,
-    "tokens_out": 13,
+    "tokens_in": 428,
+    "tokens_out": 14,
     "latencias": [
       1,
-      5008,
-      2804,
+      1804,
       1,
-      2263,
-      2723
+      2,
+      913,
+      180
     ],
-    "segundos": 12.81
+    "segundos": 2.92
   },
   {
     "caso_id": "caso_tray_pac_42_00008_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "rojo",
     "reglas": [
@@ -1700,22 +1733,22 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1575,
-    "tokens_out": 47,
+    "llm_calls": 6,
+    "tokens_in": 3208,
+    "tokens_out": 128,
     "latencias": [
       1,
-      9995,
-      7428,
-      6619,
-      5286,
+      4522,
+      3098,
+      2556,
+      5952,
       1
     ],
-    "segundos": 29.34
+    "segundos": 16.15
   },
   {
     "caso_id": "caso_tray_pac_42_00008_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -1750,24 +1783,24 @@
     "turnos": 6,
     "llm_calls": 1,
     "tokens_in": 781,
-    "tokens_out": 80,
+    "tokens_out": 79,
     "latencias": [
-      13634,
-      2504,
-      2503,
-      5570,
-      2,
-      1
+      13452,
+      2536,
+      2534,
+      8046,
+      5,
+      2
     ],
-    "segundos": 24.23
+    "segundos": 26.6
   },
   {
     "caso_id": "caso_tray_pac_42_00009_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 4,
       "temperature_c": 36.0,
@@ -1775,7 +1808,7 @@
       "mobility": "limitada_esperada",
       "wound": "normal",
       "appetite": "levemente_disminuido",
-      "sleep": "muy_alterado",
+      "sleep": null,
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -1790,29 +1823,78 @@
         "fever": "lexicon",
         "mobility": "lexicon",
         "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "llm"
+        "appetite": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
     "llm_calls": 1,
-    "tokens_in": 429,
-    "tokens_out": 16,
+    "tokens_in": 411,
+    "tokens_out": 13,
     "latencias": [
+      3,
       2,
       2,
-      2,
-      2,
-      2453,
-      1
+      3,
+      2550,
+      2323
     ],
-    "segundos": 2.47
+    "segundos": 4.91
   },
   {
     "caso_id": "caso_tray_pac_42_00009_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "rojo",
+    "reglas": [
+      "movilidad_incapacitante"
+    ],
+    "completitud": 0.833,
+    "sintomas": {
+      "pain_level": 5,
+      "temperature_c": null,
+      "fever": true,
+      "mobility": "incapacitante_nueva",
+      "wound": null,
+      "appetite": "normal",
+      "sleep": "normal",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "fever": "lexicon",
+        "mobility": "llm",
+        "appetite": "lexicon",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 1,
+    "tokens_in": 379,
+    "tokens_out": 17,
+    "latencias": [
+      2,
+      2,
+      1936,
+      4,
+      2,
+      3,
+      2
+    ],
+    "segundos": 1.98
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00009_3",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -1837,58 +1919,8 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 851,
-    "tokens_out": 27,
-    "latencias": [
-      2,
-      1,
-      1,
-      1390,
-      2521,
-      1414
-    ],
-    "segundos": 5.35
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00009_3",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "amarillo",
-    "reglas": [
-      "informacion_insuficiente"
-    ],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 5,
-      "temperature_c": null,
-      "fever": true,
-      "mobility": "limitada_esperada",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "mobility": "lexicon",
         "fever": "llm",
-        "wound": "lexicon",
+        "mobility": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
@@ -1896,22 +1928,22 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 851,
-    "tokens_out": 27,
+    "llm_calls": 4,
+    "tokens_in": 1648,
+    "tokens_out": 53,
     "latencias": [
       1,
-      1433,
-      1562,
-      1,
-      2,
-      1
+      1994,
+      2115,
+      3,
+      1623,
+      1621
     ],
-    "segundos": 3.01
+    "segundos": 7.38
   },
   {
     "caso_id": "caso_tray_pac_42_00009_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -1943,23 +1975,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 407,
-    "tokens_out": 11,
+    "turnos": 7,
+    "llm_calls": 2,
+    "tokens_in": 843,
+    "tokens_out": 23,
     "latencias": [
-      1,
-      1,
-      1105,
-      1,
+      1881,
+      4,
+      3,
+      1610,
       2,
-      1
+      2,
+      3
     ],
-    "segundos": 1.12
+    "segundos": 3.53
   },
   {
     "caso_id": "caso_tray_pac_42_00010_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -1992,23 +2025,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 0,
     "tokens_in": 0,
     "tokens_out": 0,
     "latencias": [
       1,
       1,
+      2,
       1,
-      1,
-      1,
+      2,
+      2,
       1
     ],
     "segundos": 0.03
   },
   {
     "caso_id": "caso_tray_pac_42_00010_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -2016,7 +2050,7 @@
     "sintomas": {
       "pain_level": 3,
       "temperature_c": 36.9,
-      "fever": null,
+      "fever": true,
       "mobility": "normal",
       "wound": "normal",
       "appetite": "normal",
@@ -2031,6 +2065,7 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
+        "fever": "llm",
         "wound": "lexicon",
         "temperature_c": "lexicon",
         "mobility": "lexicon",
@@ -2040,32 +2075,32 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 1415,
-    "tokens_out": 116,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1570,
+    "tokens_out": 101,
     "latencias": [
-      4609,
-      6316,
-      18166,
-      2528,
-      10345,
-      14413
+      4817,
+      2016,
+      7478,
+      16247,
+      3,
+      8269,
+      7856
     ],
-    "segundos": 56.42
+    "segundos": 46.72
   },
   {
     "caso_id": "caso_tray_pac_42_00010_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
-    "predicho": "rojo",
+    "predicho": "amarillo",
     "reglas": [
-      "fiebre_referida_con_signos",
-      "vigilancia_multiples_signos"
+      "informacion_insuficiente"
     ],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
-      "pain_level": 5,
+      "pain_level": null,
       "temperature_c": null,
       "fever": true,
       "mobility": "normal",
@@ -2081,7 +2116,6 @@
       "seizure": null,
       "day_postop": null,
       "sources": {
-        "pain_level": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
         "wound": "lexicon",
@@ -2091,23 +2125,26 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 9,
+    "llm_calls": 8,
+    "tokens_in": 4239,
+    "tokens_out": 216,
     "latencias": [
-      5757,
-      15981,
-      5310,
-      3,
+      5526,
+      6683,
+      6688,
+      950,
       1,
+      649,
+      1,
+      2,
       1
     ],
-    "segundos": 27.07
+    "segundos": 20.54
   },
   {
     "caso_id": "caso_tray_pac_42_00010_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "rojo",
     "reglas": [
@@ -2116,8 +2153,8 @@
     "completitud": 0.833,
     "sintomas": {
       "pain_level": 5,
-      "temperature_c": 37.0,
-      "fever": null,
+      "temperature_c": null,
+      "fever": true,
       "mobility": "limitada_esperada",
       "wound": "secrecion_purulenta",
       "appetite": "normal",
@@ -2132,31 +2169,32 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
+        "mobility": "lexicon",
+        "fever": "llm",
         "wound": "lexicon",
-        "appetite": "lexicon",
-        "temperature_c": "lexicon",
-        "mobility": "lexicon"
+        "appetite": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 775,
-    "tokens_out": 80,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1643,
+    "tokens_out": 105,
     "latencias": [
-      5238,
-      15531,
-      5710,
-      2522,
+      6531,
+      933,
+      2739,
+      3,
+      1,
       1,
       1
     ],
-    "segundos": 29.02
+    "segundos": 10.23
   },
   {
     "caso_id": "caso_tray_pac_42_00011_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -2191,33 +2229,34 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 2,
-    "tokens_in": 1144,
-    "tokens_out": 93,
+    "tokens_in": 1182,
+    "tokens_out": 60,
     "latencias": [
-      10742,
-      2999,
-      4158,
-      3880,
-      7141,
-      5388
+      5430,
+      2421,
+      2074,
+      2245,
+      4550,
+      2027,
+      2
     ],
-    "segundos": 34.32
+    "segundos": 18.77
   },
   {
     "caso_id": "caso_tray_pac_42_00011_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 0.833,
+    "completitud": 1.0,
     "sintomas": {
       "pain_level": 0,
       "temperature_c": 36.3,
       "fever": true,
       "mobility": "normal",
-      "wound": null,
+      "wound": "normal",
       "appetite": "normal",
       "sleep": "levemente_alterado",
       "medication_effective": null,
@@ -2233,6 +2272,7 @@
         "temperature_c": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
+        "wound": "llm",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
@@ -2240,33 +2280,33 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 420,
-    "tokens_out": 13,
+    "llm_calls": 2,
+    "tokens_in": 822,
+    "tokens_out": 27,
     "latencias": [
       1,
-      0,
       1,
-      2198,
-      2520,
-      2504
+      1,
+      876,
+      655,
+      1
     ],
-    "segundos": 7.24
+    "segundos": 1.55
   },
   {
     "caso_id": "caso_tray_pac_42_00011_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
       "informacion_insuficiente"
     ],
-    "completitud": 0.833,
+    "completitud": 0.667,
     "sintomas": {
       "pain_level": 5,
       "temperature_c": null,
       "fever": false,
-      "mobility": "normal",
+      "mobility": null,
       "wound": "normal",
       "appetite": "normal",
       "sleep": null,
@@ -2282,29 +2322,29 @@
         "pain_level": "lexicon",
         "fever": "lexicon",
         "wound": "lexicon",
-        "mobility": "llm",
         "appetite": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 848,
-    "tokens_out": 23,
+    "turnos": 7,
+    "llm_calls": 4,
+    "tokens_in": 1690,
+    "tokens_out": 53,
     "latencias": [
-      2809,
+      1675,
       2,
-      5460,
-      5692,
-      5103,
-      7
+      3203,
+      2351,
+      2369,
+      1,
+      616
     ],
-    "segundos": 19.1
+    "segundos": 10.24
   },
   {
     "caso_id": "caso_tray_pac_42_00011_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -2329,30 +2369,31 @@
         "pain_level": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
-        "wound": "llm",
         "appetite": "lexicon",
+        "wound": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 795,
-    "tokens_out": 29,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1183,
+    "tokens_out": 38,
     "latencias": [
-      2,
       1,
-      2444,
-      2,
-      1054,
-      2
+      601,
+      1,
+      618,
+      1,
+      623,
+      1
     ],
-    "segundos": 3.52
+    "segundos": 1.86
   },
   {
     "caso_id": "caso_tray_pac_42_00012_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -2375,9 +2416,9 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
+        "fever": "llm",
         "mobility": "lexicon",
+        "temperature_c": "lexicon",
         "wound": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
@@ -2385,23 +2426,25 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 8,
+    "llm_calls": 3,
+    "tokens_in": 1220,
+    "tokens_out": 38,
     "latencias": [
+      667,
       1,
+      574,
       1,
-      0,
+      588,
       1,
       1,
       1
     ],
-    "segundos": 0.01
+    "segundos": 1.85
   },
   {
     "caso_id": "caso_tray_pac_42_00012_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -2427,7 +2470,7 @@
         "temperature_c": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
-        "wound": "lexicon",
+        "wound": "llm",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
@@ -2435,22 +2478,22 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "llm_calls": 1,
+    "tokens_in": 433,
+    "tokens_out": 14,
     "latencias": [
       1,
       1,
       1,
-      1,
+      719,
       1,
       1
     ],
-    "segundos": 0.02
+    "segundos": 0.74
   },
   {
     "caso_id": "caso_tray_pac_42_00012_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "rojo",
     "reglas": [
@@ -2492,7 +2535,7 @@
       1,
       1,
       1,
-      2,
+      1,
       1,
       1
     ],
@@ -2500,7 +2543,7 @@
   },
   {
     "caso_id": "caso_tray_pac_42_00012_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "amarillo",
     "reglas": [
@@ -2508,7 +2551,7 @@
     ],
     "completitud": 1.0,
     "sintomas": {
-      "pain_level": 4,
+      "pain_level": 2,
       "temperature_c": 37.9,
       "fever": true,
       "mobility": "limitada_esperada",
@@ -2535,22 +2578,22 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 415,
-    "tokens_out": 16,
+    "llm_calls": 2,
+    "tokens_in": 830,
+    "tokens_out": 29,
     "latencias": [
+      649,
+      1,
       2,
-      2521,
-      2,
-      5,
-      2495,
-      2
+      3,
+      748,
+      1
     ],
-    "segundos": 5.05
+    "segundos": 1.42
   },
   {
     "caso_id": "caso_tray_pac_42_00013_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -2583,23 +2626,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 7,
+    "llm_calls": 1,
+    "tokens_in": 402,
+    "tokens_out": 13,
     "latencias": [
-      2,
       1,
       1,
       1,
+      1,
+      568,
       1,
       1
     ],
-    "segundos": 0.02
+    "segundos": 0.59
   },
   {
     "caso_id": "caso_tray_pac_42_00013_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -2610,9 +2654,9 @@
       "pain_level": 5,
       "temperature_c": null,
       "fever": true,
-      "mobility": null,
+      "mobility": "normal",
       "wound": null,
-      "appetite": "normal",
+      "appetite": null,
       "sleep": "normal",
       "medication_effective": null,
       "heavy_bleeding": null,
@@ -2625,29 +2669,30 @@
       "sources": {
         "pain_level": "lexicon",
         "fever": "lexicon",
-        "appetite": "lexicon",
+        "mobility": "llm",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 1219,
-    "tokens_out": 53,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1597,
+    "tokens_out": 73,
     "latencias": [
-      315,
-      4383,
-      13215,
-      5386,
+      275,
+      1,
+      5856,
+      5001,
+      703,
       1,
       1
     ],
-    "segundos": 23.31
+    "segundos": 11.85
   },
   {
     "caso_id": "caso_tray_pac_42_00013_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "rojo",
     "reglas": [
@@ -2682,36 +2727,38 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 8,
+    "llm_calls": 2,
+    "tokens_in": 819,
+    "tokens_out": 26,
     "latencias": [
-      0,
-      0,
+      704,
+      1,
+      1,
+      613,
       1,
       1,
       1,
-      2
+      1
     ],
-    "segundos": 0.02
+    "segundos": 1.34
   },
   {
     "caso_id": "caso_tray_pac_42_00013_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "amarillo",
     "reglas": [
       "vigilancia_multiples_signos"
     ],
-    "completitud": 0.833,
+    "completitud": 0.667,
     "sintomas": {
       "pain_level": 5,
       "temperature_c": 37.1,
       "fever": true,
-      "mobility": "normal",
+      "mobility": null,
       "wound": "eritema_leve",
-      "appetite": "normal",
+      "appetite": "muy_disminuido",
       "sleep": null,
       "medication_effective": null,
       "heavy_bleeding": null,
@@ -2725,40 +2772,42 @@
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "fever": "lexicon",
-        "mobility": "lexicon",
         "wound": "lexicon",
-        "appetite": "lexicon"
+        "appetite": "llm"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 7,
+    "llm_calls": 5,
+    "tokens_in": 1978,
+    "tokens_out": 62,
     "latencias": [
+      0,
+      564,
       1,
-      1,
-      1,
-      1,
-      1,
-      2520
+      561,
+      677,
+      478,
+      717
     ],
-    "segundos": 2.53
+    "segundos": 3.01
   },
   {
     "caso_id": "caso_tray_pac_42_00014_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
+    "predicho": "rojo",
+    "reglas": [
+      "herida_purulenta"
+    ],
     "completitud": 1.0,
     "sintomas": {
       "pain_level": 5,
       "temperature_c": 36.5,
       "fever": null,
       "mobility": "limitada_esperada",
-      "wound": "normal",
+      "wound": "secrecion_purulenta",
       "appetite": "normal",
       "sleep": "normal",
       "medication_effective": null,
@@ -2780,23 +2829,25 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1293,
-    "tokens_out": 42,
+    "turnos": 8,
+    "llm_calls": 5,
+    "tokens_in": 2178,
+    "tokens_out": 81,
     "latencias": [
       1,
-      1518,
-      2520,
-      2294,
-      1361,
+      672,
+      761,
+      708,
+      695,
+      1271,
+      1,
       1
     ],
-    "segundos": 7.71
+    "segundos": 4.13
   },
   {
     "caso_id": "caso_tray_pac_42_00014_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -2827,225 +2878,33 @@
     },
     "turnos": 6,
     "llm_calls": 4,
-    "tokens_in": 1677,
-    "tokens_out": 56,
+    "tokens_in": 1694,
+    "tokens_out": 57,
     "latencias": [
       1,
-      1371,
-      2318,
-      2521,
-      1608,
-      1042
+      795,
+      1790,
+      1,
+      698,
+      795
     ],
-    "segundos": 8.88
+    "segundos": 4.09
   },
   {
     "caso_id": "caso_tray_pac_42_00014_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
+    "predicho": "rojo",
+    "reglas": [
+      "herida_purulenta"
+    ],
     "completitud": 0.833,
     "sintomas": {
       "pain_level": 3,
       "temperature_c": 37.2,
       "fever": true,
       "mobility": "normal",
-      "wound": null,
-      "appetite": "normal",
-      "sleep": "levemente_alterado",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
-        "mobility": "llm",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 4,
-    "tokens_in": 1634,
-    "tokens_out": 54,
-    "latencias": [
-      2,
-      1,
-      1149,
-      991,
-      1680,
-      1184
-    ],
-    "segundos": 5.02
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00014_7",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 2,
-      "temperature_c": 36.5,
-      "fever": true,
-      "mobility": "normal",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "mobility": "lexicon",
-        "fever": "llm",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 838,
-    "tokens_out": 25,
-    "latencias": [
-      1,
-      1013,
-      909,
-      1,
-      0,
-      0
-    ],
-    "segundos": 1.94
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00015_1",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 2,
-      "temperature_c": null,
-      "fever": true,
-      "mobility": "limitada_esperada",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "levemente_alterado",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
-    "latencias": [
-      0,
-      0,
-      0,
-      1,
-      1,
-      1
-    ],
-    "segundos": 0.02
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00015_14",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "amarillo",
-    "reglas": [
-      "informacion_insuficiente"
-    ],
-    "completitud": 0.833,
-    "sintomas": {
-      "pain_level": 5,
-      "temperature_c": null,
-      "fever": true,
-      "mobility": "normal",
-      "wound": null,
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "fever": "llm",
-        "mobility": "llm",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1295,
-    "tokens_out": 41,
-    "latencias": [
-      2199,
-      4116,
-      3767,
-      2256,
-      1,
-      6826
-    ],
-    "segundos": 19.19
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00015_3",
-    "capa": "capa1_limpia",
-    "esperado": "amarillo",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 0.833,
-    "sintomas": {
-      "pain_level": 4,
-      "temperature_c": 37.0,
-      "fever": false,
-      "mobility": "limitada_esperada",
-      "wound": "eritema_leve",
+      "wound": "secrecion_purulenta",
       "appetite": null,
       "sleep": "levemente_alterado",
       "medication_effective": null,
@@ -3060,8 +2919,106 @@
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "fever": "lexicon",
+        "mobility": "llm",
+        "wound": "llm",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 4,
+    "tokens_in": 1640,
+    "tokens_out": 58,
+    "latencias": [
+      1,
+      1,
+      569,
+      1151,
+      627,
+      1,
+      754
+    ],
+    "segundos": 3.12
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00014_7",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "verde",
+    "reglas": [],
+    "completitud": 1.0,
+    "sintomas": {
+      "pain_level": 2,
+      "temperature_c": null,
+      "fever": true,
+      "mobility": "normal",
+      "wound": "normal",
+      "appetite": "normal",
+      "sleep": "normal",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "mobility": "lexicon",
+        "fever": "llm",
+        "wound": "lexicon",
+        "appetite": "lexicon",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 2,
+    "tokens_in": 845,
+    "tokens_out": 25,
+    "latencias": [
+      1,
+      672,
+      629,
+      2,
+      1,
+      1,
+      1
+    ],
+    "segundos": 1.32
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00015_1",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "verde",
+    "reglas": [],
+    "completitud": 1.0,
+    "sintomas": {
+      "pain_level": 2,
+      "temperature_c": null,
+      "fever": true,
+      "mobility": "limitada_esperada",
+      "wound": "normal",
+      "appetite": "normal",
+      "sleep": "levemente_alterado",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "fever": "lexicon",
         "mobility": "lexicon",
         "wound": "lexicon",
+        "appetite": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
@@ -3074,28 +3031,126 @@
     "latencias": [
       1,
       1,
+      3,
       1,
       1,
-      1,
-      6232
+      1
     ],
-    "segundos": 6.25
+    "segundos": 0.02
   },
   {
-    "caso_id": "caso_tray_pac_42_00015_7",
-    "capa": "capa1_limpia",
+    "caso_id": "caso_tray_pac_42_00015_14",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
       "informacion_insuficiente"
     ],
-    "completitud": 0.667,
+    "completitud": 0.5,
     "sintomas": {
-      "pain_level": 3,
-      "temperature_c": 36.5,
+      "pain_level": 5,
+      "temperature_c": null,
       "fever": null,
       "mobility": null,
       "wound": null,
+      "appetite": "normal",
+      "sleep": "normal",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "appetite": "lexicon",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 6,
+    "llm_calls": 4,
+    "tokens_in": 1743,
+    "tokens_out": 54,
+    "latencias": [
+      1864,
+      2337,
+      2449,
+      744,
+      1,
+      2363
+    ],
+    "segundos": 9.77
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00015_3",
+    "capa": "capa2_ruidosa",
+    "esperado": "amarillo",
+    "predicho": "verde",
+    "reglas": [],
+    "completitud": 1.0,
+    "sintomas": {
+      "pain_level": 4,
+      "temperature_c": 37.0,
+      "fever": false,
+      "mobility": "limitada_esperada",
+      "wound": "eritema_leve",
+      "appetite": "normal",
+      "sleep": "levemente_alterado",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "temperature_c": "lexicon",
+        "fever": "lexicon",
+        "mobility": "lexicon",
+        "wound": "lexicon",
+        "appetite": "llm",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 8,
+    "llm_calls": 2,
+    "tokens_in": 800,
+    "tokens_out": 26,
+    "latencias": [
+      1,
+      2,
+      2,
+      651,
+      1,
+      0,
+      2234,
+      1
+    ],
+    "segundos": 2.91
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00015_7",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "rojo",
+    "reglas": [
+      "herida_purulenta"
+    ],
+    "completitud": 1.0,
+    "sintomas": {
+      "pain_level": 3,
+      "temperature_c": 36.5,
+      "fever": true,
+      "mobility": "normal",
+      "wound": "secrecion_purulenta",
       "appetite": "muy_disminuido",
       "sleep": "levemente_alterado",
       "medication_effective": null,
@@ -3109,6 +3164,9 @@
       "sources": {
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
+        "fever": "llm",
+        "mobility": "lexicon",
+        "wound": "llm",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
@@ -3116,36 +3174,36 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1230,
-    "tokens_out": 41,
+    "llm_calls": 4,
+    "tokens_in": 2070,
+    "tokens_out": 94,
     "latencias": [
-      1,
-      5409,
-      2522,
-      7767,
-      2314,
-      746
+      0,
+      5893,
+      1030,
+      2067,
+      969,
+      2
     ],
-    "segundos": 18.78
+    "segundos": 9.98
   },
   {
     "caso_id": "caso_tray_pac_42_00016_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "rojo",
     "reglas": [
       "herida_purulenta"
     ],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 5,
-      "temperature_c": 36.5,
+      "temperature_c": null,
       "fever": true,
       "mobility": "limitada_esperada",
       "wound": "secrecion_purulenta",
       "appetite": "normal",
-      "sleep": "normal",
+      "sleep": null,
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -3156,33 +3214,34 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
-        "wound": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
         "mobility": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
+        "fever": "llm",
+        "wound": "lexicon",
+        "appetite": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 761,
-    "tokens_out": 49,
+    "turnos": 9,
+    "llm_calls": 4,
+    "tokens_in": 2011,
+    "tokens_out": 58,
     "latencias": [
-      10363,
-      3374,
-      1906,
-      2,
-      2,
+      4542,
+      722,
+      2778,
+      752,
+      1,
+      1,
+      1,
+      1,
       1
     ],
-    "segundos": 15.7
+    "segundos": 8.83
   },
   {
     "caso_id": "caso_tray_pac_42_00016_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -3207,8 +3266,8 @@
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "fever": "lexicon",
-        "wound": "lexicon",
         "mobility": "llm",
+        "wound": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
@@ -3216,22 +3275,22 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 797,
-    "tokens_out": 25,
+    "llm_calls": 1,
+    "tokens_in": 399,
+    "tokens_out": 12,
     "latencias": [
       1,
       1,
-      2522,
-      985,
-      747,
-      2
+      619,
+      2,
+      1,
+      1
     ],
-    "segundos": 4.27
+    "segundos": 0.64
   },
   {
     "caso_id": "caso_tray_pac_42_00016_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -3263,23 +3322,27 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 5,
-    "tokens_in": 2677,
-    "tokens_out": 185,
+    "turnos": 10,
+    "llm_calls": 10,
+    "tokens_in": 4870,
+    "tokens_out": 251,
     "latencias": [
-      9713,
-      6077,
-      4700,
-      2096,
-      12818,
+      6111,
+      860,
+      2941,
+      812,
+      2374,
+      921,
+      686,
+      6156,
+      985,
       1
     ],
-    "segundos": 35.43
+    "segundos": 21.87
   },
   {
     "caso_id": "caso_tray_pac_42_00016_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -3314,25 +3377,25 @@
     },
     "turnos": 6,
     "llm_calls": 3,
-    "tokens_in": 2140,
-    "tokens_out": 173,
+    "tokens_in": 2190,
+    "tokens_out": 165,
     "latencias": [
-      9304,
-      3,
-      231,
+      6438,
       1,
-      9616,
-      9976
+      242,
+      1,
+      5364,
+      6307
     ],
-    "segundos": 29.16
+    "segundos": 18.37
   },
   {
     "caso_id": "caso_tray_pac_42_00017_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
-      "informacion_insuficiente"
+      "vigilancia_multiples_signos"
     ],
     "completitud": 0.833,
     "sintomas": {
@@ -3342,7 +3405,7 @@
       "mobility": "limitada_esperada",
       "wound": null,
       "appetite": "levemente_disminuido",
-      "sleep": "levemente_alterado",
+      "sleep": "muy_alterado",
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -3357,42 +3420,45 @@
         "fever": "lexicon",
         "mobility": "lexicon",
         "appetite": "lexicon",
-        "sleep": "lexicon"
+        "sleep": "llm"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 4,
-    "tokens_in": 1951,
-    "tokens_out": 103,
+    "tokens_in": 1894,
+    "tokens_out": 80,
     "latencias": [
       2,
       1,
-      7551,
-      1972,
-      921,
-      850
+      5320,
+      1,
+      835,
+      700,
+      865
     ],
-    "segundos": 11.32
+    "segundos": 7.74
   },
   {
     "caso_id": "caso_tray_pac_42_00017_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "rojo",
     "predicho": "rojo",
     "reglas": [
-      "fiebre_38"
+      "fiebre_38",
+      "dolor_severo",
+      "vigilancia_multiples_signos"
     ],
-    "completitud": 0.833,
+    "completitud": 0.667,
     "sintomas": {
-      "pain_level": 2,
+      "pain_level": 8,
       "temperature_c": 38.0,
       "fever": true,
       "mobility": "limitada_esperada",
       "wound": null,
       "appetite": "levemente_disminuido",
-      "sleep": "levemente_alterado",
+      "sleep": null,
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -3402,32 +3468,31 @@
       "seizure": null,
       "day_postop": null,
       "sources": {
+        "pain_level": "llm",
         "temperature_c": "lexicon",
         "mobility": "lexicon",
-        "pain_level": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
+        "appetite": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
     "llm_calls": 2,
-    "tokens_in": 1102,
-    "tokens_out": 77,
+    "tokens_in": 923,
+    "tokens_out": 31,
     "latencias": [
-      9371,
-      2528,
+      3067,
+      843,
       1,
-      1,
+      2,
       1,
       1
     ],
-    "segundos": 11.92
+    "segundos": 3.93
   },
   {
     "caso_id": "caso_tray_pac_42_00017_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -3459,35 +3524,37 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 871,
-    "tokens_out": 27,
+    "llm_calls": 3,
+    "tokens_in": 1266,
+    "tokens_out": 43,
     "latencias": [
       1,
-      1868,
-      4894,
-      3881,
+      657,
+      2772,
+      2701,
       1,
       1
     ],
-    "segundos": 10.66
+    "segundos": 6.14
   },
   {
     "caso_id": "caso_tray_pac_42_00017_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "rojo",
     "predicho": "rojo",
     "reglas": [
-      "herida_purulenta"
+      "herida_purulenta",
+      "movilidad_incapacitante",
+      "vigilancia_multiples_signos"
     ],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
-      "pain_level": 2,
+      "pain_level": 5,
       "temperature_c": 37.5,
       "fever": true,
-      "mobility": "limitada_esperada",
+      "mobility": "incapacitante_nueva",
       "wound": "secrecion_purulenta",
-      "appetite": "levemente_disminuido",
+      "appetite": null,
       "sleep": "levemente_alterado",
       "medication_effective": null,
       "heavy_bleeding": null,
@@ -3501,31 +3568,31 @@
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "fever": "lexicon",
-        "mobility": "lexicon",
+        "mobility": "llm",
         "wound": "lexicon",
-        "appetite": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 7,
+    "llm_calls": 2,
+    "tokens_in": 791,
+    "tokens_out": 28,
     "latencias": [
-      0,
-      0,
       1,
+      1,
+      612,
+      753,
       1,
       1,
       1
     ],
-    "segundos": 0.01
+    "segundos": 1.39
   },
   {
     "caso_id": "caso_tray_pac_42_00018_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -3548,30 +3615,31 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
-        "fever": "llm",
         "appetite": "lexicon",
+        "fever": "llm",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 4,
-    "tokens_in": 2092,
-    "tokens_out": 101,
+    "turnos": 7,
+    "llm_calls": 5,
+    "tokens_in": 2481,
+    "tokens_out": 93,
     "latencias": [
       1,
-      4113,
-      7000,
-      4560,
-      5989,
-      1
+      9602,
+      5596,
+      1754,
+      6595,
+      1734,
+      4
     ],
-    "segundos": 21.68
+    "segundos": 25.31
   },
   {
     "caso_id": "caso_tray_pac_42_00018_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -3604,23 +3672,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 7,
+    "llm_calls": 1,
+    "tokens_in": 405,
+    "tokens_out": 13,
     "latencias": [
+      3,
+      1747,
+      5432,
+      547,
+      3,
       2,
-      3313,
-      200,
-      1,
-      1,
-      3497
+      5323
     ],
-    "segundos": 7.03
+    "segundos": 13.09
   },
   {
     "caso_id": "caso_tray_pac_42_00018_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -3653,23 +3722,25 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1303,
-    "tokens_out": 44,
+    "turnos": 8,
+    "llm_calls": 4,
+    "tokens_in": 1697,
+    "tokens_out": 54,
     "latencias": [
-      1,
-      4163,
-      1,
-      4491,
-      4467,
-      4
+      4,
+      6465,
+      7,
+      581,
+      2547,
+      803,
+      2171,
+      1
     ],
-    "segundos": 13.19
+    "segundos": 12.61
   },
   {
     "caso_id": "caso_tray_pac_42_00018_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -3695,7 +3766,6 @@
       "sources": {
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
-        "fever": "llm",
         "mobility": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
@@ -3703,23 +3773,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1216,
-    "tokens_out": 40,
+    "turnos": 7,
+    "llm_calls": 5,
+    "tokens_in": 2021,
+    "tokens_out": 67,
     "latencias": [
-      3,
-      1783,
-      2518,
-      3,
-      895,
-      785
+      1,
+      1160,
+      991,
+      1,
+      814,
+      676,
+      630
     ],
-    "segundos": 6.01
+    "segundos": 4.29
   },
   {
     "caso_id": "caso_tray_pac_42_00019_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "amarillo",
     "reglas": [
@@ -3752,23 +3823,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 3,
-    "tokens_in": 1271,
+    "tokens_in": 1262,
     "tokens_out": 42,
     "latencias": [
-      1,
-      1020,
       2,
-      953,
-      2223,
+      0,
+      0,
+      838,
+      899,
+      748,
       1
     ],
-    "segundos": 4.22
+    "segundos": 2.51
   },
   {
     "caso_id": "caso_tray_pac_42_00019_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "rojo",
     "predicho": "rojo",
     "reglas": [
@@ -3795,6 +3867,7 @@
       "sources": {
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
+        "fever": "llm",
         "mobility": "lexicon",
         "wound": "lexicon",
         "appetite": "lexicon",
@@ -3803,23 +3876,25 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 8,
+    "llm_calls": 1,
+    "tokens_in": 440,
+    "tokens_out": 14,
     "latencias": [
       1,
-      2520,
+      974,
+      2,
+      1,
       1,
       1,
       1,
       1
     ],
-    "segundos": 2.54
+    "segundos": 1.0
   },
   {
     "caso_id": "caso_tray_pac_42_00019_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "amarillo",
     "reglas": [
@@ -3846,7 +3921,7 @@
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "fever": "lexicon",
-        "mobility": "lexicon",
+        "mobility": "llm",
         "wound": "lexicon",
         "appetite": "llm",
         "sleep": "llm"
@@ -3854,35 +3929,37 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 893,
-    "tokens_out": 34,
+    "turnos": 7,
+    "llm_calls": 4,
+    "tokens_in": 1774,
+    "tokens_out": 57,
     "latencias": [
       2,
+      2,
+      869,
       1,
-      2517,
-      1,
-      1183,
-      1238
+      930,
+      780,
+      1082
     ],
-    "segundos": 4.95
+    "segundos": 3.68
   },
   {
     "caso_id": "caso_tray_pac_42_00019_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "rojo",
     "predicho": "rojo",
     "reglas": [
-      "fiebre_38",
+      "movilidad_incapacitante",
+      "fiebre_referida_con_signos",
       "vigilancia_multiples_signos"
     ],
-    "completitud": 0.833,
+    "completitud": 1.0,
     "sintomas": {
       "pain_level": 5,
-      "temperature_c": 38.2,
+      "temperature_c": null,
       "fever": true,
-      "mobility": null,
+      "mobility": "incapacitante_nueva",
       "wound": "eritema_leve",
       "appetite": "levemente_disminuido",
       "sleep": "muy_alterado",
@@ -3896,8 +3973,8 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
-        "temperature_c": "lexicon",
         "fever": "lexicon",
+        "mobility": "llm",
         "wound": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
@@ -3905,34 +3982,37 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 7,
+    "llm_calls": 1,
+    "tokens_in": 411,
+    "tokens_out": 18,
     "latencias": [
       1,
       1,
+      923,
       1,
       1,
       1,
       1
     ],
-    "segundos": 0.02
+    "segundos": 0.95
   },
   {
     "caso_id": "caso_tray_pac_42_00020_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 0.833,
+    "predicho": "amarillo",
+    "reglas": [
+      "informacion_insuficiente"
+    ],
+    "completitud": 1.0,
     "sintomas": {
       "pain_level": 3,
-      "temperature_c": 36.5,
+      "temperature_c": null,
       "fever": true,
       "mobility": "normal",
       "wound": "normal",
-      "appetite": null,
+      "appetite": "muy_disminuido",
       "sleep": "normal",
       "medication_effective": null,
       "heavy_bleeding": null,
@@ -3944,32 +4024,32 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
-        "temperature_c": "lexicon",
         "fever": "llm",
         "mobility": "lexicon",
         "wound": "lexicon",
+        "appetite": "llm",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 4,
-    "tokens_in": 1563,
-    "tokens_out": 51,
+    "llm_calls": 3,
+    "tokens_in": 1180,
+    "tokens_out": 41,
     "latencias": [
-      0,
-      758,
-      2012,
       1,
-      2235,
-      842
+      800,
+      682,
+      1,
+      748,
+      1
     ],
-    "segundos": 5.86
+    "segundos": 2.26
   },
   {
     "caso_id": "caso_tray_pac_42_00020_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -4005,20 +4085,20 @@
     "turnos": 6,
     "llm_calls": 1,
     "tokens_in": 668,
-    "tokens_out": 80,
+    "tokens_out": 63,
     "latencias": [
       1,
       1,
-      2331,
+      1895,
       1,
-      2130,
-      12989
+      1965,
+      5923
     ],
-    "segundos": 17.5
+    "segundos": 9.81
   },
   {
     "caso_id": "caso_tray_pac_42_00020_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -4057,26 +4137,26 @@
     "tokens_in": 678,
     "tokens_out": 80,
     "latencias": [
-      11814,
+      7019,
       1,
       1,
       1,
       1,
       1
     ],
-    "segundos": 11.83
+    "segundos": 7.04
   },
   {
     "caso_id": "caso_tray_pac_42_00020_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 0.667,
+    "completitud": 1.0,
     "sintomas": {
-      "pain_level": null,
+      "pain_level": 0,
       "temperature_c": null,
-      "fever": null,
+      "fever": true,
       "mobility": "normal",
       "wound": "normal",
       "appetite": "normal",
@@ -4090,7 +4170,9 @@
       "seizure": null,
       "day_postop": null,
       "sources": {
+        "pain_level": "llm",
         "mobility": "lexicon",
+        "fever": "llm",
         "wound": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
@@ -4098,36 +4180,37 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 4,
-    "tokens_in": 1557,
-    "tokens_out": 54,
+    "tokens_in": 1652,
+    "tokens_out": 52,
     "latencias": [
-      2519,
-      2517,
-      942,
-      1018,
-      1964,
-      1887
+      1054,
+      781,
+      750,
+      1,
+      1,
+      696,
+      1
     ],
-    "segundos": 10.86
+    "segundos": 3.3
   },
   {
     "caso_id": "caso_tray_pac_42_00021_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "amarillo",
+    "predicho": "rojo",
     "reglas": [
-      "informacion_insuficiente"
+      "no_se_pudo_evaluar"
     ],
-    "completitud": 0.833,
+    "completitud": 0.333,
     "sintomas": {
       "pain_level": 5,
       "temperature_c": null,
-      "fever": true,
-      "mobility": "normal",
+      "fever": null,
+      "mobility": null,
       "wound": null,
-      "appetite": "normal",
+      "appetite": null,
       "sleep": "normal",
       "medication_effective": null,
       "heavy_bleeding": null,
@@ -4139,31 +4222,30 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
-        "fever": "llm",
-        "mobility": "llm",
-        "appetite": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 4,
-    "tokens_in": 2001,
-    "tokens_out": 121,
+    "turnos": 8,
+    "llm_calls": 9,
+    "tokens_in": 4496,
+    "tokens_out": 210,
     "latencias": [
-      2564,
-      6102,
-      12930,
-      2269,
-      1,
-      4964
+      2516,
+      2814,
+      7288,
+      945,
+      679,
+      795,
+      6802,
+      3215
     ],
-    "segundos": 28.84
+    "segundos": 25.08
   },
   {
     "caso_id": "caso_tray_pac_42_00021_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -4196,33 +4278,35 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 416,
-    "tokens_out": 12,
+    "turnos": 8,
+    "llm_calls": 4,
+    "tokens_in": 1654,
+    "tokens_out": 51,
     "latencias": [
-      1,
-      2518,
-      1432,
-      1,
+      827,
+      2,
+      808,
+      732,
+      707,
+      4,
       1,
       1
     ],
-    "segundos": 3.97
+    "segundos": 3.12
   },
   {
     "caso_id": "caso_tray_pac_42_00021_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 1.0,
+    "completitud": 0.667,
     "sintomas": {
-      "pain_level": 2,
+      "pain_level": null,
       "temperature_c": 37.0,
       "fever": true,
       "mobility": "limitada_esperada",
-      "wound": "normal",
+      "wound": null,
       "appetite": "normal",
       "sleep": "normal",
       "medication_effective": null,
@@ -4234,34 +4318,33 @@
       "seizure": null,
       "day_postop": null,
       "sources": {
-        "pain_level": "lexicon",
         "temperature_c": "lexicon",
-        "fever": "llm",
         "mobility": "lexicon",
-        "wound": "lexicon",
         "appetite": "lexicon",
+        "fever": "llm",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 996,
-    "tokens_out": 94,
+    "turnos": 7,
+    "llm_calls": 8,
+    "tokens_in": 3571,
+    "tokens_out": 153,
     "latencias": [
-      1,
-      1061,
-      12573,
-      2,
-      2,
-      9
+      1949,
+      992,
+      700,
+      6467,
+      1243,
+      785,
+      868
     ],
-    "segundos": 13.7
+    "segundos": 13.02
   },
   {
     "caso_id": "caso_tray_pac_42_00021_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "amarillo",
     "reglas": [
@@ -4297,32 +4380,32 @@
     },
     "turnos": 6,
     "llm_calls": 4,
-    "tokens_in": 1663,
-    "tokens_out": 59,
+    "tokens_in": 1651,
+    "tokens_out": 60,
     "latencias": [
       1,
-      4,
-      1969,
-      1143,
-      1008,
-      1102
+      2,
+      881,
+      859,
+      801,
+      853
     ],
-    "segundos": 5.26
+    "segundos": 3.41
   },
   {
     "caso_id": "caso_tray_pac_42_00022_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "amarillo",
+    "predicho": "rojo",
     "reglas": [
-      "informacion_insuficiente"
+      "movilidad_incapacitante"
     ],
     "completitud": 0.667,
     "sintomas": {
-      "pain_level": 2,
+      "pain_level": null,
       "temperature_c": 37.0,
       "fever": true,
-      "mobility": null,
+      "mobility": "incapacitante_nueva",
       "wound": "eritema_leve",
       "appetite": "normal",
       "sleep": null,
@@ -4336,43 +4419,47 @@
       "day_postop": null,
       "sources": {
         "temperature_c": "lexicon",
-        "pain_level": "lexicon",
-        "wound": "lexicon",
         "fever": "llm",
+        "mobility": "llm",
+        "wound": "lexicon",
         "appetite": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 8,
-    "tokens_in": 5020,
-    "tokens_out": 425,
+    "turnos": 8,
+    "llm_calls": 9,
+    "tokens_in": 4770,
+    "tokens_out": 272,
     "latencias": [
-      11850,
-      12517,
-      14274,
-      15462,
-      2824,
-      15471
+      6757,
+      10477,
+      984,
+      8165,
+      1055,
+      829,
+      6,
+      2
     ],
-    "segundos": 72.42
+    "segundos": 28.31
   },
   {
     "caso_id": "caso_tray_pac_42_00022_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
+    "predicho": "amarillo",
+    "reglas": [
+      "informacion_insuficiente"
+    ],
     "completitud": 0.833,
     "sintomas": {
       "pain_level": null,
       "temperature_c": 36.2,
-      "fever": null,
+      "fever": true,
       "mobility": "normal",
       "wound": "normal",
       "appetite": "normal",
-      "sleep": "normal",
+      "sleep": "muy_alterado",
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -4384,42 +4471,47 @@
       "sources": {
         "wound": "lexicon",
         "temperature_c": "lexicon",
+        "fever": "llm",
         "mobility": "lexicon",
         "appetite": "lexicon",
-        "sleep": "lexicon"
+        "sleep": "llm"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 8,
+    "llm_calls": 8,
+    "tokens_in": 4205,
+    "tokens_out": 293,
     "latencias": [
-      8029,
-      2970,
-      7879,
-      2509,
-      8050,
-      8054
+      7514,
+      1049,
+      756,
+      1223,
+      6843,
+      2,
+      3135,
+      6323
     ],
-    "segundos": 37.52
+    "segundos": 26.87
   },
   {
     "caso_id": "caso_tray_pac_42_00022_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 1.0,
+    "predicho": "rojo",
+    "reglas": [
+      "movilidad_incapacitante"
+    ],
+    "completitud": 0.667,
     "sintomas": {
       "pain_level": 3,
       "temperature_c": 37.1,
       "fever": true,
-      "mobility": "normal",
+      "mobility": "incapacitante_nueva",
       "wound": "eritema_leve",
-      "appetite": "normal",
-      "sleep": "normal",
+      "appetite": null,
+      "sleep": null,
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -4432,31 +4524,32 @@
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "fever": "lexicon",
-        "wound": "lexicon",
-        "mobility": "lexicon",
-        "appetite": "llm",
-        "sleep": "lexicon"
+        "mobility": "llm",
+        "wound": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 386,
-    "tokens_out": 12,
+    "turnos": 9,
+    "llm_calls": 4,
+    "tokens_in": 1633,
+    "tokens_out": 58,
     "latencias": [
-      2,
-      2,
-      2539,
-      2503,
-      2503,
-      1872
+      867,
+      1,
+      720,
+      1,
+      934,
+      905,
+      1,
+      1,
+      1
     ],
-    "segundos": 9.44
+    "segundos": 3.46
   },
   {
     "caso_id": "caso_tray_pac_42_00022_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -4489,37 +4582,39 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 0,
     "tokens_in": 0,
     "tokens_out": 0,
     "latencias": [
       1,
-      4170,
+      4287,
       3,
       1,
-      1,
+      3,
+      4,
       3
     ],
-    "segundos": 4.24
+    "segundos": 4.33
   },
   {
     "caso_id": "caso_tray_pac_42_00023_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "amarillo",
+    "predicho": "rojo",
     "reglas": [
+      "fiebre_referida_con_signos",
       "vigilancia_multiples_signos"
     ],
     "completitud": 0.833,
     "sintomas": {
       "pain_level": 5,
       "temperature_c": null,
-      "fever": null,
+      "fever": true,
       "mobility": "limitada_esperada",
       "wound": "eritema_leve",
       "appetite": "normal",
-      "sleep": "muy_alterado",
+      "sleep": null,
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -4531,39 +4626,42 @@
       "sources": {
         "pain_level": "lexicon",
         "mobility": "lexicon",
+        "fever": "llm",
         "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "llm"
+        "appetite": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1608,
-    "tokens_out": 111,
+    "turnos": 7,
+    "llm_calls": 2,
+    "tokens_in": 1287,
+    "tokens_out": 35,
     "latencias": [
-      13214,
+      8996,
       2522,
-      2504,
-      1301,
-      258,
-      1274
+      1142,
+      3,
+      1,
+      1,
+      1
     ],
-    "segundos": 21.09
+    "segundos": 12.69
   },
   {
     "caso_id": "caso_tray_pac_42_00023_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 0.667,
+    "predicho": "rojo",
+    "reglas": [
+      "movilidad_incapacitante"
+    ],
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 2,
-      "temperature_c": 36.7,
-      "fever": null,
-      "mobility": null,
+      "temperature_c": null,
+      "fever": true,
+      "mobility": "incapacitante_nueva",
       "wound": null,
       "appetite": "normal",
       "sleep": "normal",
@@ -4577,34 +4675,36 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
-        "temperature_c": "lexicon",
+        "fever": "llm",
+        "mobility": "llm",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1201,
-    "tokens_out": 40,
+    "turnos": 7,
+    "llm_calls": 2,
+    "tokens_in": 766,
+    "tokens_out": 29,
     "latencias": [
       1,
-      972,
-      2520,
-      2059,
-      2331,
-      2522
+      745,
+      872,
+      3,
+      2,
+      1,
+      1
     ],
-    "segundos": 10.42
+    "segundos": 1.65
   },
   {
     "caso_id": "caso_tray_pac_42_00023_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 0.833,
+    "completitud": 1.0,
     "sintomas": {
       "pain_level": 2,
       "temperature_c": 37.2,
@@ -4612,7 +4712,7 @@
       "mobility": "normal",
       "wound": "eritema_leve",
       "appetite": "normal",
-      "sleep": null,
+      "sleep": "normal",
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -4627,39 +4727,40 @@
         "fever": "lexicon",
         "mobility": "lexicon",
         "wound": "lexicon",
-        "appetite": "lexicon"
+        "appetite": "lexicon",
+        "sleep": "llm"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
     "llm_calls": 1,
-    "tokens_in": 403,
-    "tokens_out": 13,
+    "tokens_in": 414,
+    "tokens_out": 10,
     "latencias": [
+      0,
+      0,
+      0,
+      2433,
       1,
-      1,
-      1,
-      2765,
-      1,
-      1931
+      715
     ],
-    "segundos": 4.72
+    "segundos": 3.16
   },
   {
     "caso_id": "caso_tray_pac_42_00023_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "rojo",
     "reglas": [
       "herida_purulenta"
     ],
-    "completitud": 0.833,
+    "completitud": 1.0,
     "sintomas": {
       "pain_level": 0,
       "temperature_c": 36.6,
-      "fever": null,
-      "mobility": null,
+      "fever": true,
+      "mobility": "normal",
       "wound": "secrecion_purulenta",
       "appetite": "normal",
       "sleep": "normal",
@@ -4675,29 +4776,33 @@
         "pain_level": "llm",
         "wound": "lexicon",
         "temperature_c": "lexicon",
+        "fever": "llm",
+        "mobility": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 464,
-    "tokens_out": 12,
+    "turnos": 8,
+    "llm_calls": 4,
+    "tokens_in": 1792,
+    "tokens_out": 54,
     "latencias": [
-      5325,
-      5885,
-      6566,
-      2523,
-      4,
-      3
+      3475,
+      3505,
+      3096,
+      824,
+      2,
+      1,
+      1,
+      1
     ],
-    "segundos": 20.32
+    "segundos": 10.93
   },
   {
     "caso_id": "caso_tray_pac_42_00024_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -4732,23 +4837,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 1,
     "tokens_in": 474,
     "tokens_out": 11,
     "latencias": [
-      2515,
+      937,
+      1,
       1,
       1,
       1,
       1,
       1
     ],
-    "segundos": 2.53
+    "segundos": 0.96
   },
   {
     "caso_id": "caso_tray_pac_42_00024_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -4778,23 +4884,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 5,
-    "tokens_in": 2061,
-    "tokens_out": 65,
+    "turnos": 7,
+    "llm_calls": 6,
+    "tokens_in": 2453,
+    "tokens_out": 78,
     "latencias": [
-      2389,
-      1052,
-      927,
-      913,
-      2231,
-      2525
+      716,
+      930,
+      668,
+      684,
+      749,
+      701,
+      1
     ],
-    "segundos": 10.06
+    "segundos": 4.47
   },
   {
     "caso_id": "caso_tray_pac_42_00024_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -4802,13 +4909,13 @@
     ],
     "completitud": 1.0,
     "sintomas": {
-      "pain_level": 1,
+      "pain_level": 5,
       "temperature_c": 37.5,
       "fever": true,
       "mobility": "limitada_esperada",
       "wound": "eritema_leve",
-      "appetite": "levemente_disminuido",
-      "sleep": "muy_alterado",
+      "appetite": "muy_disminuido",
+      "sleep": "normal",
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -4823,39 +4930,40 @@
         "fever": "lexicon",
         "mobility": "lexicon",
         "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "llm"
+        "appetite": "llm",
+        "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 1,
-    "tokens_in": 426,
-    "tokens_out": 15,
+    "tokens_in": 387,
+    "tokens_out": 16,
     "latencias": [
       1,
       1,
       1,
+      767,
       2,
-      2239,
+      3,
       1
     ],
-    "segundos": 2.26
+    "segundos": 0.79
   },
   {
     "caso_id": "caso_tray_pac_42_00024_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 1,
       "temperature_c": null,
       "fever": true,
       "mobility": "normal",
-      "wound": "normal",
+      "wound": null,
       "appetite": "normal",
       "sleep": "normal",
       "medication_effective": null,
@@ -4870,7 +4978,6 @@
         "pain_level": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
-        "wound": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
@@ -4878,130 +4985,34 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "llm_calls": 3,
+    "tokens_in": 1204,
+    "tokens_out": 38,
     "latencias": [
       1,
+      2,
       1,
-      1,
-      1,
-      1,
-      1
+      671,
+      770,
+      722
     ],
-    "segundos": 0.01
+    "segundos": 2.18
   },
   {
     "caso_id": "caso_tray_pac_42_00025_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
+    "predicho": "rojo",
+    "reglas": [
+      "herida_purulenta"
+    ],
     "completitud": 1.0,
     "sintomas": {
       "pain_level": 3,
       "temperature_c": 37.2,
       "fever": true,
       "mobility": "limitada_esperada",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
-    "latencias": [
-      0,
-      0,
-      0,
-      1,
-      1,
-      1
-    ],
-    "segundos": 0.02
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00025_14",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 2,
-      "temperature_c": 37.0,
-      "fever": true,
-      "mobility": "normal",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
-    "latencias": [
-      1,
-      1,
-      1,
-      1,
-      1,
-      1
-    ],
-    "segundos": 0.01
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00025_3",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 5,
-      "temperature_c": 36.5,
-      "fever": true,
-      "mobility": "normal",
-      "wound": "normal",
+      "wound": "secrecion_purulenta",
       "appetite": "normal",
       "sleep": "normal",
       "medication_effective": null,
@@ -5024,23 +5035,124 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 812,
-    "tokens_out": 25,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1183,
+    "tokens_out": 44,
     "latencias": [
-      4129,
-      2,
-      2519,
       1,
-      1456,
-      900
+      1,
+      1,
+      692,
+      685,
+      854,
+      1
     ],
-    "segundos": 9.02
+    "segundos": 2.26
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00025_14",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "verde",
+    "reglas": [],
+    "completitud": 1.0,
+    "sintomas": {
+      "pain_level": 2,
+      "temperature_c": 37.0,
+      "fever": true,
+      "mobility": "normal",
+      "wound": "normal",
+      "appetite": "muy_disminuido",
+      "sleep": "normal",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "temperature_c": "lexicon",
+        "fever": "lexicon",
+        "mobility": "lexicon",
+        "wound": "lexicon",
+        "appetite": "llm",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 2,
+    "tokens_in": 796,
+    "tokens_out": 30,
+    "latencias": [
+      3,
+      1,
+      1,
+      1,
+      2287,
+      979,
+      1
+    ],
+    "segundos": 3.29
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00025_3",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "rojo",
+    "reglas": [
+      "herida_purulenta"
+    ],
+    "completitud": 0.667,
+    "sintomas": {
+      "pain_level": 2,
+      "temperature_c": 36.5,
+      "fever": true,
+      "mobility": "normal",
+      "wound": "secrecion_purulenta",
+      "appetite": null,
+      "sleep": null,
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "temperature_c": "lexicon",
+        "fever": "lexicon",
+        "pain_level": "lexicon",
+        "mobility": "lexicon",
+        "wound": "llm"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1263,
+    "tokens_out": 49,
+    "latencias": [
+      857,
+      1010,
+      1,
+      1,
+      1050,
+      1,
+      1
+    ],
+    "segundos": 2.94
   },
   {
     "caso_id": "caso_tray_pac_42_00025_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "rojo",
     "reglas": [
@@ -5077,32 +5189,32 @@
     },
     "turnos": 6,
     "llm_calls": 1,
-    "tokens_in": 702,
-    "tokens_out": 80,
+    "tokens_in": 703,
+    "tokens_out": 78,
     "latencias": [
-      241,
-      2391,
-      14336,
+      168,
+      1721,
+      6790,
       2,
       1,
-      4
+      1
     ],
-    "segundos": 16.99
+    "segundos": 8.7
   },
   {
     "caso_id": "caso_tray_pac_42_00026_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 0.833,
+    "completitud": 1.0,
     "sintomas": {
       "pain_level": 4,
       "temperature_c": 37.2,
       "fever": true,
       "mobility": "limitada_esperada",
       "wound": "normal",
-      "appetite": null,
+      "appetite": "muy_disminuido",
       "sleep": "levemente_alterado",
       "medication_effective": null,
       "heavy_bleeding": null,
@@ -5115,31 +5227,33 @@
       "sources": {
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
-        "fever": "llm",
         "mobility": "lexicon",
+        "fever": "llm",
         "wound": "lexicon",
+        "appetite": "llm",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 801,
-    "tokens_out": 27,
+    "turnos": 7,
+    "llm_calls": 4,
+    "tokens_in": 1667,
+    "tokens_out": 54,
     "latencias": [
       1,
-      2007,
+      1012,
+      781,
       1,
-      1,
-      2524,
-      2361
+      908,
+      608,
+      1
     ],
-    "segundos": 6.91
+    "segundos": 3.33
   },
   {
     "caso_id": "caso_tray_pac_42_00026_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "rojo",
     "predicho": "rojo",
     "reglas": [
@@ -5174,31 +5288,33 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 1059,
-    "tokens_out": 39,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1537,
+    "tokens_out": 91,
     "latencias": [
+      1,
+      7331,
+      1020,
+      2438,
       2,
-      13194,
-      2665,
-      4,
-      3,
+      1,
       1
     ],
-    "segundos": 15.88
+    "segundos": 10.81
   },
   {
     "caso_id": "caso_tray_pac_42_00026_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "amarillo",
+    "predicho": "rojo",
     "reglas": [
+      "dolor_severo",
       "vigilancia_multiples_signos"
     ],
     "completitud": 1.0,
     "sintomas": {
-      "pain_level": 4,
+      "pain_level": 9,
       "temperature_c": 37.6,
       "fever": true,
       "mobility": "normal",
@@ -5220,28 +5336,30 @@
         "fever": "lexicon",
         "mobility": "lexicon",
         "appetite": "lexicon",
-        "sleep": "lexicon"
+        "sleep": "llm"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 2162,
-    "tokens_out": 165,
+    "turnos": 8,
+    "llm_calls": 6,
+    "tokens_in": 3524,
+    "tokens_out": 228,
     "latencias": [
-      208,
-      2118,
-      11542,
-      13959,
-      12077,
-      4097
+      189,
+      844,
+      1952,
+      5631,
+      1007,
+      7347,
+      8740,
+      7
     ],
-    "segundos": 44.05
+    "segundos": 25.76
   },
   {
     "caso_id": "caso_tray_pac_42_00026_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "rojo",
     "predicho": "rojo",
     "reglas": [
@@ -5278,21 +5396,21 @@
     },
     "turnos": 6,
     "llm_calls": 1,
-    "tokens_in": 445,
+    "tokens_in": 460,
     "tokens_out": 14,
     "latencias": [
-      4246,
-      2173,
+      2635,
+      1042,
+      3,
       1,
       2,
-      1,
       2
     ],
-    "segundos": 6.44
+    "segundos": 3.71
   },
   {
     "caso_id": "caso_tray_pac_42_00027_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -5303,7 +5421,7 @@
       "pain_level": 5,
       "temperature_c": null,
       "fever": true,
-      "mobility": "limitada_esperada",
+      "mobility": "normal",
       "wound": "normal",
       "appetite": "levemente_disminuido",
       "sleep": null,
@@ -5325,23 +5443,26 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 9,
+    "llm_calls": 3,
+    "tokens_in": 1218,
+    "tokens_out": 37,
     "latencias": [
+      851,
       1,
       1,
+      694,
       1,
       1,
-      1,
-      1
+      2,
+      579,
+      2
     ],
-    "segundos": 0.02
+    "segundos": 2.15
   },
   {
     "caso_id": "caso_tray_pac_42_00027_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "rojo",
     "predicho": "rojo",
     "reglas": [
@@ -5377,29 +5498,31 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 8,
+    "llm_calls": 1,
+    "tokens_in": 393,
+    "tokens_out": 13,
     "latencias": [
       1,
+      695,
+      3,
       2,
       1,
       2,
-      1,
+      2,
       1
     ],
-    "segundos": 0.02
+    "segundos": 0.74
   },
   {
     "caso_id": "caso_tray_pac_42_00027_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "amarillo",
     "reglas": [
       "vigilancia_multiples_signos"
     ],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 3,
       "temperature_c": 37.0,
@@ -5407,7 +5530,7 @@
       "mobility": "normal",
       "wound": "eritema_leve",
       "appetite": "muy_disminuido",
-      "sleep": "muy_alterado",
+      "sleep": null,
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -5421,29 +5544,28 @@
         "temperature_c": "lexicon",
         "mobility": "lexicon",
         "wound": "lexicon",
-        "appetite": "llm",
-        "sleep": "llm"
+        "appetite": "llm"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1482,
-    "tokens_out": 88,
+    "llm_calls": 4,
+    "tokens_in": 1915,
+    "tokens_out": 90,
     "latencias": [
-      9062,
-      2526,
-      7150,
-      2522,
-      1425,
-      1356
+      5240,
+      2525,
+      3259,
+      1053,
+      1,
+      978
     ],
-    "segundos": 24.07
+    "segundos": 13.13
   },
   {
     "caso_id": "caso_tray_pac_42_00027_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "rojo",
     "predicho": "rojo",
     "reglas": [
@@ -5479,23 +5601,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 1,
-    "tokens_in": 424,
-    "tokens_out": 16,
+    "tokens_in": 430,
+    "tokens_out": 14,
     "latencias": [
       1,
-      1437,
-      4,
+      916,
+      1,
+      1,
       1,
       1,
       1
     ],
-    "segundos": 1.46
+    "segundos": 0.94
   },
   {
     "caso_id": "caso_tray_pac_42_00028_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "rojo",
     "reglas": [
@@ -5505,7 +5628,7 @@
     "sintomas": {
       "pain_level": 4,
       "temperature_c": 37.3,
-      "fever": null,
+      "fever": true,
       "mobility": "limitada_esperada",
       "wound": "secrecion_purulenta",
       "appetite": null,
@@ -5521,29 +5644,32 @@
       "sources": {
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
+        "fever": "llm",
         "mobility": "lexicon",
         "wound": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 755,
-    "tokens_out": 48,
+    "turnos": 8,
+    "llm_calls": 3,
+    "tokens_in": 1208,
+    "tokens_out": 38,
     "latencias": [
-      8218,
-      2525,
-      2505,
-      2508,
-      5,
-      2
+      1,
+      982,
+      620,
+      749,
+      2,
+      2,
+      1,
+      1
     ],
-    "segundos": 15.79
+    "segundos": 2.39
   },
   {
     "caso_id": "caso_tray_pac_42_00028_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "rojo",
     "predicho": "rojo",
     "reglas": [
@@ -5579,32 +5705,32 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "turnos": 7,
+    "llm_calls": 1,
+    "tokens_in": 469,
+    "tokens_out": 11,
     "latencias": [
-      15035,
-      2533,
-      3,
+      2177,
+      996,
       2,
-      1,
-      1
+      2,
+      2,
+      2,
+      2
     ],
-    "segundos": 17.59
+    "segundos": 3.21
   },
   {
     "caso_id": "caso_tray_pac_42_00028_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "rojo",
     "reglas": [
-      "herida_purulenta",
-      "vigilancia_multiples_signos"
+      "herida_purulenta"
     ],
     "completitud": 0.833,
     "sintomas": {
-      "pain_level": 5,
+      "pain_level": 2,
       "temperature_c": 37.0,
       "fever": true,
       "mobility": "normal",
@@ -5623,44 +5749,44 @@
         "temperature_c": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
-        "pain_level": "lexicon",
         "wound": "lexicon",
-        "appetite": "lexicon"
+        "appetite": "lexicon",
+        "pain_level": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 1,
-    "tokens_in": 434,
-    "tokens_out": 15,
+    "tokens_in": 398,
+    "tokens_out": 13,
     "latencias": [
       1,
-      1565,
+      790,
       1,
-      2,
-      2,
+      1,
+      1,
+      1,
       1
     ],
-    "segundos": 1.58
+    "segundos": 0.82
   },
   {
     "caso_id": "caso_tray_pac_42_00028_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "rojo",
     "predicho": "rojo",
     "reglas": [
-      "fiebre_38",
-      "vigilancia_multiples_signos"
+      "herida_purulenta"
     ],
-    "completitud": 0.833,
+    "completitud": 0.667,
     "sintomas": {
       "pain_level": 5,
-      "temperature_c": 38.5,
-      "fever": true,
+      "temperature_c": null,
+      "fever": null,
       "mobility": "normal",
-      "wound": null,
-      "appetite": "levemente_disminuido",
+      "wound": "secrecion_purulenta",
+      "appetite": null,
       "sleep": "levemente_alterado",
       "medication_effective": null,
       "heavy_bleeding": null,
@@ -5672,32 +5798,30 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
         "mobility": "lexicon",
-        "appetite": "lexicon",
+        "wound": "llm",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "llm_calls": 5,
+    "tokens_in": 2079,
+    "tokens_out": 70,
     "latencias": [
       1,
-      1,
-      1,
-      1,
-      1,
-      1
+      1063,
+      673,
+      3043,
+      896,
+      1060
     ],
-    "segundos": 0.02
+    "segundos": 6.77
   },
   {
     "caso_id": "caso_tray_pac_42_00029_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -5730,33 +5854,34 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 436,
-    "tokens_out": 12,
+    "turnos": 7,
+    "llm_calls": 2,
+    "tokens_in": 877,
+    "tokens_out": 25,
     "latencias": [
+      1,
       2,
-      1,
-      1,
-      1,
-      1208,
-      1
+      818,
+      2,
+      2,
+      867,
+      3
     ],
-    "segundos": 1.23
+    "segundos": 1.72
   },
   {
     "caso_id": "caso_tray_pac_42_00029_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "rojo",
+    "predicho": "amarillo",
     "reglas": [
-      "no_se_pudo_evaluar"
+      "informacion_insuficiente"
     ],
-    "completitud": 0.333,
+    "completitud": 0.5,
     "sintomas": {
       "pain_level": 5,
       "temperature_c": null,
-      "fever": null,
+      "fever": true,
       "mobility": null,
       "wound": null,
       "appetite": "normal",
@@ -5771,28 +5896,29 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
+        "fever": "llm",
         "appetite": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 873,
-    "tokens_out": 28,
+    "llm_calls": 5,
+    "tokens_in": 2165,
+    "tokens_out": 67,
     "latencias": [
       1,
-      1318,
-      1511,
-      2526,
-      2503,
-      1
+      1023,
+      1051,
+      725,
+      772,
+      857
     ],
-    "segundos": 7.88
+    "segundos": 4.44
   },
   {
     "caso_id": "caso_tray_pac_42_00029_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -5827,23 +5953,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 901,
-    "tokens_out": 26,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1317,
+    "tokens_out": 38,
     "latencias": [
-      1727,
-      1319,
+      921,
+      977,
+      1,
+      711,
       2,
-      3,
-      4,
+      2,
       2
     ],
-    "segundos": 3.08
+    "segundos": 2.63
   },
   {
     "caso_id": "caso_tray_pac_42_00029_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "rojo",
     "reglas": [
@@ -5880,33 +6007,31 @@
     },
     "turnos": 6,
     "llm_calls": 1,
-    "tokens_in": 396,
-    "tokens_out": 13,
+    "tokens_in": 405,
+    "tokens_out": 14,
     "latencias": [
+      2,
+      2,
+      2347,
+      2,
       1,
-      1,
-      981,
-      1,
-      1,
-      1
+      2
     ],
-    "segundos": 1.0
+    "segundos": 2.38
   },
   {
     "caso_id": "caso_tray_pac_42_00030_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "amarillo",
-    "reglas": [
-      "informacion_insuficiente"
-    ],
-    "completitud": 0.833,
+    "predicho": "verde",
+    "reglas": [],
+    "completitud": 1.0,
     "sintomas": {
-      "pain_level": 4,
+      "pain_level": 2,
       "temperature_c": 37.4,
       "fever": true,
       "mobility": "limitada_esperada",
-      "wound": null,
+      "wound": "normal",
       "appetite": "levemente_disminuido",
       "sleep": "levemente_alterado",
       "medication_effective": null,
@@ -5918,10 +6043,11 @@
       "seizure": null,
       "day_postop": null,
       "sources": {
-        "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
+        "pain_level": "lexicon",
+        "wound": "llm",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
@@ -5929,22 +6055,22 @@
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
+    "llm_calls": 3,
+    "tokens_in": 1234,
+    "tokens_out": 40,
     "latencias": [
+      812,
+      856,
       1,
+      736,
       1,
-      1,
-      2521,
-      2502,
-      2504
+      1
     ],
-    "segundos": 7.54
+    "segundos": 2.43
   },
   {
     "caso_id": "caso_tray_pac_42_00030_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "rojo",
     "predicho": "rojo",
     "reglas": [
@@ -5979,23 +6105,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 0,
     "tokens_in": 0,
     "tokens_out": 0,
     "latencias": [
       1,
-      1,
-      1,
-      1,
       2,
+      1,
+      1,
+      1,
+      1,
       1
     ],
     "segundos": 0.03
   },
   {
     "caso_id": "caso_tray_pac_42_00030_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "rojo",
     "reglas": [
@@ -6030,33 +6157,34 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 411,
-    "tokens_out": 13,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1191,
+    "tokens_out": 39,
     "latencias": [
+      2,
+      667,
       1,
+      662,
+      749,
       1,
-      2521,
-      1325,
-      4,
-      4
+      1
     ],
-    "segundos": 3.87
+    "segundos": 2.1
   },
   {
     "caso_id": "caso_tray_pac_42_00030_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "rojo",
     "predicho": "amarillo",
     "reglas": [
       "informacion_insuficiente"
     ],
-    "completitud": 0.667,
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 5,
       "temperature_c": null,
-      "fever": null,
+      "fever": true,
       "mobility": "normal",
       "wound": null,
       "appetite": "levemente_disminuido",
@@ -6071,6 +6199,7 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
+        "fever": "llm",
         "mobility": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
@@ -6078,23 +6207,26 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1524,
-    "tokens_out": 94,
+    "turnos": 9,
+    "llm_calls": 6,
+    "tokens_in": 2975,
+    "tokens_out": 159,
     "latencias": [
-      2900,
-      2,
-      6837,
-      2505,
-      15143,
-      2
+      6245,
+      6,
+      996,
+      1,
+      981,
+      804,
+      654,
+      6736,
+      3
     ],
-    "segundos": 27.41
+    "segundos": 16.53
   },
   {
     "caso_id": "caso_tray_pac_42_00031_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -6106,7 +6238,7 @@
       "mobility": "limitada_esperada",
       "wound": "normal",
       "appetite": "levemente_disminuido",
-      "sleep": "levemente_alterado",
+      "sleep": "muy_alterado",
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -6117,33 +6249,34 @@
       "day_postop": null,
       "sources": {
         "pain_level": "llm",
+        "fever": "llm",
         "wound": "lexicon",
         "temperature_c": "lexicon",
-        "fever": "lexicon",
         "mobility": "lexicon",
         "appetite": "lexicon",
-        "sleep": "lexicon"
+        "sleep": "llm"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 1114,
-    "tokens_out": 36,
+    "turnos": 7,
+    "llm_calls": 6,
+    "tokens_in": 3086,
+    "tokens_out": 154,
     "latencias": [
-      2556,
-      2702,
-      2,
+      1374,
+      1855,
+      3332,
       1,
-      7739,
-      8450
+      1,
+      8356,
+      5435
     ],
-    "segundos": 21.47
+    "segundos": 20.39
   },
   {
     "caso_id": "caso_tray_pac_42_00031_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -6151,7 +6284,7 @@
     "sintomas": {
       "pain_level": 2,
       "temperature_c": 36.5,
-      "fever": null,
+      "fever": true,
       "mobility": "normal",
       "wound": "normal",
       "appetite": "normal",
@@ -6167,6 +6300,7 @@
       "sources": {
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
+        "fever": "llm",
         "mobility": "lexicon",
         "wound": "lexicon",
         "appetite": "lexicon",
@@ -6175,34 +6309,36 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 396,
-    "tokens_out": 13,
+    "turnos": 8,
+    "llm_calls": 3,
+    "tokens_in": 1184,
+    "tokens_out": 40,
     "latencias": [
+      2,
+      996,
+      733,
+      1860,
       1,
-      2504,
-      1363,
-      2519,
       1,
+      2,
       1
     ],
-    "segundos": 6.41
+    "segundos": 3.62
   },
   {
     "caso_id": "caso_tray_pac_42_00031_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 1.0,
+    "completitud": 0.5,
     "sintomas": {
-      "pain_level": 1,
-      "temperature_c": 36.5,
+      "pain_level": null,
+      "temperature_c": null,
       "fever": true,
       "mobility": "normal",
-      "wound": "normal",
-      "appetite": "muy_disminuido",
+      "wound": null,
+      "appetite": null,
       "sleep": "levemente_alterado",
       "medication_effective": null,
       "heavy_bleeding": null,
@@ -6213,34 +6349,31 @@
       "seizure": null,
       "day_postop": null,
       "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
         "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "llm",
+        "fever": "llm",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 410,
-    "tokens_out": 16,
+    "turnos": 7,
+    "llm_calls": 8,
+    "tokens_in": 3491,
+    "tokens_out": 149,
     "latencias": [
-      1,
-      1,
-      1,
-      1,
-      5225,
-      2214
+      1159,
+      776,
+      913,
+      962,
+      3284,
+      960,
+      6439
     ],
-    "segundos": 7.46
+    "segundos": 14.59
   },
   {
     "caso_id": "caso_tray_pac_42_00031_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -6248,205 +6381,11 @@
     "sintomas": {
       "pain_level": 0,
       "temperature_c": 36.2,
-      "fever": null,
-      "mobility": "normal",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "wound": "lexicon",
-        "temperature_c": "lexicon",
-        "mobility": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 682,
-    "tokens_out": 80,
-    "latencias": [
-      10403,
-      6722,
-      7344,
-      2530,
-      15614,
-      3008
-    ],
-    "segundos": 45.65
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00032_1",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 0.833,
-    "sintomas": {
-      "pain_level": 3,
-      "temperature_c": 36.3,
-      "fever": true,
-      "mobility": null,
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 405,
-    "tokens_out": 13,
-    "latencias": [
-      1,
-      1,
-      2538,
-      1013,
-      2505,
-      2
-    ],
-    "segundos": 6.08
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00032_14",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 2,
-      "temperature_c": 36.5,
-      "fever": false,
-      "mobility": "normal",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
-    "latencias": [
-      1,
-      1,
-      1,
-      3,
-      2,
-      1
-    ],
-    "segundos": 0.03
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00032_3",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "amarillo",
-    "reglas": [
-      "vigilancia_multiples_signos"
-    ],
-    "completitud": 0.833,
-    "sintomas": {
-      "pain_level": 5,
-      "temperature_c": null,
-      "fever": null,
-      "mobility": "limitada_esperada",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "muy_alterado",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "llm"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1551,
-    "tokens_out": 109,
-    "latencias": [
-      2546,
-      18217,
-      5733,
-      5265,
-      2,
-      838
-    ],
-    "segundos": 32.62
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00032_7",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 1,
-      "temperature_c": 36.3,
       "fever": true,
       "mobility": "normal",
       "wound": "normal",
       "appetite": "normal",
-      "sleep": "muy_alterado",
+      "sleep": "normal",
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -6462,40 +6401,189 @@
         "mobility": "lexicon",
         "fever": "llm",
         "appetite": "lexicon",
-        "sleep": "llm"
+        "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 6,
-    "tokens_in": 3380,
-    "tokens_out": 230,
+    "llm_calls": 5,
+    "tokens_in": 2824,
+    "tokens_out": 200,
     "latencias": [
-      5921,
-      4747,
-      6564,
-      2072,
-      8533,
-      2020
+      7347,
+      3892,
+      3247,
+      1,
+      8205,
+      2544
     ],
-    "segundos": 29.88
+    "segundos": 25.27
   },
   {
-    "caso_id": "caso_tray_pac_42_00033_1",
-    "capa": "capa1_limpia",
+    "caso_id": "caso_tray_pac_42_00032_1",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "verde",
+    "reglas": [],
+    "completitud": 1.0,
+    "sintomas": {
+      "pain_level": 3,
+      "temperature_c": 36.3,
+      "fever": true,
+      "mobility": "normal",
+      "wound": "normal",
+      "appetite": "normal",
+      "sleep": "normal",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "temperature_c": "lexicon",
+        "fever": "lexicon",
+        "wound": "lexicon",
+        "mobility": "llm",
+        "appetite": "lexicon",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 6,
+    "llm_calls": 3,
+    "tokens_in": 1216,
+    "tokens_out": 37,
+    "latencias": [
+      2,
+      1,
+      915,
+      885,
+      699,
+      1
+    ],
+    "segundos": 2.52
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00032_14",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "verde",
+    "reglas": [],
+    "completitud": 0.833,
+    "sintomas": {
+      "pain_level": null,
+      "temperature_c": 36.5,
+      "fever": false,
+      "mobility": "normal",
+      "wound": "normal",
+      "appetite": "normal",
+      "sleep": "normal",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "temperature_c": "lexicon",
+        "fever": "lexicon",
+        "mobility": "lexicon",
+        "wound": "lexicon",
+        "appetite": "lexicon",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 8,
+    "llm_calls": 4,
+    "tokens_in": 1626,
+    "tokens_out": 52,
+    "latencias": [
+      783,
+      833,
+      701,
+      1,
+      810,
+      2,
+      1,
+      1
+    ],
+    "segundos": 3.15
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00032_3",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "amarillo",
+    "reglas": [
+      "informacion_insuficiente"
+    ],
+    "completitud": 0.833,
+    "sintomas": {
+      "pain_level": 5,
+      "temperature_c": null,
+      "fever": true,
+      "mobility": "limitada_esperada",
+      "wound": "normal",
+      "appetite": "normal",
+      "sleep": null,
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "fever": "llm",
+        "mobility": "lexicon",
+        "wound": "lexicon",
+        "appetite": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1576,
+    "tokens_out": 93,
+    "latencias": [
+      2135,
+      951,
+      7629,
+      2562,
+      1805,
+      1,
+      1
+    ],
+    "segundos": 15.11
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00032_7",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
     "completitud": 1.0,
     "sintomas": {
       "pain_level": 1,
-      "temperature_c": 36.8,
+      "temperature_c": 36.3,
       "fever": true,
-      "mobility": "limitada_esperada",
+      "mobility": "normal",
       "wound": "normal",
       "appetite": "normal",
-      "sleep": "levemente_alterado",
+      "sleep": "normal",
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -6518,21 +6606,71 @@
     },
     "turnos": 6,
     "llm_calls": 5,
-    "tokens_in": 3215,
-    "tokens_out": 245,
+    "tokens_in": 2942,
+    "tokens_out": 218,
     "latencias": [
-      2389,
-      4241,
-      7174,
-      6841,
-      8394,
-      2341
+      6231,
+      4310,
+      5636,
+      976,
+      7315,
+      2541
     ],
-    "segundos": 31.41
+    "segundos": 27.03
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00033_1",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "rojo",
+    "reglas": [
+      "dolor_severo"
+    ],
+    "completitud": 1.0,
+    "sintomas": {
+      "pain_level": 8,
+      "temperature_c": 36.8,
+      "fever": null,
+      "mobility": "limitada_esperada",
+      "wound": "normal",
+      "appetite": "normal",
+      "sleep": "levemente_alterado",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "wound": "lexicon",
+        "pain_level": "llm",
+        "temperature_c": "lexicon",
+        "mobility": "lexicon",
+        "appetite": "lexicon",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 6,
+    "llm_calls": 2,
+    "tokens_in": 852,
+    "tokens_out": 27,
+    "latencias": [
+      897,
+      953,
+      1,
+      1,
+      1,
+      1
+    ],
+    "segundos": 1.87
   },
   {
     "caso_id": "caso_tray_pac_42_00033_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -6564,23 +6702,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 1083,
-    "tokens_out": 80,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1478,
+    "tokens_out": 102,
     "latencias": [
-      5633,
+      6741,
       1,
-      1,
-      1,
-      1667,
+      764,
+      2,
+      2,
+      646,
       2
     ],
-    "segundos": 7.33
+    "segundos": 8.18
   },
   {
     "caso_id": "caso_tray_pac_42_00033_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -6609,37 +6748,40 @@
         "mobility": "lexicon",
         "wound": "lexicon",
         "appetite": "llm",
-        "sleep": "lexicon"
+        "sleep": "llm"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1286,
-    "tokens_out": 40,
+    "turnos": 7,
+    "llm_calls": 4,
+    "tokens_in": 1683,
+    "tokens_out": 50,
     "latencias": [
       1,
-      3142,
-      982,
-      2106,
-      904,
-      2
+      3654,
+      977,
+      2,
+      2409,
+      823,
+      794
     ],
-    "segundos": 7.16
+    "segundos": 8.69
   },
   {
     "caso_id": "caso_tray_pac_42_00033_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
+    "predicho": "rojo",
+    "reglas": [
+      "movilidad_incapacitante"
+    ],
     "completitud": 1.0,
     "sintomas": {
       "pain_level": 1,
       "temperature_c": 36.9,
       "fever": true,
-      "mobility": "normal",
+      "mobility": "incapacitante_nueva",
       "wound": "normal",
       "appetite": "normal",
       "sleep": "normal",
@@ -6655,7 +6797,7 @@
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "fever": "lexicon",
-        "mobility": "lexicon",
+        "mobility": "llm",
         "wound": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
@@ -6663,27 +6805,29 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 1,
-    "tokens_in": 404,
-    "tokens_out": 15,
+    "tokens_in": 385,
+    "tokens_out": 17,
     "latencias": [
+      2,
+      2,
       1,
-      1,
-      924,
+      836,
       1,
       1,
       1
     ],
-    "segundos": 0.94
+    "segundos": 0.86
   },
   {
     "caso_id": "caso_tray_pac_42_00034_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "amarillo",
+    "predicho": "rojo",
     "reglas": [
-      "informacion_insuficiente"
+      "fiebre_referida_con_signos",
+      "vigilancia_multiples_signos"
     ],
     "completitud": 1.0,
     "sintomas": {
@@ -6693,7 +6837,7 @@
       "mobility": "limitada_esperada",
       "wound": "normal",
       "appetite": "normal",
-      "sleep": "normal",
+      "sleep": "muy_alterado",
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -6713,23 +6857,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 398,
-    "tokens_out": 10,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1270,
+    "tokens_out": 41,
     "latencias": [
+      2,
       1,
+      773,
+      3,
       1,
-      1,
-      1,
-      580,
-      1
+      827,
+      993
     ],
-    "segundos": 0.6
+    "segundos": 2.62
   },
   {
     "caso_id": "caso_tray_pac_42_00034_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -6755,41 +6900,41 @@
         "pain_level": "lexicon",
         "temperature_c": "lexicon",
         "fever": "lexicon",
-        "mobility": "llm",
+        "mobility": "lexicon",
         "appetite": "lexicon",
-        "sleep": "llm"
+        "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 860,
-    "tokens_out": 24,
+    "llm_calls": 1,
+    "tokens_in": 416,
+    "tokens_out": 15,
     "latencias": [
+      2,
       1,
+      987,
+      8,
       2,
-      804,
-      2,
-      789,
       2
     ],
-    "segundos": 1.62
+    "segundos": 1.02
   },
   {
     "caso_id": "caso_tray_pac_42_00034_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 1.0,
+    "completitud": 0.667,
     "sintomas": {
       "pain_level": 1,
       "temperature_c": 37.2,
       "fever": true,
       "mobility": "normal",
-      "wound": "normal",
-      "appetite": "muy_disminuido",
+      "wound": null,
+      "appetite": null,
       "sleep": "normal",
       "medication_effective": null,
       "heavy_bleeding": null,
@@ -6804,30 +6949,28 @@
         "temperature_c": "lexicon",
         "fever": "lexicon",
         "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "llm",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 423,
-    "tokens_out": 16,
+    "llm_calls": 2,
+    "tokens_in": 818,
+    "tokens_out": 28,
     "latencias": [
+      4,
       1,
       1,
-      1,
-      1,
-      887,
-      1
+      2,
+      940,
+      725
     ],
-    "segundos": 0.91
+    "segundos": 1.69
   },
   {
     "caso_id": "caso_tray_pac_42_00034_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -6850,8 +6993,8 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
-        "fever": "llm",
         "mobility": "lexicon",
+        "fever": "llm",
         "wound": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
@@ -6859,23 +7002,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 435,
-    "tokens_out": 14,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1303,
+    "tokens_out": 40,
     "latencias": [
-      1,
-      973,
       2,
-      1,
+      990,
+      905,
       2,
-      2
+      4,
+      727,
+      3
     ],
-    "segundos": 0.99
+    "segundos": 2.65
   },
   {
     "caso_id": "caso_tray_pac_42_00035_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -6916,15 +7060,15 @@
       1,
       1,
       1,
-      0,
-      0,
-      7
+      1,
+      1,
+      1
     ],
     "segundos": 0.02
   },
   {
     "caso_id": "caso_tray_pac_42_00035_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -6957,23 +7101,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
+    "turnos": 7,
     "llm_calls": 0,
     "tokens_in": 0,
     "tokens_out": 0,
     "latencias": [
       1,
+      2,
       1,
       1,
       1,
-      0,
-      0
+      1,
+      1
     ],
-    "segundos": 0.01
+    "segundos": 0.02
   },
   {
     "caso_id": "caso_tray_pac_42_00035_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "rojo",
     "reglas": [
@@ -7010,31 +7155,30 @@
     },
     "turnos": 6,
     "llm_calls": 3,
-    "tokens_in": 1868,
-    "tokens_out": 112,
+    "tokens_in": 1881,
+    "tokens_out": 157,
     "latencias": [
-      5480,
-      2105,
-      8006,
+      6694,
+      2806,
+      8067,
       2,
       1,
-      1
+      2
     ],
-    "segundos": 15.62
+    "segundos": 17.59
   },
   {
     "caso_id": "caso_tray_pac_42_00035_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "amarillo",
     "predicho": "rojo",
     "reglas": [
-      "herida_purulenta",
-      "vigilancia_multiples_signos"
+      "herida_purulenta"
     ],
     "completitud": 0.833,
     "sintomas": {
       "pain_level": 5,
-      "temperature_c": 37.7,
+      "temperature_c": 37.0,
       "fever": true,
       "mobility": "normal",
       "wound": "secrecion_purulenta",
@@ -7061,21 +7205,21 @@
     },
     "turnos": 6,
     "llm_calls": 4,
-    "tokens_in": 2672,
-    "tokens_out": 228,
+    "tokens_in": 2660,
+    "tokens_out": 255,
     "latencias": [
-      6249,
-      8761,
-      6316,
-      3,
+      7372,
+      9419,
+      8124,
       2,
-      2
+      1,
+      1
     ],
-    "segundos": 21.35
+    "segundos": 24.96
   },
   {
     "caso_id": "caso_tray_pac_42_00036_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -7109,23 +7253,24 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 1172,
-    "tokens_out": 48,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1623,
+    "tokens_out": 80,
     "latencias": [
-      4986,
+      7276,
+      1009,
       1,
       1,
       1,
-      1682,
-      1
+      824,
+      2
     ],
-    "segundos": 6.69
+    "segundos": 9.13
   },
   {
     "caso_id": "caso_tray_pac_42_00036_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
@@ -7158,31 +7303,32 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 853,
-    "tokens_out": 30,
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1555,
+    "tokens_out": 88,
     "latencias": [
-      1921,
+      2567,
       1,
-      2778,
-      2738,
-      1968,
-      1625
+      861,
+      2950,
+      2044,
+      6716,
+      2268
     ],
-    "segundos": 11.04
+    "segundos": 17.43
   },
   {
     "caso_id": "caso_tray_pac_42_00036_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
     "completitud": 1.0,
     "sintomas": {
-      "pain_level": 1,
+      "pain_level": 2,
       "temperature_c": 36.5,
-      "fever": null,
+      "fever": true,
       "mobility": "limitada_esperada",
       "wound": "normal",
       "appetite": "levemente_disminuido",
@@ -7196,9 +7342,10 @@
       "seizure": null,
       "day_postop": null,
       "sources": {
-        "pain_level": "llm",
         "temperature_c": "lexicon",
         "mobility": "lexicon",
+        "pain_level": "lexicon",
+        "fever": "llm",
         "wound": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
@@ -7206,29 +7353,32 @@
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 4,
-    "tokens_in": 1642,
-    "tokens_out": 51,
+    "turnos": 9,
+    "llm_calls": 5,
+    "tokens_in": 2034,
+    "tokens_out": 68,
     "latencias": [
-      804,
-      770,
-      784,
-      690,
+      972,
+      964,
+      1,
+      929,
+      672,
+      1,
+      679,
       1,
       1
     ],
-    "segundos": 3.07
+    "segundos": 4.24
   },
   {
     "caso_id": "caso_tray_pac_42_00036_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
-      "pain_level": 1,
+      "pain_level": null,
       "temperature_c": null,
       "fever": true,
       "mobility": "normal",
@@ -7244,7 +7394,6 @@
       "seizure": null,
       "day_postop": null,
       "sources": {
-        "pain_level": "llm",
         "mobility": "lexicon",
         "fever": "llm",
         "wound": "lexicon",
@@ -7256,82 +7405,30 @@
     },
     "turnos": 6,
     "llm_calls": 3,
-    "tokens_in": 1243,
-    "tokens_out": 37,
+    "tokens_in": 1212,
+    "tokens_out": 40,
     "latencias": [
-      785,
-      739,
-      649,
       1,
+      722,
+      807,
+      853,
       1,
-      1
+      2
     ],
-    "segundos": 2.19
+    "segundos": 2.4
   },
   {
     "caso_id": "caso_tray_pac_42_00037_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
       "vigilancia_multiples_signos"
     ],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 4,
       "temperature_c": 37.4,
-      "fever": true,
-      "mobility": "limitada_esperada",
-      "wound": "normal",
-      "appetite": "muy_disminuido",
-      "sleep": "muy_alterado",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "llm",
-        "sleep": "llm"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 796,
-    "tokens_out": 30,
-    "latencias": [
-      1,
-      1,
-      0,
-      1,
-      743,
-      748
-    ],
-    "segundos": 1.51
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00037_14",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "rojo",
-    "reglas": [
-      "fiebre_referida_con_signos",
-      "vigilancia_multiples_signos"
-    ],
-    "completitud": 0.833,
-    "sintomas": {
-      "pain_level": 5,
-      "temperature_c": null,
       "fever": true,
       "mobility": "limitada_esperada",
       "wound": "normal",
@@ -7347,283 +7444,35 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
+        "temperature_c": "lexicon",
+        "fever": "lexicon",
         "mobility": "lexicon",
-        "fever": "llm",
         "wound": "lexicon",
         "appetite": "llm"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 862,
-    "tokens_out": 30,
+    "turnos": 8,
+    "llm_calls": 4,
+    "tokens_in": 1570,
+    "tokens_out": 55,
     "latencias": [
       1,
       1,
-      2612,
-      1495,
-      926,
-      1
+      675,
+      1,
+      1,
+      692,
+      771,
+      799
     ],
-    "segundos": 5.05
+    "segundos": 2.97
   },
   {
-    "caso_id": "caso_tray_pac_42_00037_3",
-    "capa": "capa1_limpia",
+    "caso_id": "caso_tray_pac_42_00037_14",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "amarillo",
-    "reglas": [
-      "vigilancia_multiples_signos"
-    ],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 6,
-      "temperature_c": 37.5,
-      "fever": true,
-      "mobility": "normal",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "muy_alterado",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "llm"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 425,
-    "tokens_out": 16,
-    "latencias": [
-      1,
-      2,
-      1,
-      3,
-      2,
-      914
-    ],
-    "segundos": 0.94
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00037_7",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 3,
-      "temperature_c": 37.6,
-      "fever": true,
-      "mobility": "limitada_esperada",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "levemente_alterado",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
-    "latencias": [
-      2,
-      1,
-      2,
-      1,
-      1,
-      1
-    ],
-    "segundos": 0.02
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00038_1",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "rojo",
-    "reglas": [
-      "herida_purulenta"
-    ],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 5,
-      "temperature_c": 36.0,
-      "fever": true,
-      "mobility": "normal",
-      "wound": "secrecion_purulenta",
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "llm",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1603,
-    "tokens_out": 63,
-    "latencias": [
-      1,
-      861,
-      6063,
-      1,
-      2,
-      1
-    ],
-    "segundos": 6.94
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00038_14",
-    "capa": "capa1_limpia",
-    "esperado": "verde",
-    "predicho": "verde",
-    "reglas": [],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 2,
-      "temperature_c": 37.5,
-      "fever": true,
-      "mobility": "limitada_esperada",
-      "wound": "normal",
-      "appetite": "normal",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 0,
-    "tokens_in": 0,
-    "tokens_out": 0,
-    "latencias": [
-      0,
-      2,
-      1,
-      1,
-      1,
-      0
-    ],
-    "segundos": 0.02
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00038_3",
-    "capa": "capa1_limpia",
-    "esperado": "amarillo",
-    "predicho": "amarillo",
-    "reglas": [
-      "vigilancia_multiples_signos"
-    ],
-    "completitud": 1.0,
-    "sintomas": {
-      "pain_level": 6,
-      "temperature_c": 37.4,
-      "fever": true,
-      "mobility": "normal",
-      "wound": "eritema_leve",
-      "appetite": "muy_disminuido",
-      "sleep": "normal",
-      "medication_effective": null,
-      "heavy_bleeding": null,
-      "breathing_difficulty": null,
-      "loss_of_consciousness": null,
-      "chest_pain": null,
-      "altered_mental_status": null,
-      "seizure": null,
-      "day_postop": null,
-      "sources": {
-        "pain_level": "lexicon",
-        "temperature_c": "lexicon",
-        "fever": "lexicon",
-        "mobility": "lexicon",
-        "wound": "lexicon",
-        "appetite": "llm",
-        "sleep": "lexicon"
-      },
-      "unanswered": [],
-      "other": []
-    },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 404,
-    "tokens_out": 16,
-    "latencias": [
-      1,
-      1,
-      1,
-      1,
-      1815,
-      1
-    ],
-    "segundos": 1.83
-  },
-  {
-    "caso_id": "caso_tray_pac_42_00038_7",
-    "capa": "capa1_limpia",
-    "esperado": "amarillo",
     "predicho": "amarillo",
     "reglas": [
       "informacion_insuficiente"
@@ -7632,8 +7481,311 @@
     "sintomas": {
       "pain_level": 5,
       "temperature_c": null,
+      "fever": null,
+      "mobility": "limitada_esperada",
+      "wound": "normal",
+      "appetite": "normal",
+      "sleep": null,
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "mobility": "lexicon",
+        "wound": "lexicon",
+        "appetite": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1279,
+    "tokens_out": 41,
+    "latencias": [
+      1,
+      798,
+      2,
+      2689,
+      1717,
+      2888,
+      2
+    ],
+    "segundos": 8.11
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00037_3",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "amarillo",
+    "reglas": [
+      "informacion_insuficiente"
+    ],
+    "completitud": 0.5,
+    "sintomas": {
+      "pain_level": null,
+      "temperature_c": 37.5,
+      "fever": true,
+      "mobility": "normal",
+      "wound": null,
+      "appetite": "normal",
+      "sleep": null,
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "temperature_c": "lexicon",
+        "fever": "lexicon",
+        "mobility": "lexicon",
+        "appetite": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 4,
+    "tokens_in": 1629,
+    "tokens_out": 54,
+    "latencias": [
+      887,
+      909,
+      739,
+      2,
+      1851,
+      1,
+      942
+    ],
+    "segundos": 5.36
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00037_7",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "amarillo",
+    "reglas": [
+      "vigilancia_multiples_signos"
+    ],
+    "completitud": 1.0,
+    "sintomas": {
+      "pain_level": 3,
+      "temperature_c": 37.6,
       "fever": true,
       "mobility": "limitada_esperada",
+      "wound": "normal",
+      "appetite": "normal",
+      "sleep": "muy_alterado",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "temperature_c": "lexicon",
+        "fever": "lexicon",
+        "mobility": "lexicon",
+        "wound": "lexicon",
+        "appetite": "lexicon",
+        "sleep": "llm"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 2,
+    "tokens_in": 845,
+    "tokens_out": 29,
+    "latencias": [
+      837,
+      1,
+      1,
+      1,
+      1,
+      1,
+      914
+    ],
+    "segundos": 1.77
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00038_1",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "rojo",
+    "reglas": [
+      "herida_purulenta"
+    ],
+    "completitud": 0.833,
+    "sintomas": {
+      "pain_level": 5,
+      "temperature_c": 36.0,
+      "fever": true,
+      "mobility": "normal",
+      "wound": "secrecion_purulenta",
+      "appetite": null,
+      "sleep": "normal",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "temperature_c": "lexicon",
+        "fever": "llm",
+        "mobility": "lexicon",
+        "wound": "lexicon",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 7,
+    "llm_calls": 3,
+    "tokens_in": 1597,
+    "tokens_out": 60,
+    "latencias": [
+      820,
+      1,
+      1,
+      6653,
+      8,
+      2,
+      2
+    ],
+    "segundos": 7.51
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00038_14",
+    "capa": "capa2_ruidosa",
+    "esperado": "verde",
+    "predicho": "rojo",
+    "reglas": [
+      "movilidad_incapacitante"
+    ],
+    "completitud": 1.0,
+    "sintomas": {
+      "pain_level": 2,
+      "temperature_c": 37.5,
+      "fever": true,
+      "mobility": "incapacitante_nueva",
+      "wound": "normal",
+      "appetite": "normal",
+      "sleep": "normal",
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "temperature_c": "lexicon",
+        "fever": "lexicon",
+        "mobility": "llm",
+        "wound": "lexicon",
+        "appetite": "lexicon",
+        "sleep": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 9,
+    "llm_calls": 3,
+    "tokens_in": 1197,
+    "tokens_out": 42,
+    "latencias": [
+      1,
+      774,
+      1,
+      719,
+      939,
+      1,
+      1,
+      2,
+      2
+    ],
+    "segundos": 2.46
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00038_3",
+    "capa": "capa2_ruidosa",
+    "esperado": "amarillo",
+    "predicho": "amarillo",
+    "reglas": [
+      "vigilancia_multiples_signos"
+    ],
+    "completitud": 0.5,
+    "sintomas": {
+      "pain_level": 6,
+      "temperature_c": 37.4,
+      "fever": true,
+      "mobility": "normal",
+      "wound": null,
+      "appetite": null,
+      "sleep": null,
+      "medication_effective": null,
+      "heavy_bleeding": null,
+      "breathing_difficulty": null,
+      "loss_of_consciousness": null,
+      "chest_pain": null,
+      "altered_mental_status": null,
+      "seizure": null,
+      "day_postop": null,
+      "sources": {
+        "pain_level": "lexicon",
+        "temperature_c": "lexicon",
+        "fever": "lexicon",
+        "mobility": "lexicon"
+      },
+      "unanswered": [],
+      "other": []
+    },
+    "turnos": 6,
+    "llm_calls": 3,
+    "tokens_in": 1171,
+    "tokens_out": 38,
+    "latencias": [
+      1,
+      1,
+      1,
+      718,
+      731,
+      657
+    ],
+    "segundos": 2.13
+  },
+  {
+    "caso_id": "caso_tray_pac_42_00038_7",
+    "capa": "capa2_ruidosa",
+    "esperado": "amarillo",
+    "predicho": "rojo",
+    "reglas": [
+      "movilidad_incapacitante"
+    ],
+    "completitud": 0.667,
+    "sintomas": {
+      "pain_level": 5,
+      "temperature_c": null,
+      "fever": true,
+      "mobility": "incapacitante_nueva",
       "wound": "normal",
       "appetite": null,
       "sleep": null,
@@ -7648,41 +7800,45 @@
       "sources": {
         "pain_level": "lexicon",
         "fever": "llm",
-        "mobility": "lexicon",
+        "mobility": "llm",
         "wound": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 428,
-    "tokens_out": 14,
+    "turnos": 10,
+    "llm_calls": 5,
+    "tokens_in": 2092,
+    "tokens_out": 68,
     "latencias": [
-      0,
-      2551,
-      1867,
-      1871,
+      806,
+      1,
+      809,
+      3182,
+      915,
+      983,
+      1,
+      1,
       1,
       1
     ],
-    "segundos": 6.31
+    "segundos": 6.72
   },
   {
     "caso_id": "caso_tray_pac_42_00039_1",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "amarillo",
     "reglas": [
       "informacion_insuficiente"
     ],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 5,
       "temperature_c": null,
       "fever": true,
       "mobility": "normal",
-      "wound": "normal",
+      "wound": null,
       "appetite": "levemente_disminuido",
       "sleep": "levemente_alterado",
       "medication_effective": null,
@@ -7696,35 +7852,36 @@
       "sources": {
         "pain_level": "lexicon",
         "fever": "lexicon",
-        "mobility": "llm",
-        "wound": "lexicon",
+        "mobility": "lexicon",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 1,
-    "tokens_in": 430,
-    "tokens_out": 12,
+    "turnos": 8,
+    "llm_calls": 4,
+    "tokens_in": 1713,
+    "tokens_out": 54,
     "latencias": [
-      1,
-      1,
-      794,
-      1,
-      1,
-      1
+      2,
+      910,
+      2,
+      1041,
+      2,
+      1038,
+      3,
+      634
     ],
-    "segundos": 0.81
+    "segundos": 3.66
   },
   {
     "caso_id": "caso_tray_pac_42_00039_14",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
-    "completitud": 1.0,
+    "completitud": 0.833,
     "sintomas": {
       "pain_level": 0,
       "temperature_c": 36.8,
@@ -7732,7 +7889,7 @@
       "mobility": "normal",
       "wound": "normal",
       "appetite": "normal",
-      "sleep": "normal",
+      "sleep": null,
       "medication_effective": null,
       "heavy_bleeding": null,
       "breathing_difficulty": null,
@@ -7747,39 +7904,38 @@
         "mobility": "lexicon",
         "fever": "llm",
         "wound": "lexicon",
-        "appetite": "lexicon",
-        "sleep": "lexicon"
+        "appetite": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
     "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1240,
-    "tokens_out": 37,
+    "llm_calls": 4,
+    "tokens_in": 1613,
+    "tokens_out": 47,
     "latencias": [
-      823,
-      739,
-      623,
+      893,
+      898,
+      715,
       1,
       1,
-      1
+      441
     ],
-    "segundos": 2.21
+    "segundos": 2.97
   },
   {
     "caso_id": "caso_tray_pac_42_00039_3",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
-    "predicho": "amarillo",
+    "predicho": "rojo",
     "reglas": [
-      "informacion_insuficiente"
+      "no_se_pudo_evaluar"
     ],
-    "completitud": 0.5,
+    "completitud": 0.333,
     "sintomas": {
       "pain_level": 5,
       "temperature_c": null,
-      "fever": true,
+      "fever": null,
       "mobility": null,
       "wound": null,
       "appetite": "levemente_disminuido",
@@ -7794,29 +7950,29 @@
       "day_postop": null,
       "sources": {
         "pain_level": "lexicon",
-        "fever": "llm",
         "appetite": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 3,
-    "tokens_in": 1260,
-    "tokens_out": 43,
+    "turnos": 7,
+    "llm_calls": 4,
+    "tokens_in": 1616,
+    "tokens_out": 52,
     "latencias": [
       2,
       1,
-      800,
-      899,
+      695,
+      793,
       1,
-      765
+      802,
+      786
     ],
-    "segundos": 2.48
+    "segundos": 3.1
   },
   {
     "caso_id": "caso_tray_pac_42_00039_7",
-    "capa": "capa1_limpia",
+    "capa": "capa2_ruidosa",
     "esperado": "verde",
     "predicho": "verde",
     "reglas": [],
@@ -7826,7 +7982,7 @@
       "temperature_c": 36.5,
       "fever": true,
       "mobility": "normal",
-      "wound": "eritema_leve",
+      "wound": "normal",
       "appetite": "normal",
       "sleep": "normal",
       "medication_effective": null,
@@ -7842,25 +7998,28 @@
         "temperature_c": "lexicon",
         "mobility": "lexicon",
         "fever": "llm",
-        "wound": "lexicon",
+        "wound": "llm",
         "appetite": "lexicon",
         "sleep": "lexicon"
       },
       "unanswered": [],
       "other": []
     },
-    "turnos": 6,
-    "llm_calls": 2,
-    "tokens_in": 797,
-    "tokens_out": 27,
+    "turnos": 9,
+    "llm_calls": 6,
+    "tokens_in": 2353,
+    "tokens_out": 75,
     "latencias": [
       1,
-      843,
-      647,
-      1,
+      959,
+      686,
+      665,
+      738,
+      688,
+      690,
       1,
       1
     ],
-    "segundos": 1.51
+    "segundos": 4.45
   }
 ]

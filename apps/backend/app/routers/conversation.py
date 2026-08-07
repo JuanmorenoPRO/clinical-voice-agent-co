@@ -12,10 +12,22 @@ from sqlalchemy.orm import Session
 from ..db import get_session
 from ..models import Conversation
 from ..summary.service import close_conversation
-from ..agent import orchestrator as convo
+from ..agent import orchestrator as convo, phrasing
 from ..schemas import TurnRequest, TurnResponse
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
+
+
+@router.get("/apertura")
+def apertura() -> dict:
+    """El saludo con el que el pipeline de voz abre la llamada (ver
+    `app/voice/pipeline.py`, `TTSSpeakFrame(APERTURA)`). La consola de texto lo
+    usa para mostrar la misma primera burbuja antes de que el paciente escriba
+    nada: sin esto, `CallState` ya asume la pregunta de dolor como hecha
+    (arranca en `slot_actual="dolor"`) y el primer mensaje del usuario se
+    procesa como respuesta a una pregunta que nunca vio en pantalla.
+    """
+    return {"text": phrasing.APERTURA}
 
 
 @router.post("/turn", response_model=TurnResponse)

@@ -81,6 +81,16 @@ class Settings(BaseSettings):
     tts_voice: str = "es_MX-claude-high"
     piper_voices_dir: str = "data/piper-voices"
 
+    # Prosodia de Piper. Pipecat sintetiza sin `SynthesisConfig`, así que sin esto
+    # se usan los valores por defecto del modelo (`es_MX-claude-high.onnx.json`:
+    # length_scale=1.0, noise_scale=0.667, noise_w=0.8), que es lo que suena plano
+    # ("robótico"). Subir el ruido y bajar un poco la velocidad da más variación
+    # prosódica sin cambiar de voz ni de proveedor. Calibrar de oído con
+    # `scripts/spike_voice.py`.
+    piper_length_scale: float = 1.08
+    piper_noise_scale: float = 0.75
+    piper_noise_w_scale: float = 0.9
+
     # Detección de fin de turno. 0.7 s protege al paciente mayor de ser cortado a
     # media frase; es la palanca dominante del presupuesto de latencia.
     vad_stop_secs: float = 0.7

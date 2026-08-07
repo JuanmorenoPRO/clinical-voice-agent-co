@@ -227,7 +227,21 @@ async function enviar() {
 }
 $("#cEnviar").onclick = enviar;
 $("#cTexto").onkeydown = e => { if (e.key === "Enter") enviar(); };
-$("#cNueva").onclick = () => { convId = null; $("#cChat").innerHTML = ""; };
+
+// El backend ya asume, desde el primer turno, que esta pregunta se hizo (ver
+// CallState en app/agent/script.py: arranca en slot_actual="dolor"), igual que
+// en la llamada de voz el bot la dice antes de escuchar al paciente. Sin esta
+// burbuja, escribir cualquier cosa como primer mensaje se interpreta como una
+// respuesta fallida a una pregunta que el usuario nunca vio.
+async function nuevaConversacion() {
+  convId = null;
+  $("#cChat").innerHTML = "";
+  try {
+    const r = await api("/conversation/apertura");
+    burbuja("ag", r.text);
+  } catch (e) { /* sin conexión: ya se avisa en el estado de arriba */ }
+}
+$("#cNueva").onclick = nuevaConversacion;
 $("#cCerrar").onclick = async () => {
   if (!convId) return;
   const r = await api(`/conversation/${convId}/close`, { method: "POST" });
@@ -380,6 +394,7 @@ $("#vColgar").onclick = () => {
 
 estado();
 cargarPacientes();
+nuevaConversacion();
 setInterval(estado, 15000);
 </script>
 </body>

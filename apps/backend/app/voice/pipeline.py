@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from functools import partial
 from pathlib import Path
 
 from loguru import logger
@@ -153,9 +154,22 @@ def _build_tts(s):
 
         return KokoroTTSService(voice_id=s.tts_voice)
 
+    from piper.config import SynthesisConfig
     from pipecat.services.piper.tts import PiperTTSService
 
-    return PiperTTSService(voice_id=s.tts_voice, download_dir=Path(s.piper_voices_dir))
+    tts = PiperTTSService(voice_id=s.tts_voice, download_dir=Path(s.piper_voices_dir))
+    # `PiperTTSSettings` de Pipecat no tiene campos para prosodia: `run_tts` llama
+    # a `self._voice.synthesize(text)` sin `syn_config`, así que usa siempre los
+    # valores por defecto del modelo. Se parchea la llamada ya vinculada (en vez
+    # de subclasear y duplicar la lógica de streaming de `run_tts`) para que
+    # cada síntesis use los valores calibrados en `config.py`.
+    syn_config = SynthesisConfig(
+        length_scale=s.piper_length_scale,
+        noise_scale=s.piper_noise_scale,
+        noise_w_scale=s.piper_noise_w_scale,
+    )
+    tts._voice.synthesize = partial(tts._voice.synthesize, syn_config=syn_config)
+    return tts
 
 
 async def run_bot(webrtc_connection, patient_id: str | None = None) -> None:
