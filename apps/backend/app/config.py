@@ -111,8 +111,7 @@ class Settings(BaseSettings):
     chunk_size: int = 900
     chunk_overlap: int = 180
 
-    # --- Prompts y datos versionados fuera del código (RNF-05) ---
-    prompts_dir: str = "prompts"
+    # --- Datos versionados fuera del código ---
     seed_dir: str = "data/seed"
 
 
@@ -123,7 +122,6 @@ def get_settings() -> Settings:
     # lanzado desde la raíz, desde apps/backend/ o desde un servicio del sistema.
     s.chroma_dir = _abs(s.chroma_dir)
     s.piper_voices_dir = _abs(s.piper_voices_dir)
-    s.prompts_dir = _abs(s.prompts_dir)
     s.seed_dir = _abs(s.seed_dir)
     if s.database_url.startswith("sqlite:///./"):
         s.database_url = "sqlite:///" + _abs(s.database_url.removeprefix("sqlite:///./"))
