@@ -94,10 +94,11 @@ _PRIORITARIA: dict[str, str] = {
         "subiendo, aparece fiebre o vomita, llame al 123."
     ),
     "fiebre_referida_con_signos": (
-        "Aunque no haya podido tomarse la temperatura, lo que me describe junto con lo "
-        "demás sí hay que revisarlo hoy. Voy a pedir que enfermería lo contacte en las "
-        "próximas horas. Si consigue un termómetro, tómese la temperatura y anótela. "
-        "Si pasa de 39 o le cuesta respirar, llame al 123 sin esperar."
+        "Con la fiebre que me contó, aunque no la haya podido medir, y las otras "
+        "molestias que me ha ido contando, sí hay que revisarlo hoy. Voy a pedir que "
+        "enfermería lo contacte en las próximas horas. Si consigue un termómetro, "
+        "tómese la temperatura y anótela. Si pasa de 39 o le cuesta respirar, llame "
+        "al 123 sin esperar."
     ),
     "no_se_pudo_evaluar": (
         "No alcanzamos a repasar bien cómo ha seguido, y prefiero no quedarme con la "

@@ -205,11 +205,18 @@ async def process_turn_async(
         # Si se acabó abstiniendo, no se citan fuentes: decir "no tengo información"
         # y adjuntar una cita es incoherente, y en la traza parecería que el agente
         # ignoró evidencia que sí tenía.
-        if es_abstencion(respuesta):
-            evidence = None
         siguiente = _texto_de(action, semilla=conv.id + str(len(prior)),
                               recientes=recientes, nombre=nombre, preocupante=False)
-        final = f"{respuesta} {siguiente}"
+        if es_abstencion(respuesta):
+            evidence = None
+            # Sin este puente, la pregunta clínica sin resolver se pegaba justo
+            # antes de la siguiente pregunta del guion y sonaba a que el agente
+            # ignoraba lo que acababa de decir en vez de retomar el seguimiento.
+            transicion = phrasing.transicion_abstencion(
+                conv.id + str(len(prior)), recientes)
+            final = f"{respuesta} {transicion} {siguiente}"
+        else:
+            final = f"{respuesta} {siguiente}"
     else:
         preocupante = decision.risk_level != "NORMAL"
         prefijo = phrasing.TERCERO + " " if extraccion.intent == "tercero" else ""

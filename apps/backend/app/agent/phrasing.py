@@ -117,6 +117,16 @@ FUERA_DE_MISION = (
     "Eso no se lo puedo decir yo: no receto ni cambio tratamientos. "
     "Se lo paso a enfermería y ellos lo orientan."
 )
+
+# Puente tras una abstención del RAG ("no tengo información..."). Sin esto, la
+# siguiente pregunta clínica se pegaba justo después del "se lo paso a
+# enfermería" y sonaba a que el agente ignoró lo que acababa de decir en vez de
+# retomar el hilo del seguimiento.
+TRANSICION_ABSTENCION: tuple[str, ...] = (
+    "Voy a continuar entonces con las preguntas de su seguimiento.",
+    "Sigamos entonces con las preguntas correspondientes a su cirugía.",
+    "Continuemos con el resto de las preguntas.",
+)
 RECHAZO = (
     "Sin problema, no le quito más tiempo. Si algo cambia o se siente mal, "
     "comuníquese con el hospital. Que siga bien."
@@ -148,6 +158,10 @@ def repregunta(slot: str, intento: int) -> str:
 def acuse(semilla: str, usadas: list[str] | None = None, *, preocupante: bool = False) -> str:
     banco = ACUSES_PREOCUPANTE if preocupante else ACUSES
     return _rotar(banco, semilla, usadas or [])
+
+
+def transicion_abstencion(semilla: str, usadas: list[str] | None = None) -> str:
+    return _rotar(TRANSICION_ABSTENCION, semilla, usadas or [])
 
 
 def cierre_tras_escalamiento(nombre: str | None) -> str:
@@ -183,4 +197,5 @@ def textos_cacheables() -> list[str]:
             fijos.extend(opciones)
     fijos.extend(ACUSES)
     fijos.extend(ACUSES_PREOCUPANTE)
+    fijos.extend(TRANSICION_ABSTENCION)
     return fijos
