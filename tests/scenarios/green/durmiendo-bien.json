@@ -1,0 +1,15 @@
+{
+  "name": "Durmiendo bien",
+  "risk": "green",
+  "category": "green",
+  "messages": [
+    "Hola, buenas.",
+    "Anoche dormí bien, del tirón.",
+    "Amanecí tranquilo."
+  ],
+  "expected": {
+    "risk": "green",
+    "should_escalate": false,
+    "should_reassure": false
+  }
+}

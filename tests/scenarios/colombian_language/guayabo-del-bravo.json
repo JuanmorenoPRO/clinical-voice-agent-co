@@ -1,0 +1,17 @@
+{
+  "name": "Guayabo del bravo",
+  "risk": "green",
+  "category": "colombian_language",
+  "messages": [
+    "Hola, buenas.",
+    "Amanecí con un guayabo del bravo, mareado.",
+    "Pero sin fiebre y con dolor leve, un 2."
+  ],
+  "expected": {
+    "risk": "green",
+    "should_escalate": false,
+    "must_interpret": [
+      "guayabo del bravo"
+    ]
+  }
+}

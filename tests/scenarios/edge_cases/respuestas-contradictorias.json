@@ -1,0 +1,15 @@
+{
+  "name": "Respuestas contradictorias",
+  "risk": "yellow",
+  "category": "edge_cases",
+  "messages": [
+    "Hola, buenas.",
+    "No me duele nada.",
+    "Bueno, en realidad tengo un dolor de 9.",
+    "No, no me duele... sí me duele mucho y la medicación no sirve."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true
+  }
+}

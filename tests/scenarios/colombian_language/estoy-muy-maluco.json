@@ -1,0 +1,17 @@
+{
+  "name": "Estoy muy maluco",
+  "risk": "yellow",
+  "category": "colombian_language",
+  "messages": [
+    "Hola, buenas.",
+    "Me siento muy maluco.",
+    "Tengo calentura, el termómetro marca 39."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "must_interpret": [
+      "estoy muy maluco"
+    ]
+  }
+}

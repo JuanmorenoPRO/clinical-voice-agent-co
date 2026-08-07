@@ -31,6 +31,11 @@ class Symptoms(BaseModel):
     heavy_bleeding: bool | None = Field(None, description="Sangrado abundante")
     breathing_difficulty: bool | None = None
     loss_of_consciousness: bool | None = None
+    chest_pain: bool | None = Field(None, description="Dolor en el pecho / torácico")
+    altered_mental_status: bool | None = Field(
+        None, description="Confusión, desorientación o estado mental alterado"
+    )
+    seizure: bool | None = Field(None, description="Convulsión / crisis convulsiva")
     # Texto libre para síntomas no mapeados (coloquialismos: "me siento maluco").
     other: list[str] = Field(default_factory=list)
 

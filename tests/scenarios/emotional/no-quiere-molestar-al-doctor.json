@@ -1,0 +1,15 @@
+{
+  "name": "No quiere molestar al doctor",
+  "risk": "yellow",
+  "category": "emotional",
+  "messages": [
+    "Hola, buenas.",
+    "No quiero molestar al doctor con esto.",
+    "Pero llevo con fiebre de 39 desde anoche."
+  ],
+  "expected": {
+    "should_reassure": true,
+    "risk": "yellow",
+    "should_escalate": true
+  }
+}

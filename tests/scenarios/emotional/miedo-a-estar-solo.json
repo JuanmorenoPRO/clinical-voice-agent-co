@@ -1,0 +1,15 @@
+{
+  "name": "Miedo a estar solo",
+  "risk": "green",
+  "category": "emotional",
+  "messages": [
+    "Hola, buenas.",
+    "Estoy solo en casa y me da miedo.",
+    "El dolor es un 2 pero la angustia no me deja."
+  ],
+  "expected": {
+    "should_reassure": true,
+    "risk": "green",
+    "should_escalate": false
+  }
+}

@@ -32,12 +32,42 @@ _BY_RULE: dict[str, str] = {
         "enfermería ahora mismo. Si hay alguien con usted, pídale que se quede a su "
         "lado; si vuelve a desvanecerse, deben llamar a emergencias al 123."
     ),
+    "dolor_toracico": (
+        "Un dolor en el pecho después de la cirugía es una señal de alarma que hay que "
+        "atender de inmediato. Estoy alertando ahora mismo al personal de enfermería. "
+        "Por favor quédese quieto y sentado; si el dolor aumenta, se irradia al brazo o "
+        "le falta el aire, llame de una vez a emergencias al 123."
+    ),
+    "estado_mental_alterado": (
+        "La confusión o desorientación tras la cirugía es una señal seria y su seguridad "
+        "es lo primero. Voy a avisar de inmediato al personal de enfermería. Si hay "
+        "alguien con usted, pídale que se quede a su lado y, si empeora, que llame a "
+        "emergencias al 123."
+    ),
+    "convulsion": (
+        "Una convulsión es una emergencia. Estoy alertando al personal de enfermería en "
+        "este momento. Si alguien está con usted, que lo recueste de lado en un lugar "
+        "seguro, que no le sujete la lengua ni la boca, y que llame ya a emergencias al 123."
+    ),
 }
 
 
+# Apertura empática común: ADR-006 advierte que el guion crítico "puede sonar
+# robótico" y prescribe "redactarlo con tono empático". Validamos la emoción ANTES
+# de la instrucción clínica (mismo principio que la categoría emocional de las
+# pruebas: primero validar, luego lo clínico).
+_EMPATHIC_OPENER = (
+    "Entiendo que esto lo puede asustar y estoy aquí con usted; vamos a actuar de "
+    "inmediato. "
+)
+
+
 def script_for(triggered_rules: list[str]) -> str:
-    """Selecciona el guion según la primera regla CRÍTICA disparada."""
+    """Selecciona el guion según la primera regla CRÍTICA disparada.
+
+    Antepone una validación emocional breve (ADR-006) al guion clínico determinista.
+    """
     for rule in triggered_rules:
         if rule in _BY_RULE:
-            return _BY_RULE[rule]
-    return _DEFAULT
+            return _EMPATHIC_OPENER + _BY_RULE[rule]
+    return _EMPATHIC_OPENER + _DEFAULT

@@ -1,0 +1,4 @@
+# Los reportes generados no se versionan; se conserva la carpeta.
+report-*.md
+report-*.html
+report-*.json

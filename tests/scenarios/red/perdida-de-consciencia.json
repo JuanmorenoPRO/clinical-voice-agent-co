@@ -1,0 +1,15 @@
+{
+  "name": "Pérdida de consciencia",
+  "risk": "red",
+  "category": "red",
+  "messages": [
+    "Hola, buenas.",
+    "Me desmayé hace un rato.",
+    "Perdí el conocimiento por unos segundos."
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

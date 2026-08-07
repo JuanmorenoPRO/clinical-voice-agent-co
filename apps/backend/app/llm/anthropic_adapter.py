@@ -35,6 +35,9 @@ con exactamente esta forma:
     "heavy_bleeding": <true/false o null>,
     "breathing_difficulty": <true/false o null>,
     "loss_of_consciousness": <true/false o null>,
+    "chest_pain": <true/false o null>,
+    "altered_mental_status": <true/false o null>,
+    "seizure": <true/false o null>,
     "other": [<strings>]
   },
   "respuesta": "<lo que le dirías al paciente en voz alta>"

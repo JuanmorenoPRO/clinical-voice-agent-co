@@ -1,0 +1,19 @@
+{
+  "name": "No repetir pregunta ya respondida",
+  "risk": "green",
+  "category": "memory",
+  "messages": [
+    "Hola, buenas.",
+    "El dolor es de 2 y ya le dije que la medicación me hace efecto.",
+    "Duermo bien.",
+    "Camino sin problema.",
+    "¿Cómo sigo el cuidado?"
+  ],
+  "expected": {
+    "risk": "green",
+    "should_escalate": false,
+    "remember": {
+      "dolor": "2 controlado"
+    }
+  }
+}

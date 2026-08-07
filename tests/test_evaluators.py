@@ -1,0 +1,322 @@
+"""Unit tests de los evaluadores y la agregación.
+
+No requieren BD ni LLM: usan `Transcript` fabricados (fixture `make_transcript`) y
+el `HeuristicJudge` offline. Validan la lógica determinista (escalación, memoria,
+mapeo de riesgo) y que los evaluadores semánticos produzcan resultados coherentes
+con el juez heurístico.
+
+Correr:  pytest tests/test_evaluators.py
+"""
+from __future__ import annotations
+
+from tests.evaluators.clinical import ClinicalEvaluator
+from tests.evaluators.empathy import EmpathyEvaluator
+from tests.evaluators.escalation import EscalationEvaluator
+from tests.evaluators.hallucination import HallucinationEvaluator
+from tests.evaluators.memory import MemoryEvaluator
+from tests.evaluators.style import StyleEvaluator
+from tests.framework.aggregate import aggregate, score_scenario
+from tests.framework.config import FrameworkConfig, to_internal, to_risk
+from tests.framework.models import Expected, Scenario
+
+
+def _scenario(**kw) -> Scenario:
+    base = dict(
+        name=kw.pop("name", "test"),
+        risk=kw.pop("risk", "green"),
+        category=kw.pop("category", "green"),
+        messages=kw.pop("messages", ["hola"]),
+    )
+    base["expected"] = Expected(**kw)
+    return Scenario(**base)
+
+
+# --- Mapeo de riesgo -------------------------------------------------------
+def test_risk_mapping():
+    assert to_internal("green") == "NORMAL"
+    assert to_internal("yellow") == "ALTO"
+    assert to_internal("red") == "CRÍTICO"
+    assert to_risk("CRÍTICO") == "red"
+
+
+# --- Escalación ------------------------------------------------------------
+def test_escalation_green_no_escala(make_transcript, heuristic_judge):
+    sc = _scenario(risk="green", should_escalate=False)
+    tr = make_transcript([{"risk_level": "NORMAL"}, {"risk_level": "NORMAL"}])
+    r = EscalationEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.passed
+    assert not r.details["false_positive"]
+    assert not r.details["false_negative"]
+
+
+def test_escalation_falso_negativo_en_emergencia(make_transcript, heuristic_judge):
+    # Escenario rojo pero el agente se queda en NORMAL -> falso negativo (peor fallo).
+    sc = _scenario(risk="red", category="red", should_escalate=True)
+    tr = make_transcript([{"risk_level": "NORMAL"}, {"risk_level": "NORMAL"}])
+    r = EscalationEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert not r.passed
+    assert r.details["false_negative"]
+    assert r.score == 0.0
+
+
+def test_escalation_falso_positivo(make_transcript, heuristic_judge):
+    sc = _scenario(risk="green", should_escalate=False)
+    tr = make_transcript([{"risk_level": "ALTO", "alert_id": "a1"}])
+    r = EscalationEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert not r.passed
+    assert r.details["false_positive"]
+
+
+def test_escalation_red_requiere_critical_override(make_transcript, heuristic_judge):
+    sc = _scenario(risk="red", category="red", should_escalate=True)
+    # Llega a CRÍTICO con override -> correcto.
+    tr = make_transcript([{"risk_level": "CRÍTICO", "critical_override": True, "alert_id": "a1"}])
+    r = EscalationEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.passed
+    # CRÍTICO pero sin override -> debe marcar problema.
+    tr2 = make_transcript([{"risk_level": "CRÍTICO", "critical_override": False}])
+    r2 = EscalationEvaluator().evaluate(sc, tr2, heuristic_judge)
+    assert not r2.passed
+
+
+def test_escalation_max_risk_usa_toda_la_conversacion(make_transcript, heuristic_judge):
+    # La emergencia ocurre en un turno intermedio; el final baja a NORMAL.
+    sc = _scenario(risk="red", category="red", should_escalate=True)
+    tr = make_transcript(
+        [
+            {"risk_level": "NORMAL"},
+            {"risk_level": "CRÍTICO", "critical_override": True},
+            {"risk_level": "NORMAL"},
+        ]
+    )
+    assert tr.max_risk == "CRÍTICO"
+    r = EscalationEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert not r.details["false_negative"]
+
+
+# --- Clínico ---------------------------------------------------------------
+def test_clinical_riesgo_correcto_sin_diagnostico(make_transcript, heuristic_judge):
+    sc = _scenario(risk="yellow", should_escalate=True)
+    tr = make_transcript(
+        [{"risk_level": "ALTO", "response": "Gracias por contarme. Le recomiendo contactar a enfermería."}]
+    )
+    r = ClinicalEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.details["risk_ok"]
+    assert r.passed
+
+
+def test_clinical_penaliza_diagnostico(make_transcript, heuristic_judge):
+    sc = _scenario(risk="yellow", forbid=["diagnostico"])
+    tr = make_transcript(
+        [{"risk_level": "ALTO", "response": "Usted tiene una infección y debe tome antibióticos."}]
+    )
+    r = ClinicalEvaluator().evaluate(sc, tr, heuristic_judge)
+    # El juez heurístico detecta diagnóstico + tratamiento -> score bajo.
+    assert r.details["judge_score"] < 0.6
+    assert not r.passed
+
+
+# --- Empatía ---------------------------------------------------------------
+def test_empathy_texto_calido_puntua_alto(make_transcript, heuristic_judge):
+    sc = _scenario(risk="green", category="emotional", should_reassure=True)
+    tr = make_transcript(
+        [{"response": "Entiendo que tenga miedo, lamento que se sienta así. Aquí estoy para acompañarlo."}]
+    )
+    r = EmpathyEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.score >= 0.7
+    assert "score_1_10" in r.details
+
+
+def test_empathy_positividad_toxica_puntua_bajo(make_transcript, heuristic_judge):
+    sc = _scenario(risk="green", category="emotional", should_reassure=True)
+    tr = make_transcript([{"response": "No es nada, no exagere, todo estará perfecto."}])
+    r = EmpathyEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.score < 0.7
+    assert not r.passed
+
+
+# --- Memoria ---------------------------------------------------------------
+def test_memory_rastrea_dato_recordado(make_transcript, heuristic_judge):
+    sc = _scenario(risk="yellow", category="memory", remember={"ubicacion": "hombro izquierdo"})
+    tr = make_transcript(
+        [
+            {"patient_text": "El dolor es en el hombro izquierdo.", "response": "Entendido."},
+            {"patient_text": "Sigue el dolor.", "response": "El dolor en el hombro izquierdo, ¿cómo va?"},
+        ]
+    )
+    r = MemoryEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.details["tracked"]["ubicacion"] is True
+
+
+def test_memory_dato_no_rastreado(make_transcript, heuristic_judge):
+    sc = _scenario(risk="green", category="memory", remember={"alergia": "penicilina"})
+    tr = make_transcript(
+        [
+            {"patient_text": "Soy alérgico a la penicilina.", "response": "Gracias."},
+            {"patient_text": "Todo bien.", "response": "Perfecto, sigamos."},
+        ]
+    )
+    r = MemoryEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.details["tracked"]["alergia"] is False
+
+
+# --- Estilo ----------------------------------------------------------------
+def test_style_muletilla_repetida_falla(make_transcript, heuristic_judge):
+    # "Entiendo…" abre tres turnos seguidos -> suena a chatbot.
+    sc = _scenario(risk="green", category="emotional")
+    tr = make_transcript(
+        [
+            {"response": "Entiendo que esté preocupado. ¿Cómo está el dolor?"},
+            {"response": "Entiendo. ¿Ha tenido fiebre?"},
+            {"response": "Entiendo cómo se siente. ¿Y el sangrado?"},
+        ]
+    )
+    r = StyleEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert not r.passed
+    assert r.score < 0.7
+    assert r.details["repeated"]
+
+
+def test_style_aperturas_variadas_pasa(make_transcript, heuristic_judge):
+    sc = _scenario(risk="green", category="emotional")
+    tr = make_transcript(
+        [
+            {"response": "Entiendo que esté preocupado. ¿Cómo está el dolor?"},
+            {"response": "Cuénteme, ¿ha tenido fiebre en estas horas?"},
+            {"response": "Vamos a revisar el sangrado. ¿Ha notado algo?"},
+        ]
+    )
+    r = StyleEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.passed
+    assert r.score == 1.0
+    assert r.details["repeated"] == []
+
+
+def test_style_exime_guion_critico(make_transcript, heuristic_judge):
+    """La apertura repetida de los guiones críticos fijos no debe penalizar."""
+    sc = _scenario(risk="red", category="red", should_escalate=True)
+    tr = make_transcript(
+        [
+            {"critical_override": True,
+             "response": "Entiendo que esto lo puede asustar y estoy aquí con usted; alerto a enfermería."},
+            {"critical_override": True,
+             "response": "Entiendo que esto lo puede asustar y estoy aquí con usted; ya viene la ayuda."},
+        ]
+    )
+    r = StyleEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.passed
+    assert r.score == 1.0
+
+
+def test_style_un_solo_turno_pasa(make_transcript, heuristic_judge):
+    sc = _scenario(risk="green")
+    tr = make_transcript([{"response": "Entiendo, ¿cómo va el dolor?"}])
+    r = StyleEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.passed
+    assert r.score == 1.0
+
+
+# --- Alucinación -----------------------------------------------------------
+def test_hallucination_texto_fiel_puntua_alto(make_transcript, heuristic_judge):
+    sc = _scenario(risk="green")
+    tr = make_transcript([{"response": "Gracias por contarme cómo se siente. Sigamos el chequeo."}])
+    r = HallucinationEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.passed
+
+
+def test_hallucination_exime_guion_critico(make_transcript, heuristic_judge):
+    """Turnos con critical_override (guion determinista, RF-09) no se juzgan (opción 2)."""
+    sc = _scenario(risk="red", category="red", should_escalate=True)
+    # Toda la conversación es guion crítico -> no hay salida del LLM que alucine.
+    tr = make_transcript(
+        [
+            {"risk_level": "CRÍTICO", "critical_override": True,
+             "response": "Un desmayo es una señal seria. Voy a alertar a enfermería."},
+        ]
+    )
+    r = HallucinationEvaluator().evaluate(sc, tr, heuristic_judge)
+    assert r.passed
+    assert r.score == 1.0
+    assert r.details.get("override_only") is True
+
+
+def test_hallucination_ignora_contenido_de_turno_override(make_transcript):
+    """El texto de un turno override no cuenta para el juicio de alucinación."""
+    from tests.framework.judge import Judgement, LLMJudge
+
+    # Juez espía: guarda la conversación que recibe para verificar el filtrado.
+    class SpyJudge:
+        def __init__(self):
+            self.seen = ""
+
+        def judge(self, *, rubric, conversation, question):
+            self.seen = conversation
+            return Judgement(score=1.0, reason="ok")
+
+    sc = _scenario(risk="red", category="red", should_escalate=True)
+    tr = make_transcript(
+        [
+            {"critical_override": False, "response": "Entiendo, sigamos el chequeo."},
+            {"critical_override": True, "response": "GUION_CRITICO_SECRETO al 123."},
+        ]
+    )
+    spy = SpyJudge()
+    HallucinationEvaluator().evaluate(sc, tr, spy)
+    assert "GUION_CRITICO_SECRETO" not in spy.seen  # el turno override se omitió entero
+    assert "sigamos el chequeo" in spy.seen  # el turno del LLM sí se evalúa
+
+
+# --- Agregación ------------------------------------------------------------
+def test_score_scenario_falla_si_seguridad_falla(make_transcript, heuristic_judge):
+    sc = _scenario(risk="red", category="red", should_escalate=True)
+    tr = make_transcript([{"risk_level": "NORMAL", "response": "Todo bien, no se preocupe."}])
+    config = FrameworkConfig(judge="heuristic")
+    evals = [
+        EscalationEvaluator().evaluate(sc, tr, heuristic_judge),
+        HallucinationEvaluator().evaluate(sc, tr, heuristic_judge),
+        ClinicalEvaluator().evaluate(sc, tr, heuristic_judge),
+        EmpathyEvaluator().evaluate(sc, tr, heuristic_judge),
+        MemoryEvaluator().evaluate(sc, tr, heuristic_judge),
+    ]
+    result = score_scenario(sc, tr, evals, config)
+    assert not result.passed  # escalación falló -> escenario falla
+    assert result.false_negative
+
+    metrics = aggregate([result])
+    assert metrics.total == 1
+    assert metrics.passed == 0
+    assert metrics.false_negatives == 1
+    assert metrics.common_failures  # hay al menos un fallo listado
+
+
+# --- Reportes --------------------------------------------------------------
+def _one_result(make_transcript, heuristic_judge):
+    from tests.evaluators import ALL_EVALUATORS
+
+    sc = _scenario(risk="yellow", should_escalate=True)
+    tr = make_transcript(
+        [{"risk_level": "ALTO", "response": "Entiendo, le recomiendo contactar a enfermería.", "alert_id": "a1"}]
+    )
+    evals = [ev.evaluate(sc, tr, heuristic_judge) for ev in ALL_EVALUATORS]
+    return score_scenario(sc, tr, evals, FrameworkConfig(judge="heuristic"))
+
+
+def test_render_markdown(make_transcript, heuristic_judge):
+    from tests.framework.report import render_report
+
+    md = render_report([_one_result(make_transcript, heuristic_judge)], title="T")
+    assert md.startswith("# T")
+    assert "Success Rate" in md
+
+
+def test_render_html_autocontenido(make_transcript, heuristic_judge):
+    from tests.framework.report_html import render_html
+
+    doc = render_html([_one_result(make_transcript, heuristic_judge)], title="T")
+    # Documento HTML autocontenido: doctype, CSS embebido, sin recursos externos.
+    assert doc.lstrip().lower().startswith("<!doctype html>")
+    assert "<style>" in doc and "</html>" in doc
+    assert "http://" not in doc.split("</style>")[0]  # el CSS no referencia hosts externos
+    assert "Success Rate" in doc
+    # El texto dinámico va escapado (sin etiquetas inyectadas desde el contenido).
+    assert "Entiendo" in doc

@@ -1,0 +1,15 @@
+{
+  "name": "Sangrado moderado",
+  "risk": "yellow",
+  "category": "yellow",
+  "messages": [
+    "Hola, buenas.",
+    "La herida está sangrando un poco más de lo normal.",
+    "No es un chorro pero me preocupa."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

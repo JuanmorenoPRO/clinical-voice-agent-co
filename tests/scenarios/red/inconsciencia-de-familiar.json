@@ -1,0 +1,15 @@
+{
+  "name": "Inconsciencia de familiar",
+  "risk": "red",
+  "category": "red",
+  "messages": [
+    "Hola, buenas.",
+    "Mi papá operado está inconsciente.",
+    "No responde cuando le hablo."
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

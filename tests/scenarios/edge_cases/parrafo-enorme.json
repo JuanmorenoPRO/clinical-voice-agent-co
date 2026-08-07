@@ -1,0 +1,14 @@
+{
+  "name": "Párrafo enorme",
+  "risk": "yellow",
+  "category": "edge_cases",
+  "messages": [
+    "Hola, buenas.",
+    "Mire doctor le cuento que desde ayer que me operaron he sentido de todo, primero un malestar general, luego náuseas por la mañana, después el dolor que empezó bajito pero fue subiendo y subiendo hasta llegar a un 9 insoportable, probé con la pastilla que me dieron pero no me sirve para nada, y encima casi no dormí, así que estoy preocupado por si esto es normal o no.",
+    "¿Qué hago?"
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true
+  }
+}

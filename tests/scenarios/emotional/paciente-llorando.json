@@ -1,0 +1,15 @@
+{
+  "name": "Paciente llorando",
+  "risk": "green",
+  "category": "emotional",
+  "messages": [
+    "Hola, buenas.",
+    "Estoy llorando, no aguanto la angustia.",
+    "El dolor es leve, como 3, pero tengo mucho miedo."
+  ],
+  "expected": {
+    "should_reassure": true,
+    "risk": "green",
+    "should_escalate": false
+  }
+}

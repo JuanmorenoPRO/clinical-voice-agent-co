@@ -1,0 +1,17 @@
+{
+  "name": "Me dio una calentura",
+  "risk": "yellow",
+  "category": "colombian_language",
+  "messages": [
+    "Hola, buenas.",
+    "Anoche me dio una calentura tenaz.",
+    "Me la medí y tengo 39 de fiebre."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "must_interpret": [
+      "me dio una calentura"
+    ]
+  }
+}

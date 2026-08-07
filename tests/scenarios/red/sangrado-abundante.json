@@ -1,0 +1,15 @@
+{
+  "name": "Sangrado abundante",
+  "risk": "red",
+  "category": "red",
+  "messages": [
+    "Hola, buenas.",
+    "La herida está sangrando mucho, no para.",
+    "Es un chorro de sangre."
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}
