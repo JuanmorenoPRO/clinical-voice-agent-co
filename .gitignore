@@ -27,3 +27,6 @@ dist/
 
 # Logs y metricas
 logs/
+
+# Base de datos generada (se recrea con scripts/init_db.py)
+data/clinical.db*

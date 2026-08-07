@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ..db import get_session
 from ..models import Conversation
 from ..summary.service import build_summary
-from ..voice import conversation as convo
+from ..agent import orchestrator as convo
 from ..schemas import TurnRequest, TurnResponse
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])

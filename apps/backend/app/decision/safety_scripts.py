@@ -93,6 +93,18 @@ _PRIORITARIA: dict[str, str] = {
         "Tome la analgesia como se la formularon y quédese en reposo. Si el dolor sigue "
         "subiendo, aparece fiebre o vomita, llame al 123."
     ),
+    "fiebre_referida_con_signos": (
+        "Aunque no haya podido tomarse la temperatura, lo que me describe junto con lo "
+        "demás sí hay que revisarlo hoy. Voy a pedir que enfermería lo contacte en las "
+        "próximas horas. Si consigue un termómetro, tómese la temperatura y anótela. "
+        "Si pasa de 39 o le cuesta respirar, llame al 123 sin esperar."
+    ),
+    "no_se_pudo_evaluar": (
+        "No alcanzamos a repasar bien cómo ha seguido, y prefiero no quedarme con la "
+        "duda. Voy a pedir que enfermería lo llame hoy para revisarlo con calma. Si "
+        "mientras tanto le da fiebre, la herida cambia o el dolor aumenta, comuníquese "
+        "al 123."
+    ),
 }
 
 _PRIORITARIA_DEFAULT = (

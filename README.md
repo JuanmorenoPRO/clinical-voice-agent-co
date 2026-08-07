@@ -1,194 +1,327 @@
-# Clinical Voice Agent — Seguimiento Post-operatorio
+# Agente de voz para seguimiento postoperatorio
 
-Agente de voz con IA para el **seguimiento post-operatorio** de pacientes
-(Tech Sphere Challenge 2026). Tras una cirugía, el agente conversa con el
-paciente en **español colombiano**, evalúa síntomas, fundamenta cada respuesta
-clínica en documentos mediante **RAG con trazabilidad completa**, decide de
-forma **determinista** cuándo alertar a personal humano, y genera un **resumen
-estructurado** de cada llamada.
+Tech Sphere Challenge 2026. Un agente que llama al paciente después de una cirugía,
+conversa en español colombiano, entiende lo que le cuenta y decide si hay que
+alertar a personal humano.
 
-> **Estado: scaffold inicial.** Diseñado tal como se pretende, listo para
-> ajustar cuando lleguen el **modelo LLM obligatorio** y el **dataset (Databricks
-> Delta Share)** el **7 de agosto**. Los puntos de ajuste están marcados en el
-> código con `⏳` / `TODO Aug 7`.
-
-Documentación de diseño: [`docs/prd.md`](docs/prd.md) ·
-[`docs/architecture.md`](docs/architecture.md) ·
-[`docs/decision-log.md`](docs/decision-log.md) ·
-[`docs/tech-stack.md`](docs/tech-stack.md).
+**El modelo de lenguaje es `llama3.2:3b` vía Ollama**, uno de los cuatro permitidos
+por la compuerta G3. El porqué está en [§ El modelo](#el-modelo-y-por-qué-ese) —
+resumen: los dos permitidos que corren en la nube ya no se pueden invocar.
 
 ---
 
-## Principio rector
+## Arranque
 
-El LLM **nunca** toma decisiones clínicas ni responde desde su conocimiento
-interno. Las decisiones son **reglas deterministas** (funciones Python puras); las
-respuestas médicas provienen exclusivamente del **conocimiento indexado**, con
-cita a documento y página.
+**Requisitos:** Python 3.12+, [Ollama](https://ollama.com), y una clave gratuita de
+[Groq](https://console.groq.com) (un minuto, sin tarjeta). Es la única credencial.
 
-## Arquitectura (resumen)
+```bash
+# 1. Modelos (3.2 GB). Se pueden lanzar en paralelo con el resto.
+ollama pull llama3.2:3b &
+ollama pull bge-m3 &
 
+# 2. Código y dependencias
+git clone https://github.com/JuanmorenoPRO/clinical_assistant && cd clinical_assistant
+python3.12 -m venv .venv && .venv/bin/pip install -r apps/backend/requirements.txt \
+                                                  -r apps/backend/requirements-voice.txt
+
+# 3. Credencial
+cp .env.example .env        # pega tu GROQ_API_KEY
+
+# 4. Índice del corpus clínico preconstruido (63 MB, ~5 s)
+.venv/bin/python scripts/fetch_index.py
+.venv/bin/python scripts/init_db.py
+
+# 5. Arrancar
+.venv/bin/python -m uvicorn app.main:app --app-dir apps/backend --port 8000
 ```
-Paciente ──(texto hoy / voz con Pipecat)──▶ Servicio de Conversación
-                                              │  1 sola llamada LLM/turno (ADR-006)
-                     RAG (Voyage + pgvector) ─┤  {sintomas, respuesta}
-                                              ▼
-                              Motor de Decisión (reglas puras + YAML)
-                                              │  NORMAL | ALTO | CRÍTICO
-                    CRÍTICO ▶ descarta LLM, guion de seguridad + alerta
-                                              ▼
-                        Respuesta (TTS) + traza completa (RF-05) + resumen (RF-10)
+
+Abre <http://localhost:8000/docs>. Comprueba que todo está en pie:
+
+```bash
+curl localhost:8000/health          # {"status":"ok","llm_provider":"ollama",…}
+curl localhost:8000/voice/status    # {"ready":true}
 ```
 
-## Claves de API necesarias
+**Por qué no hay Docker:** en macOS, Docker Desktop no reenvía los puertos UDP de
+WebRTC, así que la voz —que es lo que evalúa G4— no funciona con el backend en un
+contenedor. Quitarlo también elimina PostgreSQL de la ruta crítica: el estado vive
+en SQLite y los vectores en ChromaDB, ambos sin servidor.
 
-| Variable | Servicio | Para qué | ¿Necesaria ahora? |
-|---|---|---|---|
-| `VOYAGE_API_KEY` | [Voyage AI](https://www.voyageai.com/) | Embeddings del RAG (`voyage-3`) — construye la base que **simula Databricks** | **Sí** (para RAG/voz) |
-| `ANTHROPIC_API_KEY` | [Anthropic](https://console.anthropic.com) | LLM provisional (hasta el 7 ago) | Opcional (el modo `mock` corre sin ella) |
-| `DEEPGRAM_API_KEY` | [Deepgram](https://deepgram.com) | STT en español | Solo modo voz |
-| `ELEVENLABS_API_KEY` | [ElevenLabs](https://elevenlabs.io) | TTS `eleven_flash_v2_5`, voz es-CO | Solo modo voz |
-| `DATABASE_URL` | PostgreSQL + pgvector | Datos + vectores | Sí (compose la provee) |
-
-Config extra: `LLM_PROVIDER` (`mock`|`anthropic`), `EMBEDDING_DIM`. Ver
-[`.env.example`](.env.example). Copia `.env.example` → `.env` y rellena las claves.
+**Por qué el índice viene preconstruido:** indexar los 107 PDFs del corpus cuesta
+11 minutos de CPU. Descargarlo cuesta 5 segundos. `scripts/build_index.py` sigue en
+el repositorio y reproduce el mismo resultado, con el modelo de embeddings y los
+parámetros de troceado anotados en `manifest.json`.
 
 ---
 
-## Arranque con Docker (gate G2: ≤15 min)
+## Qué hace, y quién decide qué
 
-```bash
-cp .env.example .env          # y rellena VOYAGE_API_KEY (mínimo)
-docker compose up --build     # db (pgvector) + backend + frontend
-docker compose exec backend python seed.py   # carga pacientes + embeddings
+El principio que ordena todo el sistema: **el modelo interpreta, el código decide.**
+
+```
+A. determinista   léxico colombiano → intención → detección de inyección   (<5 ms)
+B. LLM            extracción del slot, solo si el léxico no lo resolvió    (~325 ms)
+C. determinista   fusión por severidad → motor de decisión                 (<1 ms)
+D. determinista   máquina de estados del guion → qué se pregunta ahora
+E. LLM            respuesta anclada al RAG, solo si preguntó algo clínico
 ```
 
-- Consola:  http://localhost:3000
-- API/docs: http://localhost:8000/docs
-- Salud:    http://localhost:8000/health
+Si el léxico detecta una bandera de emergencia, se saltan B, D y E: se emite el
+guion determinista y se alerta. **La ruta crítica es la más corta del sistema y no
+pasa por el modelo**, así que ni uno caído ni uno manipulado pueden suprimir un
+escalamiento. Hay un test que lo comprueba apuntando el adaptador a un puerto
+muerto.
 
-> El sistema corre **hoy** solo con `VOYAGE_API_KEY` (RAG) y el LLM en modo
-> `mock`. El modo de voz necesita además Deepgram + ElevenLabs.
-
-## Desarrollo local (sin Docker)
-
-```bash
-# Base de datos
-docker run -d --name pgvector -p 5432:5432 \
-  -e POSTGRES_USER=clinical -e POSTGRES_PASSWORD=clinical -e POSTGRES_DB=clinical \
-  pgvector/pgvector:pg16
-
-# Backend
-cd apps/backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cd ../.. && python seed.py                      # semilla (desde la raíz)
-cd apps/backend && uvicorn app.main:app --reload   # :8000
-
-# Frontend
-cd apps/frontend && npm install && npm run dev  # :3000
-```
-
-## Probar el bucle del turno (modo texto, sin audio)
-
-```bash
-# NORMAL
-curl -s localhost:8000/conversation/turn -H 'content-type: application/json' \
-  -d '{"text":"Hola, me siento bien, solo un poco cansada"}' | jq
-
-# ALTO (dolor no controlado)
-curl -s localhost:8000/conversation/turn -H 'content-type: application/json' \
-  -d '{"text":"Tengo dolor 9 y la pastilla no me hace nada"}' | jq
-
-# CRÍTICO (guion de seguridad determinista, se descarta el LLM)
-curl -s localhost:8000/conversation/turn -H 'content-type: application/json' \
-  -d '{"text":"Estoy sangrando mucho, no para"}' | jq
-```
-
-## Modo de voz real (Pipecat + Deepgram + ElevenLabs)
-
-La arquitectura del reto (ADR-003/007): navegador ↔ WebRTC → Deepgram STT (es) →
-**la misma lógica clínica** (`process_turn`: RAG + decisión + guion CRÍTICO) →
-ElevenLabs TTS (voz es-CO). El modo consola de texto se conserva en paralelo.
-
-Las deps de voz son pesadas, así que van **detrás de un flag** (`INSTALL_VOICE`)
-para no afectar el arranque del modo texto.
-
-**Claves en `.env`:**
-```
-DEEPGRAM_API_KEY=...        # ya lo tienes
-ELEVENLABS_API_KEY=...      # permisos: Text to Speech + Voices (read)
-ELEVENLABS_VOICE_ID=...     # voz NATIVA es-CO/latina de la Voice Library
-```
-
-### ⚠️ La voz NO funciona con el backend en Docker en Mac
-
-WebRTC usa **puertos UDP** aparte del HTTP para el audio; Docker Desktop en Mac no
-los reenvía, así que la llamada se queda "Estableciendo conexión…" y nunca conecta
-(el ICE no llega). **Para el modo de voz, corre el backend de forma NATIVA** (la
-base de datos y el frontend pueden seguir en Docker):
-
-```bash
-# 1) Solo la base de datos en Docker
-docker compose up -d db
-
-# 2) Backend NATIVO con deps de voz
-cd apps/backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt -r requirements-voice.txt
-cd ../.. && python seed.py                       # siembra (si no lo has hecho)
-cd apps/backend
-export $(grep -v '^#' ../../.env | xargs)        # carga las claves de .env
-export DATABASE_URL=postgresql+psycopg://clinical:clinical@localhost:5432/clinical
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-
-# 3) Frontend (Docker o local) apuntando a http://localhost:8000
-#    -> pestaña "Voz (real)" -> permitir micrófono.
-```
-
-> En Linux sí puedes usar Docker para la voz añadiendo `network_mode: host` al
-> servicio `backend`; en Mac esa opción no es fiable, por eso se recomienda nativo.
-
-**Modo texto en Docker** sigue igual (`INSTALL_VOICE=true docker compose up --build`
-también instala la voz, pero el audio no conectará en Mac por lo anterior).
-
-Diagnóstico rápido: `GET http://localhost:8000/voice/status` indica si faltan
-claves o si Pipecat no está instalado. Si el modo de voz no está listo, el modo
-texto sigue funcionando igual.
-
-## Tests
-
-```bash
-cd apps/backend && pytest
-```
-
-- `test_decision.py` — reglas del Motor de Decisión (sin BD, sin LLM, sin red).
-- `test_rag.py` — ida y vuelta ingesta→recuperación (se **salta** si faltan
-  `VOYAGE_API_KEY` o la BD).
+El guion de la conversación —dolor, fiebre, movilidad, herida, apetito, sueño— es
+una máquina de estados en `app/agent/script.py`, no una instrucción en el prompt.
+Sale del dataset oficial, donde el agente de referencia pregunta exactamente eso y
+en ese orden. Que viva en código tiene tres consecuencias: un modelo de 3B no puede
+perderse, la inyección de prompt no puede saltarse una pregunta ni cambiar una
+decisión, y las seis preguntas se pueden pre-sintetizar en audio.
 
 ---
 
-## Qué se ajusta el 7 de agosto (marcado con `⏳` / `TODO Aug 7`)
+## Métricas medidas
 
-| Ítem | Dónde |
+Generadas con `python scripts/report_metrics.py`, que las lee de las mismas filas
+de `turns` que se pueden inspeccionar en `GET /console/conversations/{id}`. **No se
+escriben a mano**, para que no puedan divergir de los logs.
+
+| Latencia por turno (modo texto) | ms |
+|---|---:|
+| P50 | 3 |
+| P95 | 3.400 |
+| media | 538 |
+
+El P50 de 3 ms no es un truco: es que **el 57 % de los turnos no llaman al modelo**.
+El léxico determinista resuelve lo formulaico —un dígito, "botando materia", "no
+puedo respirar"— en cero milisegundos. Medido sobre los 2.071 turnos de paciente
+del dataset oficial, la cobertura es del 61 %: 67 % en la capa limpia y 54 % en la
+ruidosa, que es justo donde el modelo se gana el sueldo.
+
+| Consumo | Valor |
+|---|---:|
+| Invocaciones al modelo por turno | 0,52 |
+| Turnos resueltos sin modelo | 57 % |
+| Tokens de entrada / salida por turno | 231 / 11 |
+| Tokens de entrada / salida por llamada | 1.327 / 62 |
+| Consultas al RAG por llamada | 0,50 |
+| Turnos por llamada | 5,8 |
+
+**Presupuesto de voz**, desde que el paciente deja de hablar (medido en
+`scripts/spike_voice.py`):
+
+| Etapa | ms |
+|---|---:|
+| VAD, confirmar fin de turno | 700 |
+| Groq `whisper-large-v3-turbo` | ~500 |
+| Léxico + intención + decisión | <5 |
+| Extracción con el LLM (0,53× de media) | ~170 |
+| Kokoro TTS (0 si la frase está cacheada) | 0–250 |
+| **Total típico** | **~1.400** |
+
+Los 700 ms del VAD son la mitad del presupuesto y son una decisión, no una
+limitación: bajarlo a 0,4 s recortaría un tercio a costa de cortar a quien hace
+pausas, y hablamos de pacientes de hasta 82 años recién operados.
+
+**Costo por llamada.** El LLM y el TTS corren en local, así que lo único que se
+paga de verdad es el reconocimiento de voz de Groq: **USD 0,00026 por llamada**.
+
+Extrapolado a precios de API de producción serían USD 0,021, y el reparto es
+revelador: USD 0,00008 el LLM y **USD 0,0207 el TTS**. Es decir, servir esta
+solución por API costaría 250 veces más en sintetizar la voz que en razonar. Eso es
+lo que hace que correr Kokoro en local sea una decisión económica y no solo
+técnica. El cálculo completo con sus referencias de precio está en
+[`docs/metricas.md`](docs/metricas.md), regenerable con `report_metrics.py`.
+
+---
+
+## El motor de decisión
+
+Los umbrales no salen de la intuición: se derivaron de las **160 trayectorias** del
+dataset contrastadas con su `label_ground_truth`.
+
+```
+rojo     ⟺ fiebre ≥ 38,0 ∨ secreción purulenta ∨ movilidad incapacitante ∨ dolor ≥ 8
+amarillo ⟺ dos o más de: dolor ≥ 5, fiebre ≥ 37,3, eritema, inapetencia, insomnio
+```
+
+```
+  real \ predicho   verde  amarillo   rojo
+  verde               115         8      0
+  amarillo              0        25      0
+  rojo                  0         0     12
+  exactitud 152/160 (95,0 %)
+```
+
+**Cero falsos negativos.** Los ocho errores son verdes escalados a amarillo, que es
+la asimetría que pide la rúbrica: no alertar cuando había que alertar es la falla
+catastrófica; un seguimiento de más cuesta una llamada. La derivación completa está
+en [`docs/calibracion-triage.md`](docs/calibracion-triage.md) y se verifica en
+menos de un segundo:
+
+```bash
+cd apps/backend && ../../.venv/bin/python -m pytest app/tests/test_triage_from_trajectories.py -q
+```
+
+Un slot sin responder **nunca** reduce el riesgo, y al cerrar la llamada, si quedó
+demasiado sin averiguar, se fuerza seguimiento con la regla
+`informacion_insuficiente`. Es un falso positivo comprado a propósito para cerrar
+una vía de falso negativo.
+
+---
+
+## Conocimiento vivo
+
+Desde la consola se sube un documento, el agente lo usa y lo cita; se borra y lo
+olvida. Automatizado en `test_conocimiento_vivo`, que además comprueba lo que hace
+frágil tener dos almacenes: **el borrado va primero a ChromaDB y después a SQLite**,
+y toda consulta filtra por los documentos vivos de SQLite, así que un vector
+huérfano no puede servirse aunque el proceso muera a mitad de camino.
+
+```bash
+curl -F "file=@protocolo.pdf" -F "procedure=Apendicectomía" localhost:8000/knowledge/documents
+curl -X DELETE localhost:8000/knowledge/documents/{id}
+```
+
+### Cuándo el agente dice "no sé"
+
+Que la similitud vectorial sea alta **no significa** que la evidencia responda. Es
+el hallazgo más contraintuitivo del proyecto: medido sobre 25 preguntas, "¿cuál es
+el horario de visitas?" puntúa 0.868 y "¿cuándo me quitan los puntos?" puntúa
+0.795. La ajena gana. No es un defecto del modelo: todo el corpus es texto médico
+postoperatorio y el coseno mide cercanía temática, no respuesta. Ningún umbral
+separa esas dos.
+
+La solución encadena cuatro filtros y solo uno es un modelo:
+
+| Filtro | Coste | Qué descarta |
+|---|---:|---|
+| Umbral de similitud | 0 ms | Lo obviamente lejano |
+| Nombres propios presentes | 0 ms | Protocolos y escalas inventados |
+| Juicio de pertinencia (LLM) | ~130 ms | Lo que es de otro tema |
+| Validación de cifras | 0 ms | Números que no están en la evidencia |
+
+Pasó de **0/10 preguntas inventadas rechazadas a 9/10**, conservando 12/15 de las
+legítimas. Los tres fallos restantes son abstenciones de más, que en clínica es el
+lado correcto donde equivocarse. El detalle está en
+[`docs/calibracion-rag.md`](docs/calibracion-rag.md).
+
+### Tres cosas que encontramos en el corpus
+
+- **Los 19 documentos de `breast_cancer/` son de cáncer de cuello uterino**, no de
+  mama, mientras el procedimiento asociado es Mastectomía. Citarlos como evidencia
+  de una mastectomía sería una afirmación falsa *con fuente*, que es peor que no
+  responder: quedan marcados fuera de alcance y el agente declara el límite.
+- Un PDF de `Appendicitis/` está escaneado sin capa de texto. Se registra con ese
+  estado y se ve en la consola, en vez de desaparecer en silencio.
+- Hay documentos casi duplicados; se deduplican por hash del texto normalizado.
+
+---
+
+## El modelo, y por qué ese
+
+De los cuatro permitidos por G3, dos ya no se pueden invocar (verificado el 7 de
+agosto de 2026):
+
+| Modelo permitido | Estado |
 |---|---|
-| Adaptador del **LLM obligatorio** (junto a Mock/Anthropic) | `app/llm/factory.py` |
-| Modelo de **embeddings** definitivo / `EMBEDDING_DIM` | `app/config.py`, `app/rag/embeddings.py` |
-| **Reglas y umbrales** calibrados al dataset | `app/decision/thresholds.yaml`, `app/decision/rules.py` |
-| Ingesta desde **Delta Share** (reemplaza los ejemplos) | `seed.py` (bloque `TODO Aug 7`) |
-| **Voz**: transporte WebRTC + voz es-CO de ElevenLabs | `app/voice/pipeline.py` |
+| Google Gemini 1.5 Flash | Retirado; la familia 1.5 devuelve 404 |
+| Llama 3.1 70B vía Groq | Decomisionado el 24-ene-2025 |
+| **Llama 3.2 (1B/3B) local** | ✅ Vivo en Ollama |
+| Phi-3.5 Mini (3.8B) local | ✅ Vivo en Ollama |
+
+Se eligió **`llama3.2:3b`** por su español, bastante mejor que el de Phi-3.5 para
+hablar con un paciente colombiano. Se midió `llama3.2:1b` y se descartó: es ~100 ms
+más rápido pero falla la extracción y llega a truncar el JSON.
+
+Whisper de Groq se usa para el reconocimiento de voz. No compromete G3, que
+restringe el modelo *que razona*, no el que transcribe.
+
+Todas las mediciones que sostienen estas decisiones —y las que las cambiaron sobre
+la marcha— están en [`docs/spikes-7-agosto.md`](docs/spikes-7-agosto.md).
+
+---
+
+## Pruebas
+
+```bash
+cd apps/backend && ../../.venv/bin/python -m pytest app/tests -q
+```
+
+140 tests. Los del motor de decisión y los del léxico corren sin modelo, sin red y
+sin base de datos, en menos de un segundo.
+
+### Evaluación sobre los 160 casos del dataset
+
+```bash
+.venv/bin/python scripts/run_dataset_eval.py --capa capa1 --out reports
+```
+
+Reproduce las conversaciones del dataset a través del agente completo y escribe
+[`reports/dataset-eval.md`](reports/dataset-eval.md). Sale con **código 2 si hay un
+falso negativo en rojo**, que es la falla que la rúbrica considera catastrófica.
+
+Es distinto del test del motor de decisión, y la diferencia es el punto: aquel
+alimenta las reglas con el cuadro clínico ya estructurado y mide solo la
+calibración de los umbrales (95%); este mete la conversación cruda y mide la cadena
+entera. **Cuando un caso falla, comparar los dos dice si la culpa fue del extractor
+o de las reglas**, y por eso el informe incluye la exactitud por slot.
+
+Resultado sobre la capa limpia, con los 160 casos:
+
+```
+  real \ predicho   verde  amarillo   rojo
+  verde                79       34       10
+  amarillo              1       13       11
+  rojo                  0        1       11
+
+  exactitud 103/160 (64.4%)   ·   1 falso negativo en rojo
+```
+
+**Ese 64% frente al 95% de las reglas es el dato honesto de este proyecto**, y la
+distancia entre ambos se reparte en dos cosas.
+
+La primera es la extracción: entender un cuadro clínico hablando con alguien que no
+tiene vocabulario médico se acierta entre el 66% y el 75% según el slot. La segunda
+—y es la mayoría de los errores— es **sobre-escalamiento deliberado**: 44 casos
+verdes se clasificaron como amarillo o rojo, casi todos por la política de
+incertidumbre. Cuando el paciente no suelta la información, el sistema escala en vez
+de asumir que está bien. Se ve con claridad por estilo de paciente: con el
+colaborativo acierta el 81% y con el minimizador el 92%, pero con el evasivo cae al
+17%, y casi todo ese hundimiento son verdes escalados de más.
+
+Es la asimetría que pide la rúbrica llevada a sus últimas consecuencias: 44
+seguimientos innecesarios a cambio de un solo falso negativo. Si el criterio fuera
+la exactitud, habría que aflojar la política; como el criterio es no dejar pasar una
+emergencia, se queda.
+
+El contraste entre las dos evaluaciones ya pagó tres correcciones que ningún test
+escrito a mano habría sugerido: la cobertura del léxico en pretérito perfecto
+(*"he comido bien"*, no solo *"como bien"*), la extracción de slots que el paciente
+menciona sin que se los pregunten, y la regla de fiebre referida sin termómetro.
+Entre las tres subieron la exactitud del 58% al 64% y bajaron los falsos negativos
+en rojo de 2 a 1.
+
+---
 
 ## Estructura
 
 ```
-apps/
-  backend/   FastAPI: llm/ rag/ decision/ summary/ voice/ routers/ tests/
-  frontend/  Next.js: consola (llamada texto, conocimiento, alertas)
-prompts/     plantillas de prompts versionadas
-data/samples/ pacientes + protocolos de ejemplo (stand-in de Delta Share)
-docs/        PRD, arquitectura, decision log, tech stack
-seed.py      carga pacientes + construye la base de embeddings (Voyage)
-docker-compose.yml
+apps/backend/app/
+  agent/        orquestador, guion de 6 slots, banco de frases deterministas
+  nlu/          léxico colombiano, clasificación de intención, fusión por severidad
+  decision/     reglas puras + umbrales calibrados contra el ground truth
+  rag/          ChromaDB, embeddings, ingesta en caliente, recuperación con citas
+  llm/          adaptador de Ollama y esquemas de extracción restringida
+  voice/        pipeline Pipecat (Groq STT → orquestador → Kokoro TTS)
+scripts/        construcción del índice, carga del dataset, métricas, spikes
+docs/           calibración del triaje, mediciones, decisiones de arquitectura
 ```
 
-Licencia: [MIT](LICENSE).
+## Licencia
+
+MIT (ver [`LICENSE`](LICENSE)). Los PDFs del corpus son obra de sus autores y no se
+redistribuyen; el índice publicado contiene solo vectores y los fragmentos
+necesarios para citar.

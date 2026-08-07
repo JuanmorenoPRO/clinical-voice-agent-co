@@ -58,7 +58,8 @@ _ACTO_MEDICO = re.compile(
 _ADMIN = re.compile(
     r"\bcitas?\b|\bautoriza\w*|\beps\b|\bincapacidad\b|\bfactura\b|\bcopago\b"
     r"|\bcarne\b|\borden\s+medica\b|\bdonde\s+queda\b"
-    r"|\ba\s+que\s+hora\s+(abre|atienden)|\btelefono\s+del?\s+hospital\b",
+    r"|\ba\s+que\s+hora\s+(abre|atienden)|\btelefono\s+del?\s+hospital\b"
+    r"|\bhorario\b|\bvisitas\b|\bparqueadero\b|\bafiliaci[oó]n\b",
     re.I,
 )
 

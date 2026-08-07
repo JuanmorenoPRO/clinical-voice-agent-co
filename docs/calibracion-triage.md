@@ -128,6 +128,31 @@ y escalan por una vía distinta: `emergencia_123` en vez de `enfermeria_priorita
 dos guiones con tono distinto, porque alarmar de más a alguien que lo que necesita es una
 consulta hoy también es un daño.
 
+## Dos reglas que salieron de correr el dataset completo
+
+Los umbrales de arriba se derivaron del cuadro clínico **ya estructurado**. Al
+pasar las conversaciones reales por el agente entero
+(`scripts/run_dataset_eval.py`) aparecieron dos huecos que ese análisis no podía
+ver, porque solo existen cuando hay que averiguar los datos hablando.
+
+**Fiebre referida sin termómetro.** Dos casos rojos se escapaban porque el paciente
+decía tener fiebre pero no se la había medido, y la regla de ≥38 °C exige la cifra.
+El README del reto avisa de que el paciente "a veces ni un termómetro" tiene, así
+que exigirla es exigir algo que no va a dar. La regla nueva escala cuando hay
+fiebre referida **sin medir** acompañada de dos o más señales amarillas: fiebre +
+inapetencia + insomnio + herida enrojecida es el cuadro de una infección
+postoperatoria, se haya medido o no.
+
+**No se pudo evaluar.** La política de incertidumbre tenía un solo grado y mandaba
+a seguimiento cualquier llamada incompleta. Pero no es lo mismo una conversación a
+medias que una en la que se averiguó un dato de seis: con esa base no se puede
+descartar una emergencia. Ahora hay dos grados, y por debajo de un tercio del guion
+se escala a enfermería en vez de a seguimiento.
+
+Ninguna de las dos altera la matriz de los 160 casos estructurados —ahí la
+temperatura siempre viene con cifra y el cuadro siempre está completo—, que es
+precisamente por qué hacían falta las dos evaluaciones.
+
 ## La política de incertidumbre
 
 Un slot en `None` nunca reduce el riesgo: los predicados son igualdad explícita o

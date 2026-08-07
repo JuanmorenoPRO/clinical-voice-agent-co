@@ -102,6 +102,25 @@ def _multiple_yellow_signals(s: Symptoms, t: dict) -> bool:
     return len(yellow_signals(s, t)) >= t["amarillo"]["score_min"]
 
 
+def _fever_reported_unmeasured(s: Symptoms, t: dict) -> bool:
+    """Fiebre referida sin termómetro, junto a otras señales.
+
+    Se descubrió con `scripts/run_dataset_eval.py`: dos de los casos rojos se
+    escapaban porque el paciente decía tener fiebre pero no se la había medido, y
+    la regla de ≥38 °C exige la cifra. El reto avisa de que muchos pacientes "ni
+    un termómetro" tienen, así que exigirla es exigir algo que no van a dar.
+
+    Fiebre referida + inapetencia + insomnio + herida enrojecida es el cuadro de
+    una infección postoperatoria. Escalarlo sin la cifra es lo correcto: la
+    alternativa es un falso negativo, que la rúbrica considera catastrófico.
+    """
+    return (
+        s.fever is True
+        and s.temperature_c is None
+        and len(yellow_signals(s, t)) >= t["rojo"]["signos_con_fiebre_referida"]
+    )
+
+
 def _pain_uncontrolled(s: Symptoms, t: dict) -> bool:
     return (
         s.pain_level is not None
@@ -134,6 +153,8 @@ RULES: list[Rule] = [
          "CRÍTICO", _incapacitating_mobility, "enfermeria_prioritaria"),
     Rule("dolor_severo", "Dolor ≥ 8 en escala 0–10",
          "CRÍTICO", _severe_pain, "enfermeria_prioritaria"),
+    Rule("fiebre_referida_con_signos", "Fiebre referida sin medir, con otras señales",
+         "CRÍTICO", _fever_reported_unmeasured, "enfermeria_prioritaria"),
 
     # --- AMARILLO: vigilancia y seguimiento -----------------------------------
     Rule("vigilancia_multiples_signos", "Dos o más señales de alarma leves simultáneas",

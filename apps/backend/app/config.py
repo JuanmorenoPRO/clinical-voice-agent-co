@@ -6,12 +6,26 @@ del RAG es cambiar una variable, no reescribir código (ADR-002).
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Raíz del repositorio: .../apps/backend/app/config.py -> subir tres niveles.
+# Todas las rutas de datos se anclan aquí y no al directorio de trabajo. Sin esto,
+# arrancar el servidor desde apps/backend/ crea una base de datos vacía y un
+# índice inexistente **en silencio**: la app responde 200 y devuelve cero
+# documentos, que es la peor forma de fallar en una demo cronometrada.
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _abs(ruta: str) -> str:
+    """Convierte una ruta relativa en absoluta respecto a la raíz del proyecto."""
+    p = Path(ruta)
+    return str(p if p.is_absolute() else (PROJECT_ROOT / p))
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=PROJECT_ROOT / ".env", extra="ignore")
 
     # --- Estado de la conversación (ADR-014: SQLite, sin servidor) ---
     # Se abandonó PostgreSQL+pgvector: los vectores viven en Chroma y quitar el
@@ -28,6 +42,9 @@ class Settings(BaseSettings):
     # Si el modelo tarda más que esto, el turno se completa con el léxico
     # determinista y se marca degradado. Medido: la extracción va en ~325 ms.
     llm_timeout_s: float = 2.5
+    # La respuesta anclada al RAG procesa evidencia y genera dos frases: es la
+    # ruta lenta del sistema y necesita más margen que la extracción de un slot.
+    llm_reply_timeout_s: float = 12.0
     # Mantiene el modelo en RAM entre turnos. Sin esto, el primer turno tras una
     # pausa cuesta ~24 s de recarga.
     llm_keep_alive: str = "60m"
@@ -72,4 +89,12 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    s = Settings()
+    # Se normalizan a absoluto después de leer el entorno, para que funcione igual
+    # lanzado desde la raíz, desde apps/backend/ o desde un servicio del sistema.
+    s.chroma_dir = _abs(s.chroma_dir)
+    s.prompts_dir = _abs(s.prompts_dir)
+    s.seed_dir = _abs(s.seed_dir)
+    if s.database_url.startswith("sqlite:///./"):
+        s.database_url = "sqlite:///" + _abs(s.database_url.removeprefix("sqlite:///./"))
+    return s

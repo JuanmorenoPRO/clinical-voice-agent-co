@@ -68,9 +68,17 @@ def evaluate(symptoms: Symptoms, *, final: bool = False) -> DecisionResult:
 
     # Política de incertidumbre: sólo al cerrar, y sólo hacia arriba. Un cuadro que
     # ya escaló no se toca; uno que se quedó a medias no puede irse como verde.
-    if final and level == "NORMAL" and _uncertain(symptoms, comp, thresholds):
-        triggered.append("informacion_insuficiente")
-        level, action = "ALTO", "seguimiento"
+    # Dos grados, porque no es lo mismo una llamada incompleta que una en la que no
+    # se averiguó nada. Con menos de dos slots de seis no se puede descartar una
+    # emergencia, y dejar eso en "seguimiento" fue un falso negativo real medido en
+    # reports/dataset-eval.md.
+    if final and _ORDER[level] < _ORDER["CRÍTICO"]:
+        if comp < thresholds["incertidumbre"]["min_para_evaluar"]:
+            triggered.append("no_se_pudo_evaluar")
+            level, action = "CRÍTICO", "enfermeria_prioritaria"
+        elif level == "NORMAL" and _uncertain(symptoms, comp, thresholds):
+            triggered.append("informacion_insuficiente")
+            level, action = "ALTO", "seguimiento"
 
     script = None
     if level == "CRÍTICO":

@@ -115,24 +115,65 @@ Ninguna de estas dependencias arrastra PyTorch: `pipecat-ai[kokoro]` depende de
 
 ---
 
-## 5. Presupuesto de latencia resultante
+## 5. El ciclo de voz completo, medido
+
+`scripts/spike_voice.py` cierra el círculo: Kokoro sintetiza una frase en español, Groq
+Whisper la transcribe, y se compara. Valida las dos mitades de la compuerta G4 de una vez.
+
+**La transcripción es literal, incluidos los colombianismos.** "Me duele un berraco,
+doctora, no aguanto" y "La herida está botando materia amarilla desde ayer" volvieron
+palabra por palabra. Eso importa porque el léxico de `app/nlu/lexicon.py` trabaja sobre
+esas frases exactas: si Whisper las normalizara, la capa determinista dejaría de acertar.
+
+### Groq Whisper: el coste es la red, no el audio
+
+| Duración del audio | STT (mediana de 4) |
+|---|---:|
+| 0,7 s | 412 ms |
+| 2,3 s | 572 ms |
+| 6,7 s | 539 ms |
+
+Multiplicar por diez la duración del audio no cambia el tiempo: son ~400 ms fijos de ida y
+vuelta HTTP más unos 20 ms por segundo de audio. No hay nada que optimizar del lado del
+audio; si hubiera que bajar de ahí, la única palanca sería un STT local.
+
+### Kokoro: barato en frases cortas, y gratis si están cacheadas
+
+| Frase | TTS | Audio generado |
+|---|---:|---:|
+| "Perfecto." | 217 ms | 0,8 s |
+| "¿Cómo ha estado el dolor, en una escala del cero al diez?" | 689 ms | 2,9 s |
+
+Factor de tiempo real 0,24: sintetiza cuatro veces más rápido de lo que dura el audio. Y
+como las seis preguntas canónicas y los guiones de seguridad son texto fijo, se
+pre-sintetizan una vez en el arranque y salen a **0 ms** durante la llamada. Solo paga TTS
+lo que se genera de verdad, que son las respuestas ancladas al RAG.
+
+### Presupuesto resultante
 
 Desde que el paciente deja de hablar hasta que empieza a sonar el agente:
 
-| Etapa | Estimado | Nota |
+| Etapa | Medido | Nota |
 |---|---:|---|
-| Detección de fin de turno (VAD, `stop_secs=0.7`) | 700 ms | Es la palanca dominante; 0,7 s protege al paciente mayor de ser cortado |
-| Groq `whisper-large-v3-turbo` | ~300 ms | Medido pendiente de la integración |
-| Léxico colombiano + detección de inyección | <5 ms | Determinista |
-| Extracción con `llama3.2:3b` | **~325 ms** | Medido |
+| Detección de fin de turno (VAD, `stop_secs=0.7`) | 700 ms | La palanca dominante. 0,7 s protege al paciente mayor de ser cortado a media frase |
+| Groq `whisper-large-v3-turbo` | ~500 ms | Casi todo red |
+| Léxico + intención + inyección | <5 ms | Determinista |
+| Extracción con `llama3.2:3b` | ~127 ms de media | 325 ms, pero el 61% de los turnos no lo usan |
 | Motor de decisión | <1 ms | Funciones puras |
-| Kokoro TTS | ~0 ms si la frase está cacheada | Las 6 preguntas canónicas y los guiones críticos se pre-sintetizan en el warmup |
-| **Total, ruta típica** | **~1,3 s** | |
-| **Ruta rápida** (el léxico resuelve el slot) | **~1,0 s** | 0 llamadas al LLM |
-| **Ruta crítica** (bandera roja por léxico) | **~1,0 s** | 0 llamadas al LLM, audio pre-sintetizado |
+| Kokoro TTS | 0 ms | Pregunta canónica pre-sintetizada |
+| **Total, ruta típica** | **~1,35 s** | |
+| **Ruta rápida** (el léxico resuelve el slot) | **~1,2 s** | 0 llamadas al LLM |
+| **Ruta crítica** (bandera roja por léxico) | **~1,2 s** | 0 llamadas al LLM, guion pre-sintetizado |
+| **Peor caso** (pregunta clínica: RAG + respuesta generada) | **~2,8 s** | ~31% de los turnos |
 
-Que la ruta crítica sea la más rápida del sistema no es casualidad: cuando el léxico detecta
-una emergencia se salta el LLM por completo y se emite el guion determinista.
+Que la ruta crítica sea de las más rápidas del sistema no es casualidad: cuando el léxico
+detecta una emergencia se salta el LLM por completo y se emite el guion determinista.
+
+El VAD son 700 de esos 1.350 ms. Es una decisión de diseño, no una limitación técnica:
+bajarlo a 0,4 s recortaría un tercio del total a costa de cortar al paciente que hace
+pausas, que en una población postoperatoria de hasta 82 años es exactamente lo que no se
+debe hacer. Se reporta explícito para que nadie lea el número como si fuera latencia de
+cómputo.
 
 ---
 
@@ -169,6 +210,32 @@ Distribución de intenciones sobre esos mismos turnos:
 
 De ahí sale el consumo esperado: **~0.39 llamadas de extracción + ~0.31 de respuesta
 anclada = ~0.70 invocaciones al modelo por turno**, y ~0.31 consultas al RAG por turno.
+
+### Lo que costó 30 puntos de cobertura: el tiempo verbal
+
+La primera versión del léxico cubría presente —"como bien", "duermo bien"— y se
+perdía la mitad de las respuestas, porque a *"¿cómo ha estado su apetito?"* la
+gente contesta en pretérito perfecto: *"he comido bien"*, *"he dormido normal"*, o
+en gerundio, *"comiendo bien, normal, como siempre"*.
+
+Corregirlo fue añadir `(he\s+)?com(o|ido|iendo)` en lugar de `como`. El efecto,
+medido sobre los 160 turnos reales de cada slot:
+
+| Slot | Antes | Después |
+|---|---:|---:|
+| apetito | 50% | **82%** |
+| sueño | 51% | **84%** |
+| fiebre | 58% | **84%** |
+
+La fiebre es un caso aparte y vale la pena mirarlo: de los 31 turnos que no se
+resolvían, la mayoría eran *"no me he tomado la temperatura"* o *"no le he puesto
+atención a eso"*. No es un fallo del léxico, es que el paciente **no lo sabe** —
+algo que el propio README del reto anticipa cuando dice que a veces no tiene ni un
+termómetro. La respuesta correcta ahí no es adivinar, es reformular en cerrada
+("¿lo ha sentido como fiebre, sí o no?"), que es lo que hace el guion. Lo que sí se
+recuperó fue la sensación térmica sin medir —"siento como un calorcito"—, porque es
+una señal aunque sea blanda, y el criterio de todo el sistema es que la ausencia de
+dato nunca baje el riesgo.
 
 ### Cuatro bugs que solo aparecieron midiendo contra datos reales
 

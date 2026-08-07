@@ -79,11 +79,21 @@ _TEMP = re.compile(r"\b(3[5-9]|4[0-3])\s*(?:[.,]\s*(\d))?\s*(?:grados|°|c\b)?")
 # "37 y algo", "38 y medio"
 _TEMP_FRAC = re.compile(r"\b(3[5-9]|4[0-2])\s+y\s+(medio|algo|pico|cachito)")
 
+# Este es el slot con más respuestas evasivas del dataset, y tiene explicación: el
+# propio README del reto avisa de que el paciente "a veces ni un termómetro" tiene.
+# "No me he tomado la temperatura" es una respuesta legítima, no un fallo, y por eso
+# el guion la reformula en cerrada ("¿lo ha sentido como fiebre, sí o no?").
+# La sensación térmica sin medir SÍ se recoge: es una señal, aunque sea blanda, y
+# el criterio de todo el sistema es que la ausencia de dato nunca baje el riesgo.
 _FIEBRE_SI = re.compile(
     r"\bfiebre|calentura|destemplad\w+|escalofrio|con\s+frio\s+y\s+calor"
-    r"|ardiendo|hirviendo|temperatura\s+alta")
-_FIEBRE_NO = re.compile(r"no\s+(he\s+tenido|tengo|ha\s+tenido)\s+(fiebre|calentura|temperatura)"
-                        r"|sin\s+fiebre|nada\s+de\s+fiebre")
+    r"|ardiendo|hirviendo|temperatura\s+alta"
+    r"|siento\s+.{0,12}calor(cito)?|me\s+he\s+sentido\s+.{0,12}(tibi|calient)"
+    r"|(ando|estoy)\s+.{0,10}(tibi|calient)")
+_FIEBRE_NO = re.compile(
+    r"no\s+(he\s+tenido|tengo|ha\s+tenido)\s+(fiebre|calentura|temperatura)"
+    r"|sin\s+fiebre|nada\s+de\s+fiebre|de\s+eso\s+(nada|nada\s+que\s+ver)"
+    r"|fiebre\s+no\s+(he\s+tenido|ha\s+habido)|ninguna\s+fiebre")
 
 # --- herida -------------------------------------------------------------------
 _HERIDA: list[tuple[str, re.Pattern[str]]] = [
@@ -114,30 +124,48 @@ _MOVILIDAD: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 # --- apetito ------------------------------------------------------------------
+# Los patrones se ampliaron midiendo contra los 160 turnos reales de cada slot:
+# la primera versión solo cubría presente ("como bien") y se perdía la mitad,
+# porque la gente responde en pretérito perfecto ("he comido bien") o en gerundio
+# ("comiendo bien"). Ese detalle gramatical valía 30 puntos de cobertura.
 _APETITO: list[tuple[str, re.Pattern[str]]] = [
     ("muy_disminuido", re.compile(
-        r"no\s+me\s+provoca\s+nada|no\s+(he\s+)?com(o|ido)\s+(nada|casi\s+nada)"
-        r"|no\s+me\s+pasa\s+(la\s+)?comida|sin\s+ganas\s+de\s+comer|se\s+me\s+cerro\s+el\s+estomago"
-        r"|no\s+tengo\s+nada\s+de\s+(hambre|apetito)|todo\s+me\s+sabe\s+mal")),
+        r"no\s+me\s+provoca\s+(nada|casi\s+nada)"
+        r"|no\s+(he\s+)?com(o|ido|iendo)\s+(casi\s+)?nada"
+        r"|casi\s+no\s+(he\s+)?com(o|ido)"
+        r"|no\s+me\s+pasa\s+(la\s+)?comida|sin\s+ganas\s+de\s+comer"
+        r"|se\s+me\s+cerro\s+el\s+estomago|no\s+tengo\s+(nada\s+de\s+)?(hambre|apetito)"
+        r"|todo\s+me\s+sabe\s+mal|perdi\s+(el\s+)?apetito")),
     ("levemente_disminuido", re.compile(
-        r"como\s+(menos|poquito)|(un\s+)?poco\s+desganad\w+|no\s+tanto\s+como\s+antes"
-        r"|se\s+me\s+bajo\s+un\s+poco\s+el\s+(hambre|apetito)|a\s+ratos\s+me\s+provoca")),
+        r"com(o|ido|iendo)\s+(menos|poquito|poco)|(un\s+)?poco\s+desganad\w+"
+        r"|no\s+tanto\s+como\s+antes|se\s+me\s+bajo\s+(un\s+poco\s+)?el\s+(hambre|apetito)"
+        r"|a\s+ratos\s+me\s+provoca|apetito\s+.{0,14}(bajo|bajito|flojo|regular)"
+        r"|no\s+me\s+provoca\s+much|como\s+por\s+obligacion|con\s+desgano")),
     ("normal", re.compile(
-        r"como\s+(bien|normal|de\s+todo)|buen\s+apetito|con\s+(mucha\s+)?hambre"
-        r"|el\s+apetito\s+(bien|normal)")),
+        r"(he\s+)?com(o|ido|iendo)\s+(bien|normal|de\s+todo|como\s+siempre)"
+        r"|buen\s+apetito|con\s+(mucha\s+)?hambre"
+        r"|(el\s+)?apetito\s+.{0,18}(bien|normal|igual|de\s+siempre)"
+        r"|sin\s+problema\s+para\s+comer|no\s+me\s+ha\s+faltado\s+el\s+apetito"
+        r"|normal\s+para\s+comer")),
 ]
 
 # --- sueño --------------------------------------------------------------------
 _SUENO: list[tuple[str, re.Pattern[str]]] = [
     ("muy_alterado", re.compile(
-        r"no\s+(he\s+)?p(u|o)(dido|de)\s+(pegar\s+el\s+ojo|dormir)|no\s+duermo\s+nada"
-        r"|paso\s+la\s+noche\s+en\s+vela|casi\s+no\s+duermo|toda\s+la\s+noche\s+despiert\w+"
-        r"|no\s+he\s+dormido\s+(nada|casi)")),
+        r"no\s+(he\s+)?p(u|o)(dido|de)\s+(pegar\s+el\s+ojo|dormir)"
+        r"|no\s+(he\s+)?d(uermo|ormido)\s+(casi\s+)?nada|casi\s+no\s+(he\s+)?d(uermo|ormido)"
+        r"|paso\s+la\s+noche\s+en\s+vela|toda\s+la\s+noche\s+despiert\w+"
+        r"|dando\s+vueltas\s+toda\s+la\s+noche|no\s+concilio\s+el\s+sueno"
+        r"|(he\s+)?dormido\s+(muy\s+)?mal|pesimo\s+.{0,10}dorm")),
     ("levemente_alterado", re.compile(
-        r"me\s+despierto\s+(varias\s+veces|a\s+ratos)|duermo\s+a\s+ratos|a\s+pedazos"
-        r"|me\s+cuesta\s+(un\s+poco\s+)?(coger|conciliar)\s+el\s+sueno|interrumpid\w+")),
+        r"me\s+despierto\s+(varias\s+veces|a\s+ratos|por)|d(uermo|ormido)\s+a\s+ratos"
+        r"|a\s+pedazos|me\s+cuesta\s+(un\s+poco\s+)?(coger|conciliar|agarrar)"
+        r"|interrumpid\w+|no\s+(he\s+)?dormido\s+(muy\s+)?bien\s+que\s+digamos"
+        r"|me\s+desvelo|con\s+(algo\s+de\s+)?incomodidad\s+al\s+acostar")),
     ("normal", re.compile(
-        r"duermo\s+(bien|normal|de\s+corrido)|descanso\s+bien|sin\s+problema\s+para\s+dormir")),
+        r"(he\s+)?d(uermo|ormido)\s+(bien|normal|de\s+corrido|tranquil\w+)"
+        r"|descanso\s+bien|sin\s+problema\s+para\s+dormir"
+        r"|(el\s+)?sueno\s+.{0,18}(bien|normal|igual)|he\s+descansado")),
 ]
 
 _CATEGORICOS: dict[str, tuple[str, list[tuple[str, re.Pattern[str]]]]] = {
@@ -207,6 +235,8 @@ def extract(text: str, slot: str | None = None) -> Symptoms:
             sym.pain_level = nivel
             sym.sources["pain_level"] = "lexicon"
 
+    # El slot que se preguntó se resuelve primero, y solo ahí vale la afirmación
+    # genérica de normalidad: "todo bien" significa lo que se acaba de preguntar.
     if slot in _CATEGORICOS:
         campo, patrones = _CATEGORICOS[slot]
         for valor, patron in patrones:
@@ -218,6 +248,21 @@ def extract(text: str, slot: str | None = None) -> Symptoms:
             if _NORMAL_GENERICO.search(t):
                 setattr(sym, campo, "normal")
                 sym.sources[campo] = "lexicon"
+
+    # Y después se buscan los DEMÁS slots con sus patrones específicos. El paciente
+    # no contesta por turnos: suelta "no he pegado el ojo" mientras le preguntan por
+    # la comida, y perder eso es perder una señal de alarma. Medido: sin esto, el
+    # sueño se extraía en el 36% de las conversaciones aunque el léxico acierta el
+    # 84% cuando se le da el turno correcto — el agente perdía el paso al
+    # reformular una pregunta y ya no lo recuperaba.
+    for otro, (campo, patrones) in _CATEGORICOS.items():
+        if otro == slot or getattr(sym, campo) is not None:
+            continue
+        for valor, patron in patrones:
+            if patron.search(t):
+                setattr(sym, campo, valor)
+                sym.sources[campo] = "lexicon"
+                break
 
     return sym
 

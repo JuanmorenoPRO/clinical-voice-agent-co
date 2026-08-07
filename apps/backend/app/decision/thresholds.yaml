@@ -12,6 +12,10 @@ rojo:
   # Sobre los 160 casos: 12/12 de recall, 0 falsos positivos. Separación perfecta.
   temperature_c: 38.0        # >=
   pain_nrs: 8                # >=
+  # Fiebre que el paciente refiere pero no midió, acompañada de al menos estas
+  # señales amarillas. Muchos pacientes no tienen termómetro: exigir la cifra
+  # dejaba escapar casos rojos reales (ver reports/dataset-eval.md).
+  signos_con_fiebre_referida: 2
   # herida = secrecion_purulenta  y  movilidad = incapacitante_nueva son categóricos
 
 amarillo:
@@ -33,3 +37,6 @@ incertidumbre:
   # amarilla, se fuerza ALTO. Compramos un falso positivo para cerrar una vía de
   # falso negativo, que es la asimetría que premia la rúbrica.
   min_completeness: 0.5
+  # Por debajo de esto no se evaluó al paciente en absoluto y no se puede
+  # descartar una emergencia: se escala a enfermería en vez de a seguimiento.
+  min_para_evaluar: 0.34
