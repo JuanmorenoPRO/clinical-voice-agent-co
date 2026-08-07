@@ -16,11 +16,14 @@ ningún `STTService`/`TTSService` a medida. Detalles que no son obvios:
     silencio sin avisar: el resultado es una llamada que se conecta y hasta
     saluda, pero jamás detecta que el paciente terminó de hablar. Es un
     `FrameProcessor` propio (`VADProcessor`) que va explícito en la cadena.
-  - **TTS por defecto: Piper, no Kokoro.** Kokoro es un modelo centrado en
-    inglés que cubre español por fonemización de respaldo (espeak-ng): suena a
-    acento anglosajón hablando español. Piper entrena un modelo por idioma;
-    `es_MX-claude-high` además resultó 5× más rápido en caliente. Ver
-    `TTS_PROVIDER` en `config.py` y la medición en `docs/spikes-7-agosto.md`.
+  - **TTS por defecto: Piper, no Kokoro.** Piper entrena un modelo por idioma;
+    `es_MX-claude-high` además resultó 5× más rápido en caliente que Kokoro. Por
+    defecto se prefiere la voz nativa de Piper. Kokoro se mantiene disponible con
+    `TTS_PROVIDER=kokoro`; para que su español no quede en fonemización por
+    defecto en inglés (acento anglosajón), se le pasa `language=Language.ES`,
+    que es el mismo G2P español (misaki/espeak-ng) que usa el proyecto
+    `leonelhs/kokoro-tts-spanish`. Ver `TTS_PROVIDER` en `config.py` y la
+    medición en `docs/spikes-7-agosto.md`.
   - Nada de esto arrastra PyTorch. `pipecat-ai[kokoro]` depende de `kokoro-onnx`
     y `piper-tts` solo de `onnxruntime`; Silero corre sobre el mismo runtime.
 
@@ -28,6 +31,7 @@ ningún `STTService`/`TTSService` a medida. Detalles que no son obvios:
 perezosa (desde el router de voz), para que la app arranque en modo texto sin las
 dependencias de voz instaladas.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -148,11 +152,18 @@ def _build_tts(s):
     módulo). `kokoro` se mantiene disponible: importa Pipecat perezosamente
     porque este módulo entero ya se importa perezosamente desde el router, así
     que el import extra no le cuesta nada a quien nunca activa la voz.
+
+    Para `kokoro` hay que forzar el G2P en español (`Language.ES`): el default
+    de `KokoroTTSService` es `en`, y sin esto el texto español se fonemiza en
+    inglés y suena con acento anglosajón. `Language.ES` usa el mismo respaldo
+    espeak-ng de misaki que el proyecto `leonelhs/kokoro-tts-spanish`.
     """
     if s.tts_provider == "kokoro":
-        from pipecat.services.kokoro.tts import KokoroTTSService
+        from pipecat.services.kokoro.tts import KokoroTTSService, KokoroTTSSettings
 
-        return KokoroTTSService(voice_id=s.tts_voice)
+        return KokoroTTSService(
+            settings=KokoroTTSSettings(voice=s.tts_voice, language=Language.ES),
+        )
 
     from piper.config import SynthesisConfig
     from pipecat.services.piper.tts import PiperTTSService
@@ -192,34 +203,40 @@ async def run_bot(webrtc_connection, patient_id: str | None = None) -> None:
     # cuándo el paciente deja de hablar: el audio entra, pero `GroqSTTService`
     # (que transcribe por segmentos) jamás recibe la señal de "ya terminó" y no
     # transcribe nada, aunque la llamada parezca conectada y funcionando.
-    vad = VADProcessor(vad_analyzer=SileroVADAnalyzer(params=VADParams(
-        # 0.7 s de silencio antes de dar el turno por terminado. Es la palanca
-        # dominante de la latencia (la mitad del presupuesto) y está alta a
-        # propósito: cortar a un paciente de 80 años a media frase es peor que
-        # responder medio segundo más tarde.
-        stop_secs=s.vad_stop_secs,
-        start_secs=0.2,
-        confidence=0.7,
-        min_volume=0.6,
-    )))
+    vad = VADProcessor(
+        vad_analyzer=SileroVADAnalyzer(
+            params=VADParams(
+                # 0.7 s de silencio antes de dar el turno por terminado. Es la palanca
+                # dominante de la latencia (la mitad del presupuesto) y está alta a
+                # propósito: cortar a un paciente de 80 años a media frase es peor que
+                # responder medio segundo más tarde.
+                stop_secs=s.vad_stop_secs,
+                start_secs=0.2,
+                confidence=0.7,
+                min_volume=0.6,
+            )
+        )
+    )
 
     stt = GroqSTTService(
         api_key=s.groq_api_key,
-        model=s.stt_model,          # whisper-large-v3-turbo
+        model=s.stt_model,  # whisper-large-v3-turbo
         language=Language.ES,
         prompt=_PROMPT_STT,
     )
 
     tts = _build_tts(s)
 
-    pipeline = Pipeline([
-        transport.input(),
-        vad,
-        stt,
-        ClinicalProcessor(patient_id=patient_id),
-        tts,
-        transport.output(),
-    ])
+    pipeline = Pipeline(
+        [
+            transport.input(),
+            vad,
+            stt,
+            ClinicalProcessor(patient_id=patient_id),
+            tts,
+            transport.output(),
+        ]
+    )
 
     worker = PipelineWorker(
         pipeline,

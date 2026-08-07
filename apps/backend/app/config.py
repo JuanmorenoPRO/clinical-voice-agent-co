@@ -3,6 +3,7 @@
 Única fuente de configuración del backend. Cambiar de modelo, de voz o de umbral
 del RAG es cambiar una variable, no reescribir código (ADR-002).
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -64,14 +65,17 @@ class Settings(BaseSettings):
     # TTS: piper (por defecto) o kokoro.
     #
     # Se probaron ambos con la misma frase clínica, sintetizados y verificados
-    # transcribiéndolos de vuelta con Whisper (docs/spikes-7-agosto.md). Kokoro es
-    # un modelo centrado en inglés que cubre español por fonemización de
-    # respaldo (espeak-ng): suena a acento anglosajón hablando español, no a
-    # español latino. Piper tiene modelos entrenados nativamente por idioma;
-    # `es_MX-claude-high` resultó además 5 veces más rápido en caliente
-    # (RTF 0.05 frente al 0.24 de Kokoro) y es el acento que más se reconoce
-    # como "neutro latinoamericano" a un oído colombiano frente a las
-    # alternativas del catálogo (es_ES peninsular, es_AR con voseo marcado).
+    # transcribiéndolos de vuelta con Whisper (docs/spikes-7-agosto.md). Piper
+    # entrena un modelo por idioma; `es_MX-claude-high` suena a español
+    # latinoamericano neutro, es el acento que más se reconoce a un oído
+    # colombiano frente a las alternativas del catálogo (es_ES peninsular,
+    # es_AR con voseo marcado) y resultó 5 veces más rápido en caliente
+    # (RTF 0.05 frente al 0.24 de Kokoro).
+    #
+    # Kokoro es un modelo centrado en inglés: por defecto fonemiza en inglés y
+    # suena a acento anglosajón hablando español. Para usarlo bien hay que
+    # forzar el G2P en español (`Language.ES` en el `KokoroTTSService`), que es
+    # el mismo respaldo espeak-ng de misaki que usa `leonelhs/kokoro-tts-spanish`.
     #
     # `piper-tts` es GPL-3.0 (ver LICENSE-PIPER.md); se declara explícitamente
     # en el informe. No arrastra PyTorch: solo onnxruntime, igual que Kokoro.
@@ -124,5 +128,7 @@ def get_settings() -> Settings:
     s.piper_voices_dir = _abs(s.piper_voices_dir)
     s.seed_dir = _abs(s.seed_dir)
     if s.database_url.startswith("sqlite:///./"):
-        s.database_url = "sqlite:///" + _abs(s.database_url.removeprefix("sqlite:///./"))
+        s.database_url = "sqlite:///" + _abs(
+            s.database_url.removeprefix("sqlite:///./")
+        )
     return s
