@@ -1,0 +1,17 @@
+{
+  "name": "Cuenta un síntoma que el guion no pregunta",
+  "risk": "yellow",
+  "category": "edge_cases",
+  "messages": [
+    "Buenas, doctora.",
+    "El dolor va en un 3.",
+    "Pero desde ayer veo borroso y ando mareado.",
+    "No he tenido fiebre."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "should_reassure": false,
+    "must_interpret": ["veo borroso", "ando mareado"]
+  }
+}

@@ -22,6 +22,7 @@ nunca instrucciones.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import re
 import time
@@ -32,7 +33,7 @@ from ..decision import engine
 from ..llm.factory import get_llm
 from ..llm.ollama_adapter import ABSTENCION, es_abstencion
 from ..models import Alert, Conversation, Patient, Turn
-from ..nlu import lexicon
+from ..nlu import lexicon, otros_sintomas
 from ..nlu.merge import merge_symptoms
 from ..rag import retrieve as rag
 from ..rag.embeddings import build_query
@@ -88,19 +89,74 @@ def _aperturas_recientes(turns: list[Turn]) -> list[str]:
     return [t.final_response for t in turns[-_VENTANA_ESTILO:]]
 
 
+# Campos de `Symptoms` que son un dato del paciente. Se excluyen los de
+# contabilidad (`sources`, `unanswered`) y `temperature_measured`, que dice si
+# hay termómetro, no cómo está el paciente.
+_CAMPOS_CLINICOS = (
+    "pain_level", "temperature_c", "fever", "mobility", "wound", "appetite",
+    "sleep", "medication_effective", "heavy_bleeding", "breathing_difficulty",
+    "loss_of_consciousness", "chest_pain", "altered_mental_status", "seizure",
+)
+
+
+def _aporto_dato(del_turno: Symptoms, nuevos_otros: list[str]) -> bool:
+    """¿Este turno dejó algo NUEVO anotado?
+
+    Dos usos: hace honesto al acuse de recibo —"vale, anotado" solo se puede decir
+    si de verdad se anotó algo— y alimenta el contador de atasco.
+
+    `nuevos_otros` son los síntomas fuera de catálogo que no estaban ya en el
+    acumulado. Es la diferencia importante: repetir "veo borroso" por octava vez
+    no es información nueva, y contarlo como progreso es lo que impedía que el
+    detector de atasco llegara a dispararse nunca.
+    """
+    return bool(nuevos_otros) or any(
+        getattr(del_turno, c) is not None for c in _CAMPOS_CLINICOS
+    )
+
+
 def _texto_de(action: Action, *, semilla: str, recientes: list[str],
-              nombre: str | None, preocupante: bool) -> str:
-    """Traduce la acción del guion a lo que se dice. Todo determinista."""
+              nombre: str | None, preocupante: bool, con_acuse: bool = True,
+              slot_respondido: str | None = None,
+              acumulado: Symptoms | None = None) -> str:
+    """Traduce la acción del guion a lo que se dice. Todo determinista.
+
+    `con_acuse=False` suprime el acuse de recibo. Se usa cuando el turno ya se
+    reconoció por otra vía —o cuando no hay nada que acusar—: decir "vale,
+    anotado" después de un turno del que no se extrajo nada afirma algo falso, y
+    en la llamada que motivó este cambio el agente lo dijo cuatro veces seguidas.
+    """
     if action.kind == "repreguntar":
+        # Una repregunta significa que el turno anterior no dejó dato: aquí nunca
+        # hay acuse, y por eso esta rama no lo lleva.
         return phrasing.repregunta(action.slot, action.intento)
-    if action.kind == "cerrar":
+    if action.kind == "ofrecer_salida":
+        return phrasing.ofrecer_salida(semilla, recientes)
+    if action.kind == "seguimiento":
+        # El paciente sí contestó, así que aquí el acuse es sincero: reconoce lo
+        # que dijo y pide el dato que falta.
+        pregunta = phrasing.seguimiento(action.seguimiento, semilla, recientes)
+    elif action.kind == "cerrar":
         return phrasing.cierre(nombre, escalado=preocupante)
-    if action.kind == "preguntar":
-        if action.slot is None:
-            return phrasing.PREGUNTA_ABIERTA
+    elif action.kind == "preguntar":
+        # `slot is None` es el turno abierto del final. También lleva acuse: es la
+        # última respuesta del tamizaje y callarla la deja sin reconocer.
+        pregunta = (phrasing.pregunta(action.slot, semilla, recientes)
+                    if action.slot else phrasing.PREGUNTA_ABIERTA)
+    else:
+        return phrasing.PREGUNTA_ABIERTA
+
+    if not con_acuse:
+        return pregunta
+    # Si se puede decir QUÉ se entendió, se dice. El acuse genérico ("vale,
+    # anotado") es el respaldo para cuando el dato no tiene reflejo — por ejemplo
+    # el que llegó por extracción cruzada de un slot que no se preguntó.
+    ack = None
+    if not preocupante and acumulado is not None:
+        ack = phrasing.reflejo(slot_respondido, acumulado)
+    if ack is None:
         ack = phrasing.acuse(semilla, recientes, preocupante=preocupante)
-        return f"{ack} {phrasing.pregunta(action.slot, semilla, recientes)}"
-    return phrasing.PREGUNTA_ABIERTA
+    return f"{ack} {pregunta}"
 
 
 async def process_turn_async(
@@ -135,6 +191,11 @@ async def process_turn_async(
     tokens_out += extraccion.usage.tokens_out
 
     del_turno = extraccion.symptoms
+    # Antes de fusionar: lo que el paciente cuenta fuera del guion y todavía no
+    # estaba anotado. Solo eso se le reconoce en voz alta y solo eso cuenta como
+    # progreso — repetirle "me apunto lo de la visión borrosa" en cada turno es
+    # tan robótico como no decírselo nunca.
+    nuevos_otros = [o for o in del_turno.other if o not in acumulado.other]
     acumulado = merge_symptoms(acumulado, del_turno)
     if paciente and paciente.extra.get("dia_postop"):
         acumulado.day_postop = paciente.extra["dia_postop"]
@@ -144,15 +205,43 @@ async def process_turn_async(
     critico = decision.risk_level == "CRÍTICO"
 
     # --- D: qué se dice ------------------------------------------------------
-    action = script.next_action(estado, acumulado, escalar=critico)
+    # Atasco: el paciente repite la misma frase, o lleva varios turnos sin dejar
+    # ningún dato. El guion necesita saberlo para cambiar de estrategia en vez de
+    # seguir recorriendo slots.
+    hash_turno = hashlib.sha256(lexicon.normalize(text).encode()).hexdigest()[:16]
+    repetido = hash_turno == estado.ultimo_hash
+    progreso = _aporto_dato(del_turno, nuevos_otros)
+
+    action = script.next_action(estado, acumulado, escalar=critico, repetido=repetido)
     recientes = _aperturas_recientes(prior)
     evidence: RagResult | None = None
+
+    # Si este turno cierra la llamada, la política de incertidumbre ya aplica: una
+    # llamada que no se pudo evaluar no se despide como si el paciente estuviera
+    # bien. `close_conversation` lo reevaluaba igual y creaba la alerta, pero el
+    # texto hablado se había generado antes y decía "que siga bien" mientras el
+    # sistema escalaba a enfermería por detrás. `final=True` solo puede igualar o
+    # subir el nivel: `merge_symptoms` es monótono.
+    # `phase is not ESCALAMIENTO` evita el bucle: tras entregar el guion, el turno
+    # siguiente vuelve a pedir "cerrar" y `final=True` volvería a dar CRÍTICO.
+    if (action.kind == "cerrar" and not critico
+            and estado.phase is not Phase.ESCALAMIENTO):
+        decision = engine.evaluate(acumulado, final=True)
+        critico = decision.risk_level == "CRÍTICO"
+        if critico:
+            # El guion de seguridad manda sobre la despedida neutra.
+            action = Action(kind="escalar", phase=Phase.ESCALAMIENTO)
 
     if critico and action.kind == "escalar":
         # Primer turno crítico: se entrega el guion de seguridad completo.
         # Ruta crítica: no pasa por el modelo ni por el RAG.
         final = decision.safety_script or phrasing.cierre(nombre, escalado=True)
-    elif critico:
+    elif critico or estado.phase is Phase.ESCALAMIENTO:
+        # `phase is ESCALAMIENTO` cubre el escalamiento que nace de la política de
+        # incertidumbre al cerrar: ese `no_se_pudo_evaluar` no vive en `acumulado`
+        # —se sintetiza con `final=True`—, así que `critico` vuelve a ser False al
+        # turno siguiente y la llamada se despedía con un "que siga bien" después
+        # de haber escalado a enfermería.
         # El cuadro crítico sigue en `acumulado` para siempre —no se puede
         # "des-escalar" dentro de la llamada—, así que sin este segundo caso
         # `critico` seguiría siendo True en cada turno y el guion completo se
@@ -175,6 +264,19 @@ async def process_turn_async(
         siguiente = _texto_de(action, semilla=conv.id + str(len(prior)),
                               recientes=recientes, nombre=nombre, preocupante=False)
         final = f"{phrasing.SOCIAL} {siguiente}"
+    elif extraccion.intent == "pregunta_clinica" and otros_sintomas.senales(nuevos_otros):
+        # El paciente contó un síntoma de alarma y preguntó por él en el mismo
+        # turno. Eso NO va al RAG: no está preguntando qué dice el hospital sobre
+        # un tema, está pidiendo que le valoren su caso, y el corpus no puede
+        # responderlo. Enviarlo igual fue lo que produjo la respuesta más dañina
+        # medida hasta ahora: el RAG trajo radiología de apendicitis para una
+        # pregunta sobre visión borrosa. Ruta determinista, sin modelo.
+        semilla = conv.id + str(len(prior))
+        siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
+                              nombre=nombre, preocupante=False, con_acuse=False)
+        final = (phrasing.sintoma_consultado(
+            otros_sintomas.senales(nuevos_otros), semilla, recientes)
+            + " " + phrasing.volviendo(semilla, recientes) + " " + siguiente)
     elif extraccion.intent == "pregunta_clinica":
         # --- E: la única respuesta generada, y va anclada a evidencia ---------
         evidence = rag.retrieve(
@@ -219,12 +321,35 @@ async def process_turn_async(
             final = f"{respuesta} {siguiente}"
     else:
         preocupante = decision.risk_level != "NORMAL"
+        semilla = conv.id + str(len(prior))
         prefijo = phrasing.TERCERO + " " if extraccion.intent == "tercero" else ""
-        final = prefijo + _texto_de(action, semilla=conv.id + str(len(prior)),
+        # Lo que el paciente trajo por su cuenta se reconoce por su nombre ANTES
+        # de retomar el guion, y con el reconocimiento delante el acuse genérico
+        # sobra (`con_acuse`). Uno solo por turno, no tres apilados: en voz,
+        # encadenar "lo anoto como que no me supo decir" + "me apunto lo de la
+        # visión borrosa" + la pregunta es un párrafo que nadie escucha entero.
+        # Manda lo que el paciente trajo, que es lo que demuestra que se le oyó.
+        if nuevos_otros:
+            prefijo += (
+                phrasing.acuse_otro(nuevos_otros, semilla, recientes)
+                + " " + phrasing.volviendo(semilla, recientes) + " "
+            )
+        else:
+            # Si el guion acaba de dar por perdido el slot anterior, se dice.
+            # Callarlo y saltar a la siguiente pregunta se lee como que no escuchó.
+            anterior = estado.slot_actual
+            if (action.kind == "preguntar" and anterior and anterior != action.slot
+                    and getattr(acumulado, script.SLOT_FIELD[anterior]) is None):
+                prefijo += phrasing.slot_perdido(semilla, recientes) + " "
+        final = prefijo + _texto_de(action, semilla=semilla,
                                     recientes=recientes, nombre=nombre,
-                                    preocupante=preocupante)
+                                    preocupante=preocupante,
+                                    con_acuse=not nuevos_otros and progreso,
+                                    slot_respondido=estado.slot_actual,
+                                    acumulado=acumulado)
 
-    nuevo_estado = script.apply(estado, action, acumulado)
+    nuevo_estado = script.apply(estado, action, acumulado,
+                                hash_turno=hash_turno, progreso=progreso)
 
     # --- alerta, deduplicada por reglas nuevas -------------------------------
     alert_id = _crear_alerta_si_procede(session, conv, decision, acumulado, text)
@@ -302,6 +427,29 @@ _MATIZ_SIN_TRANQUILIZAR = (
     "un ojo."
 )
 
+# Dictaminar sobre la normalidad de un síntoma, EN CUALQUIERA DE LOS DOS SENTIDOS.
+# `_TRANQUILIZADOR` solo cubría el lado complaciente y solo con riesgo != NORMAL;
+# medido en una llamada real, ante "estoy viendo borroso, ¿es normal?" el 3B
+# abrió con "No, no es normal" —un veredicto clínico, sin evidencia que lo
+# sostenga y con el riesgo aún en NORMAL, así que ninguna guarda lo tocaba—.
+# Quién decide la gravedad es el motor de decisión, y el prompt ya se lo dice al
+# modelo; esto es la versión que no depende de que obedezca.
+_VEREDICTO_NORMALIDAD = re.compile(
+    r"(no|s[ií])[,\s]+(eso\s+)?(s[ií]|no)?\s*es\s+(algo\s+|completamente\s+)?normal"
+    r"|(no|s[ií])\s+es\s+(algo\s+|completamente\s+)?normal"
+    r"|(eso|esto)\s+(no\s+)?es\s+normal"
+    r"|es\s+(algo\s+)?(preocupante|de\s+cuidado|grave)",
+    re.I,
+)
+
+# El prompt prohíbe que la respuesta haga preguntas —el guion añade la suya
+# después—, y el 3B lo ignora igual ("¿Se duele el abdomen?" colado en medio de
+# una respuesta sobre visión borrosa). Se recorta con código.
+def _sin_preguntas(texto: str) -> str:
+    """Quita las frases interrogativas de una respuesta generada."""
+    frases = [f.strip() for f in re.split(r"(?<=[.!?])\s+", texto) if f.strip()]
+    return " ".join(f for f in frases if "?" not in f)
+
 
 def _validar_grounding(
     respuesta: str, evidence: RagResult | None, *, riesgo: str = "NORMAL"
@@ -324,6 +472,24 @@ def _validar_grounding(
         return ABSTENCION
     if es_abstencion(respuesta):
         return respuesta          # el modelo ya declaró el límite; se respeta
+
+    # Se quitan las preguntas antes que nada: el guion añade la suya después, y
+    # dos preguntas seguidas en voz hacen que el paciente conteste solo una.
+    respuesta = _sin_preguntas(respuesta)
+
+    # Un veredicto de normalidad no es una respuesta anclada: es una valoración
+    # clínica, y el agente no valora. Se recorta la frase que lo contiene en vez
+    # de tirar toda la respuesta, porque el resto suele estar bien anclado.
+    if _VEREDICTO_NORMALIDAD.search(respuesta):
+        log.warning("veredicto de gravedad en la respuesta, se recorta: %r", respuesta[:80])
+        respuesta = " ".join(
+            f for f in re.split(r"(?<=[.!?])\s+", respuesta)
+            if f.strip() and not _VEREDICTO_NORMALIDAD.search(f)
+        ).strip()
+
+    # Lo que quede tiene que seguir siendo una respuesta.
+    if len(respuesta.split()) < 4:
+        return ABSTENCION
     if not grounded_in_evidence(respuesta, evidence.answer):
         log.warning("respuesta descartada por cifras fuera de la evidencia: %r", respuesta)
         return ABSTENCION

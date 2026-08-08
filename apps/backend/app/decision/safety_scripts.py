@@ -68,11 +68,14 @@ _EMPATHIC_OPENER = (
 # de más a un paciente que lo que necesita es una consulta hoy también es un daño.
 _PRIORITARIA: dict[str, str] = {
     "fiebre_38": (
+        # Sin género: el resto de guiones dice "lo contacte" y este decía "la
+        # contacte"/"desorientada". El sistema no sabe el género del paciente, así
+        # que aquí se evita la concordancia en vez de acertarla por defecto.
         "Esa fiebre después de la cirugía sí hay que revisarla hoy mismo, no es algo "
-        "para esperar. Voy a pedir que enfermería la contacte en las próximas horas. "
-        "Mientras tanto tome abundante líquido y vuelva a medirse la temperatura en un "
-        "par de horas. Si pasa de 39, le da dificultad para respirar o se siente "
-        "desorientada, llame al 123 sin esperar la llamada."
+        "para esperar. Voy a pedir que enfermería se comunique con usted en las "
+        "próximas horas. Mientras tanto tome abundante líquido y vuelva a medirse la "
+        "temperatura en un par de horas. Si pasa de 39, le cuesta respirar o nota "
+        "confusión, llame al 123 sin esperar la llamada."
     ),
     "herida_purulenta": (
         "Esa secreción en la herida hay que valorarla hoy, porque puede ser una "
@@ -115,7 +118,9 @@ _PRIORITARIA_DEFAULT = (
 )
 
 # Apertura más contenida para la vía de enfermería: reconoce sin dramatizar.
-_CALM_OPENER = "Gracias por contármelo,"
+# Con punto y espacio: todos los guiones de abajo empiezan en mayúscula, y sin el
+# separador salía pegado ("Gracias por contármelo,Esa fiebre...").
+_CALM_OPENER = "Gracias por contármelo. "
 
 
 def script_for(triggered_rules: list[str], action: str = "emergencia_123") -> str:

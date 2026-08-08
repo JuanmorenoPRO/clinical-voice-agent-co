@@ -1,0 +1,21 @@
+{
+  "name": "Repite la misma frase toda la llamada",
+  "risk": "red",
+  "category": "edge_cases",
+  "messages": [
+    "estoy mamado",
+    "veo borroso",
+    "veo borroso",
+    "veo borroso",
+    "veo borroso",
+    "veo borroso",
+    "veo borroso",
+    "veo borroso"
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true,
+    "should_reassure": false,
+    "must_interpret": ["veo borroso"]
+  }
+}

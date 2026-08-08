@@ -61,6 +61,14 @@ def merge_symptoms(base: Symptoms, nuevo: Symptoms) -> Symptoms:
     elif out.fever is None and nuevo.fever is not None:
         out.fever = nuevo.fever
 
+    # No es un hallazgo clínico sino estado de la conversación —dice si hay que
+    # perseguir la cifra—, así que aquí manda lo último que dijo el paciente y no
+    # la lectura más grave: "me la tomé" y luego "no, no tengo termómetro" es una
+    # corrección, no una minimización. El riesgo lo siguen llevando `fever` y
+    # `temperature_c`, que sí son monótonos.
+    if nuevo.temperature_measured is not None:
+        out.temperature_measured = nuevo.temperature_measured
+
     # Medicación inefectiva es la lectura conservadora: agrava el cuadro de dolor.
     if nuevo.medication_effective is False:
         out.medication_effective = False

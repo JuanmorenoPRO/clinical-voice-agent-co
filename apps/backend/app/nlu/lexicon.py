@@ -20,11 +20,28 @@ import re
 import unicodedata
 
 from ..schemas import Symptoms
+from . import otros_sintomas
+
+
+# Letras repetidas de más: "borrroso", "muuucho", "siiii". Salen del STT y de
+# quien escribe alargando, y sin esto el patrón no casa y el síntoma se pierde
+# entero (caso real: "estoy viendo borrroso").
+#
+# Se colapsan distinto según el tipo, y la asimetría importa:
+#   - Vocales 3+ -> UNA. Ninguna palabra del español lleva tres vocales idénticas
+#     seguidas, así que es seguro, y "muuucho" tiene que llegar a "mucho" para
+#     que `_DOLOR_DESCRIPTOR` lo reconozca.
+#   - Consonantes 3+ -> DOS, porque "rr", "ll", "cc" y "nn" sí son legítimas.
+# Las dobles reales ("leer", "cooperar", "perro") no se tocan: hacen falta tres.
+_VOCALES_REPETIDAS = re.compile(r"([aeiou])\1{2,}")
+_CONSONANTES_REPETIDAS = re.compile(r"([^aeiou\W\d_])\1{2,}")
 
 
 def normalize(text: str) -> str:
     t = unicodedata.normalize("NFKD", text.lower())
-    return "".join(c for c in t if not unicodedata.combining(c))
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    t = _VOCALES_REPETIDAS.sub(r"\1", t)
+    return _CONSONANTES_REPETIDAS.sub(r"\1\1", t)
 
 
 # --- banderas de emergencia ---------------------------------------------------
@@ -164,8 +181,10 @@ _TEMP_FRAC = re.compile(r"\b(3[5-9]|4[0-2])\s+y\s+(medio|algo|pico|cachito)")
 _FIEBRE_SI = re.compile(
     r"\bfiebre|calentura|destemplad\w+|escalofrio|con\s+frio\s+y\s+calor"
     r"|ardiendo|hirviendo|temperatura\s+alta"
-    r"|siento\s+.{0,12}calor(cito)?|me\s+he\s+sentido\s+.{0,12}(tibi|calient)"
-    r"|(ando|estoy)\s+.{0,10}(tibi|calient)"
+    # "me siento caliente" no casaba: `siento.*calor` no cubre "caliente" y la
+    # alternativa de abajo exige "ando/estoy". Se unifican en un solo patrón de
+    # verbo de sensación + raíz térmica.
+    r"|(siento|sentido|senti|ando|estoy|estaba|amaneci)\s+.{0,14}(calor|calient|tibi|arde)"
 )
 _FIEBRE_NO = re.compile(
     r"no\s+(he\s+tenido|tengo|ha\s+tenido)\s+(fiebre|calentura|temperatura)"
@@ -173,13 +192,38 @@ _FIEBRE_NO = re.compile(
     r"|fiebre\s+no\s+(he\s+tenido|ha\s+habido)|ninguna\s+fiebre"
 )
 
+# "Sí me la tomé" contesta al ACTO de medir, no al HALLAZGO. Medido con
+# llama3.2:3b: "si la he tomado" y "si" a secas devolvían `fever=True`, el slot
+# quedaba resuelto y la cifra —la que dispara `fiebre_38`— no se pedía nunca.
+# Cuando esto casa y el turno no trae número, no se toca `fever`: se marca que
+# falta la cifra y el guion la persigue con un SEGUIMIENTO.
+_TOMO_TEMPERATURA = re.compile(
+    r"\b(me\s+la\s+|la\s+he\s+|me\s+la\s+he\s+|si\s+la\s+|ya\s+me\s+la\s+)?"
+    r"(tome|tomado|tomo|medi|medido|mido|puse\s+el\s+termometro)\b"
+    r"|con\s+el\s+termometro|si\s+tengo\s+termometro"
+)
+# Y su contrario: no hay con qué medir. Es respuesta legítima y cierra el
+# seguimiento sin insistir.
+_SIN_TERMOMETRO = re.compile(
+    r"no\s+(tengo|tenemos|hay|consegui|tuve)\s+.{0,12}termometro"
+    r"|sin\s+termometro|no\s+me\s+la\s+(he\s+)?(tomado|medido|tome)"
+    r"|no\s+(he\s+podido|puedo)\s+.{0,14}(tomar|medir)"
+    r"|termometro\s+no\s+(tengo|hay)"
+)
+
 # --- herida -------------------------------------------------------------------
 _HERIDA: list[tuple[str, re.Pattern[str]]] = [
     (
         "secrecion_purulenta",
         re.compile(
-            r"\bpus\b|materia|botando\s+(algo|un\s+)?(liquido|amarillo|verde)|supura\w*"
-            r"|sale\s+(como\s+)?(un\s+)?(liquido|algo)|huele\s+(feo|mal|maluco)"
+            r"\bpus\b|materia|supura\w*"
+            r"|bota\w*\s+.{0,18}(liquido|liquidito|amarill|verdos|secrecion)"
+            # El cuantificador intermedio es lo que fallaba: "le sale un poquito
+            # de líquido, como amarillito" es la forma real en que el paciente
+            # minimizador cuenta una secreción purulenta, y era un rojo perdido
+            # (caso_tray_pac_42_00028_7 del dataset).
+            r"|sale\s+.{0,18}(liquido|liquidito|amarill|verdos|secrecion|pus)"
+            r"|sale\s+(como\s+)?(un\s+)?algo|huele\s+(feo|mal|maluco)"
             r"|secrecion\s+(amarilla|verde|purulenta)"
         ),
     ),
@@ -188,6 +232,12 @@ _HERIDA: list[tuple[str, re.Pattern[str]]] = [
         re.compile(
             r"rojit\w+|roja?\s+(en\s+)?(el\s+)?(borde|los\s+bordes)|enrojecid\w+|colorad\w+"
             r"|un\s+poco\s+(roja|inflamada|hinchada)|eritema"
+            # "rosadita" es como la paciente colombiana describe un eritema leve, y
+            # faltaba. Costaba un rojo entero: en caso_tray_pac_42_00030_7 la fiebre
+            # de 38.9 nunca se mide ("he estado como acalorada"), así que el rojo
+            # depende de `_fever_reported_unmeasured`, que exige DOS señales
+            # amarillas. Sin el eritema solo había una y el caso salía verde.
+            r"|rosad\w+|rosita|irritad\w+|un\s+poco\s+(rosada|morada)|morad\w+"
         ),
     ),
     (
@@ -330,6 +380,30 @@ _MEDICACION_SI = re.compile(
 )
 
 
+def habla_de_medir(t: str) -> bool:
+    """¿La frase (ya normalizada) se refiere al acto de tomarse la temperatura?"""
+    return bool(_TOMO_TEMPERATURA.search(t) or _SIN_TERMOMETRO.search(t))
+
+
+# A propósito MÁS ancho que `_FIEBRE_SI`: aquel afirma `fever=True` y tiene que
+# ser estricto; este solo decide si el turno menciona algo térmico, y se usa para
+# NO suprimir un hallazgo. La asimetría es deliberada — un falso negativo de
+# fiebre es la falla catastrófica. Caso real del dataset: "me sen- un poco
+# calientica, la tomé y marcaba como [inaudible]" habla de fiebre y de medir a la
+# vez; con el patrón estricto (que exige verbo + raíz térmica, y aquí el STT
+# cortó "sen-") la guarda se comía un caso rojo.
+# No lleva "temperatura", "termómetro" ni "grados": esas son las palabras del
+# ACTO de medir, justo lo que hay que poder distinguir del hallazgo.
+_MENCION_TERMICA = re.compile(
+    r"fiebre|calentura|calient|calor|tibi|destempl|escalofrio|ardiendo|hirviendo"
+)
+
+
+def habla_de_fiebre(t: str) -> bool:
+    """¿La frase (ya normalizada) menciona algo térmico, no solo el termómetro?"""
+    return bool(_MENCION_TERMICA.search(t))
+
+
 def extract(text: str, slot: str | None = None) -> Symptoms:
     """Lo que se puede leer del texto sin modelo.
 
@@ -340,6 +414,10 @@ def extract(text: str, slot: str | None = None) -> Symptoms:
     """
     sym = Symptoms()
     t = normalize(text)
+
+    # Fuera de catálogo: se busca SIEMPRE, como las banderas, porque justamente
+    # es lo que el guion no pregunta y el paciente sí cuenta.
+    sym.other = otros_sintomas.detectar(t)
 
     for campo, patron in _BANDERAS:
         if patron.search(t):
@@ -360,6 +438,16 @@ def extract(text: str, slot: str | None = None) -> Symptoms:
     elif _FIEBRE_SI.search(t):
         sym.fever = True
         sym.sources["fever"] = "lexicon"
+
+    # Si mide, se anota aparte de `fever`: son dos hechos distintos y confundirlos
+    # es lo que hacía perder la cifra. `_SIN_TERMOMETRO` gana porque contiene
+    # formas que también casan con `_TOMO_TEMPERATURA` ("no me la he tomado").
+    if _SIN_TERMOMETRO.search(t):
+        sym.temperature_measured = False
+        sym.sources["temperature_measured"] = "lexicon"
+    elif sym.temperature_c is not None or _TOMO_TEMPERATURA.search(t):
+        sym.temperature_measured = True
+        sym.sources["temperature_measured"] = "lexicon"
 
     if _MEDICACION_NO.search(t):
         sym.medication_effective = False

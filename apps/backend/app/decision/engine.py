@@ -72,8 +72,14 @@ def evaluate(symptoms: Symptoms, *, final: bool = False) -> DecisionResult:
     # se averiguó nada. Con menos de dos slots de seis no se puede descartar una
     # emergencia, y dejar eso en "seguimiento" fue un falso negativo real medido en
     # reports/dataset-eval.md.
+    # Las reglas que nacen aquí y no en RULES. Hay que llevarlas aparte: la lista
+    # de abajo se filtra contra RULES, así que `no_se_pudo_evaluar` no llegaba a
+    # `script_for` y su guion —el que explica que no se alcanzó a repasar la
+    # llamada— era código muerto; salía el genérico.
+    sinteticas: list[str] = []
     if final and _ORDER[level] < _ORDER["CRÍTICO"]:
         if comp < thresholds["incertidumbre"]["min_para_evaluar"]:
+            sinteticas.append("no_se_pudo_evaluar")
             triggered.append("no_se_pudo_evaluar")
             level, action = "CRÍTICO", "enfermeria_prioritaria"
         elif level == "NORMAL" and _uncertain(symptoms, comp, thresholds):
@@ -83,7 +89,7 @@ def evaluate(symptoms: Symptoms, *, final: bool = False) -> DecisionResult:
     script = None
     if level == "CRÍTICO":
         critical = [r.name for r in RULES if r.name in triggered and r.level == "CRÍTICO"]
-        script = safety_scripts.script_for(critical, action)
+        script = safety_scripts.script_for(critical + sinteticas, action)
 
     return DecisionResult(
         risk_level=level,

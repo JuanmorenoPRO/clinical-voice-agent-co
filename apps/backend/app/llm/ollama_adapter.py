@@ -108,6 +108,22 @@ _TUTEO: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bdebes\b", re.I), "debe"),
     (re.compile(r"\bnecesitas\b", re.I), "necesita"),
     (re.compile(r"\bsientes\b", re.I), "siente"),
+    # Medido: el 3B mezcla registros dentro de la misma frase ("Entiendo que
+    # estés ansioso por saber cuándo puede bañarse"). Estas son las formas que
+    # aparecieron de verdad y que la tabla original no cubría.
+    (re.compile(r"\best[eá]s\b", re.I), "está"),
+    (re.compile(r"\bquieres\b", re.I), "quiere"),
+    (re.compile(r"\bsabes\b", re.I), "sabe"),
+    (re.compile(r"\bhaces\b", re.I), "hace"),
+    (re.compile(r"\bvas\b", re.I), "va"),
+    (re.compile(r"\bpuedas\b", re.I), "pueda"),
+    (re.compile(r"\btengas\b", re.I), "tenga"),
+    (re.compile(r"\bsigues\b", re.I), "sigue"),
+    # Imperativo negativo, que es la forma en que vienen escritas las
+    # instrucciones postoperatorias del corpus ("no los toques", "no te mojes").
+    # Conjunto cerrado a propósito: generalizar "-es → -e" destrozaría sustantivos.
+    (re.compile(r"\b(toqu|dej|us|apliqu|lav|moj|levant|hag|pong|quit|tom|frot|rasqu)es\b",
+                re.I), r"\1e"),
     (re.compile(r"\bte\b", re.I), "se"),
     (re.compile(r"\btu\b", re.I), "su"),
     (re.compile(r"\btus\b", re.I), "sus"),
@@ -134,6 +150,37 @@ def a_usted(texto: str) -> str:
             lambda m: _con_mayuscula_de(m.group(0), m.expand(reemplazo)), texto
         )
     return texto
+
+
+# El prompt ya prohíbe abrir con una muletilla de empatía y tratar de tú, y el 3B
+# lo ignora igual. Medido ante "¿cuándo me puedo bañar?": "Amigo, parece que se
+# siente un poco nervioso. Entiendo que estés ansioso por saber...". Tres cosas
+# mal en dos frases: el vocativo informal en una llamada del hospital, y sobre
+# todo un estado emocional INVENTADO —el paciente no dijo estar nervioso—, que
+# es lo que hace que suene a formulario en vez de a alguien que escucha.
+_APERTURA_POSTIZA = re.compile(
+    r"^\s*(amig[oa]|herman[oa]|parce|mij[oa]|querid[oa]|estimad[oa])\s*[,.]?\s*", re.I
+)
+_EMOCION_INVENTADA = re.compile(
+    r"^\s*(parece\s+que|veo\s+que|noto\s+que|entiendo\s+que|s[eé]\s+que|"
+    r"comprendo\s+que|lamento\s+que)\b[^.!?]*[.!?]\s*",
+    re.I,
+)
+
+
+def sin_muletillas(texto: str) -> str:
+    """Quita el vocativo informal y la apertura de empatía postiza.
+
+    Se aplica en bucle porque el modelo las encadena ("Amigo, parece que...
+    Entiendo que...").
+    """
+    anterior = None
+    while anterior != texto:
+        anterior = texto
+        texto = _APERTURA_POSTIZA.sub("", texto)
+        texto = _EMOCION_INVENTADA.sub("", texto)
+    texto = texto.strip()
+    return texto[0].upper() + texto[1:] if texto else texto
 
 
 def es_abstencion(texto: str) -> bool:
@@ -392,7 +439,7 @@ class OllamaAdapter:
             tokens_in=resp.get("prompt_eval_count") or 0,
             tokens_out=resp.get("eval_count") or 0,
         )
-        return a_usted(texto or ABSTENCION), usage
+        return sin_muletillas(a_usted(texto or ABSTENCION)), usage
 
     async def evidencia_responde(self, *, question: str, evidence: str) -> bool:
         """¿La evidencia recuperada responde esta pregunta?
@@ -493,31 +540,88 @@ _DOLOR_ROJO = 8
 # trabajo que sí sabe hacer (mapear una paráfrasis real que no está en el léxico).
 _MENCIONA_DOLOR = re.compile(r"dolor|duel")
 
+# Generalización de `_MENCIONA_DOLOR` al resto de slots que pueden escalar a
+# CRÍTICO desde un solo valor. Medido contra llama3.2:3b el 8-ago:
+#
+#   slot=herida  pregunta="¿La ve del color normal de la piel, o más roja...?"
+#   paciente="veo borroso"   ->  wound = secrecion_purulenta   -> CRÍTICO
+#
+# El modelo se engancha con el "ve/color/roja" de la PREGUNTA —que también entra
+# en su contexto— y, obligado por el enum a elegir algo, elige el valor más grave.
+# `_es_un_solo_token` no lo frenaba porque "veo borroso" son dos palabras: el
+# número de palabras nunca fue la señal correcta, la señal es si el paciente
+# habló del slot o no.
+#
+# El vocabulario es deliberadamente generoso —raíces, no palabras completas—
+# porque el coste de los dos errores es asimétrico: filtrar de más le quita al
+# modelo la paráfrasis que solo él resuelve ("me toca agarrarme de todo para
+# llegar al baño" → `incapacitante_nueva`), y eso sería un falso negativo. Solo
+# se aplica a valores que escalan por sí solos; todo lo demás pasa sin filtro.
+_MENCIONA_SLOT: dict[str, re.Pattern[str]] = {
+    "herida": re.compile(
+        r"herida|punto|sutura|cicatri|aposito|gasa|venda|curacion|pus|materia"
+        r"|supur|secrecion|mancha|liquido|sangr|roja?\b|rojit|hinchad|inflamad"
+        r"|huele|olor|sale|bota|costra|piel|borde|operacion|operad|cortad"
+    ),
+    "movilidad": re.compile(
+        r"camin|andar|levant|parar\b|pararme|pie\b|pies\b|mover|movi|muevo"
+        r"|cama|silla|bano|escalera|agarr|apoy|sostener|solo\b|sola\b|ayuda"
+        r"|cansa|fuerza|pierna|rodilla|arrastr|cojear|cojeo|salir|sentar"
+    ),
+    "dolor": _MENCIONA_DOLOR,
+    "fiebre": lexicon._MENCION_TERMICA,
+    "apetito": re.compile(
+        r"com(o|er|ida|iendo|i)\b|comid|apetito|hambre|provoca|bocado|desayun"
+        r"|almuerz|cena|bandeja|probado|trag|gana\w*\s+de\s+comer|alimenta"
+    ),
+    "sueno": re.compile(
+        r"duerm|dormi|sueno|descans|noche|despert|desvel|ojo\b|insomni|acost"
+        r"|madrugada|pesadilla|siesta|trasnoch"
+    ),
+}
 
-def _es_un_solo_token(utterance: str) -> bool:
-    core = utterance.strip()
-    return bool(core) and " " not in core
+# Un turno interrogativo NO es una respuesta. Medido: con la pregunta previa
+# "¿Ha sentido calentura o escalofríos?" en su contexto, el 3B contestó `si` a
+# "¿Cuándo me puedo bañar?" — se enganchó con la pregunta del agente, igual que
+# hacía con "veo borroso" → secrecion_purulenta. Cuando el paciente pregunta en
+# vez de contestar, su valor solo se acepta si de verdad habló del slot.
+_ES_PREGUNTA = re.compile(r"\?|^(cuando|como|que|cual|donde|por\s?que|puedo|debo)\b")
+
+
+def _menciona_el_slot(slot: str, utterance: str) -> bool:
+    """¿La frase del paciente habla del slot que se está preguntando?
+
+    Devuelve True cuando no hay vocabulario definido para el slot: la guarda es
+    una excepción para los valores que escalan solos, no la regla general.
+    """
+    patron = _MENCIONA_SLOT.get(slot)
+    return patron is None or bool(patron.search(lexicon.normalize(utterance)))
 
 
 def _to_symptoms(data: dict, slot: str, utterance: str) -> Symptoms:
     """Traduce el JSON de campo corto al contrato Pydantic.
 
     Medido: incluso con el ejemplo de ruido en `_SYSTEM_EXTRACT`, llama3.2:3b
-    sigue alucinando `mobility=incapacitante_nueva` para tokens sueltos como
-    "fewf" o "unufwef" — texto que ni el léxico ni ninguna regla fonotáctica
-    de `intent.py` reconocen, pero que el modelo igual "resuelve" al valor
-    más grave del enum porque el esquema lo obliga a elegir algo. El único
-    valor por slot que dispara CRÍTICO desde una sola palabra sin apoyo
-    léxico (`_SEVERIDAD_CRITICA_LLM`) no puede depender de esa conjetura
-    cuando la respuesta del paciente es un solo token sin espacios: una
-    frase real que describe esa severidad ("me toca agarrarme de todo para
-    llegar al baño") sí tiene varias palabras, así que esta guarda no le
-    quita al modelo el trabajo que solo él sabe hacer (ver
-    `test_el_modelo_cubre_la_parafrasis_que_el_lexico_no_tiene`).
+    sigue alucinando el valor más grave del enum ("fewf" → `incapacitante_nueva`,
+    "veo borroso" → `secrecion_purulenta`) porque el esquema lo obliga a elegir
+    algo y no siempre encuentra el camino a `no_dice`. Los valores que disparan
+    CRÍTICO por sí solos (`_SEVERIDAD_CRITICA_LLM`, `dolor ≥ 8`) no pueden
+    depender de esa conjetura: se exige que el paciente haya hablado del slot
+    (`_MENCIONA_SLOT`). El resto de valores pasa sin filtro, que es donde el
+    modelo hace el trabajo que solo él sabe hacer — mapear una paráfrasis que no
+    está en el léxico (ver `test_el_modelo_cubre_la_parafrasis_que_el_lexico_no_tiene`).
     """
     sym = Symptoms()
     raw = data.get(SLOT_KEY)
     if not raw or raw == "no_dice":
+        return sym
+
+    # El paciente preguntó en vez de contestar: lo que el modelo "extraiga" de ahí
+    # sale de la pregunta del agente, no del paciente.
+    norm = lexicon.normalize(utterance)
+    if _ES_PREGUNTA.search(norm) and not _menciona_el_slot(slot, utterance):
+        log.warning("valor del LLM descartado: el turno es una pregunta, no una "
+                    "respuesta sobre %s (%r)", slot, utterance[:80])
         return sym
 
     field, _ = SLOT_FIELDS[slot]
@@ -531,12 +635,26 @@ def _to_symptoms(data: dict, slot: str, utterance: str) -> Symptoms:
             return sym
         sym.pain_level = valor
     elif slot == "fiebre":
-        if raw in ("si", "no"):
-            sym.fever = raw == "si"
-        else:
+        if raw not in ("si", "no"):
             return sym
+        # "Sí me la tomé" contesta al acto de medir, no al hallazgo. Medido: el 3B
+        # devolvía `si` para "si la he tomado", y con `fever=True` el slot quedaba
+        # resuelto y la cifra —la única que dispara `fiebre_38`— no se pedía
+        # nunca. Si la frase habla del termómetro y no nombra la fiebre, el "sí"
+        # no es del síntoma: se deja `fever` en None para que el guion persiga el
+        # número (script.seguimiento_pendiente).
+        norm = lexicon.normalize(utterance)
+        if raw == "si" and lexicon.habla_de_medir(norm) and not lexicon.habla_de_fiebre(norm):
+            log.warning("fever=si del LLM descartado: la frase habla de medir (%r)",
+                        utterance[:80])
+            return sym
+        sym.fever = raw == "si"
     else:
-        if _SEVERIDAD_CRITICA_LLM.get(field) == raw and _es_un_solo_token(utterance):
+        if _SEVERIDAD_CRITICA_LLM.get(field) == raw and not _menciona_el_slot(slot, utterance):
+            log.warning(
+                "%s=%r del LLM descartado: la frase no habla de %s (%r)",
+                field, raw, slot, utterance[:80],
+            )
             return sym
         setattr(sym, field, raw)
     sym.sources[field] = "llm"

@@ -152,3 +152,37 @@ def test_rechazo_con_pocos_slots_escala_al_cerrar_por_incertidumbre(session):
     ).first()
     assert alerta is not None
     assert alerta.risk_level == "CRÍTICO"
+
+
+# --- el agente no dictamina sobre normalidad ---------------------------------
+
+@pytest.mark.parametrize(
+    "respuesta",
+    [
+        # Medido en una llamada real: ante "estoy viendo borroso, ¿es normal?" el
+        # 3B abrió con un veredicto clínico sin evidencia, y con el riesgo aún en
+        # NORMAL ninguna guarda lo tocaba.
+        "No, no es normal. Debe ser compresible.",
+        "Sí, es normal después de una cirugía.",
+        "Eso no es normal, debería consultar.",
+    ],
+)
+def test_el_veredicto_de_normalidad_se_recorta(respuesta):
+    from app.agent.orchestrator import _VEREDICTO_NORMALIDAD
+    assert _VEREDICTO_NORMALIDAD.search(respuesta), respuesta
+
+
+def test_una_respuesta_anclada_normal_no_se_recorta():
+    from app.agent.orchestrator import _VEREDICTO_NORMALIDAD
+    for buena in ("El baño diario se puede desde las 48 horas.",
+                  "Camine despacio y aumente la distancia cada día."):
+        assert not _VEREDICTO_NORMALIDAD.search(buena), buena
+
+
+def test_la_respuesta_generada_no_hace_preguntas():
+    """El guion añade la siguiente pregunta; dos seguidas en voz se pisan."""
+    from app.agent.orchestrator import _sin_preguntas
+    assert _sin_preguntas(
+        "No, no es normal. Debe ser compresible. ¿Se duele el abdomen?"
+    ) == "No, no es normal. Debe ser compresible."
+    assert _sin_preguntas("¿Y cómo sigue?") == ""

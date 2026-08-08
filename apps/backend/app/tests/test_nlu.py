@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.nlu import intent, lexicon
+from app.nlu import intent, lexicon, otros_sintomas
 from app.nlu.merge import merge_symptoms
 from app.schemas import Symptoms
 
@@ -358,3 +358,124 @@ def test_pedir_una_dosis_no_cuenta_como_inyeccion():
     """Sale del guion, pero no es un intento de manipular: se registran distinto."""
     assert intent.classify("¿Qué dosis me tomo?") == "fuera_de_mision"
     assert not intent.is_injection("¿Qué dosis me tomo?")
+
+
+# --- lo que el paciente cuenta fuera de los seis slots -------------------------
+# Regresión de una llamada real: el paciente contestó ocho veces "veo borroso" y
+# el agente no lo mencionó ni una. Era el 100% de lo que había dicho.
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("veo borroso", "visión borrosa"),
+        ("se me nubla la vista", "visión borrosa"),
+        ("ando mareado", "mareo"),
+        ("se me hinchó la pantorrilla", "hinchazón o dolor en la pierna"),
+        ("no he podido orinar", "dificultad para orinar"),
+        ("estoy mamado", "cansancio"),
+        ("me siento maluco", "malestar general"),
+    ],
+)
+def test_recoge_sintomas_fuera_de_catalogo(texto, esperado):
+    assert esperado in lexicon.extract(texto).other
+
+
+def test_lo_que_no_es_sintoma_no_se_inventa():
+    for texto in ("todo bien", "el dolor está en un 3", "no he tenido fiebre"):
+        assert lexicon.extract(texto).other == []
+
+
+def test_solo_las_senales_pesan_en_el_triaje():
+    """El cansancio se anota pero no escala; la visión borrosa sí es señal."""
+    assert otros_sintomas.senales(["cansancio", "ánimo bajo"]) == []
+    assert otros_sintomas.senales(["visión borrosa"]) == ["visión borrosa"]
+
+
+# --- fiebre: el acto de medir no es el hallazgo -------------------------------
+# Regresión del falso negativo: "sí me la tomé" se guardaba como `fever=True`, el
+# slot quedaba resuelto y la cifra —la que dispara fiebre_38— no se pedía nunca.
+
+@pytest.mark.parametrize(
+    "texto,fever,medido",
+    [
+        ("si la he tomado", None, True),
+        ("ya me la tomé", None, True),
+        ("no tengo termómetro", None, False),
+        ("no me la he tomado", None, False),
+        ("me siento caliente", True, None),
+        ("ando destemplado", True, None),
+        ("no he tenido fiebre", False, None),
+    ],
+)
+def test_medir_la_temperatura_no_es_tener_fiebre(texto, fever, medido):
+    s = lexicon.extract(texto, slot="fiebre")
+    assert s.fever is fever, f"{texto!r} → fever={s.fever!r}"
+    assert s.temperature_measured is medido, f"{texto!r} → medido={s.temperature_measured!r}"
+
+
+def test_una_cifra_alta_implica_fiebre_y_que_se_midio():
+    s = lexicon.extract("me la tomé y estaba en 38.5", slot="fiebre")
+    assert s.temperature_c == 38.5
+    assert s.temperature_measured is True
+
+
+def test_la_guarda_del_termometro_no_se_come_una_fiebre_real():
+    """Caso rojo real del dataset (caso_tray_pac_42_00028_7).
+
+    "me sen- un poco calientica, la tomé" habla de fiebre Y de medir a la vez, y
+    el STT cortó el verbo. La guarda que distingue el acto del hallazgo tiene que
+    ser asimétrica: ante la duda, la fiebre pasa. Un falso negativo de fiebre es
+    la falla que la rúbrica considera catastrófica.
+    """
+    t = lexicon.normalize("me sen- un poco calientica, la tomé y marcaba como y algo")
+    assert lexicon.habla_de_medir(t)
+    assert lexicon.habla_de_fiebre(t), "menciona algo térmico: la guarda no debe suprimir"
+    # Y el caso opuesto: puro acto de medir, sin nada térmico.
+    solo_medir = lexicon.normalize("si la he tomado")
+    assert lexicon.habla_de_medir(solo_medir)
+    assert not lexicon.habla_de_fiebre(solo_medir)
+
+
+def test_la_secrecion_minimizada_se_detecta():
+    """El minimizador es el 23% del dataset: "un poquito de líquido amarillito"
+    es como cuenta una secreción purulenta, y era un rojo perdido."""
+    for texto in ("le sale un poquito de líquido ahí, como amarillito",
+                  "sale como un liquidito amarillo",
+                  "está botando algo amarillo"):
+        assert lexicon.extract(texto, slot="herida").wound == "secrecion_purulenta", texto
+
+
+def test_la_negacion_no_cuenta_como_sintoma():
+    """Un detector que confunde "no tengo X" con "tengo X" es peor que ninguno."""
+    for texto in ("sin náuseas ni nada de eso", "no he vomitado",
+                  "nada de mareo", "no veo borroso"):
+        assert lexicon.extract(texto).other == [], texto
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Caso real: el STT/tecleo alarga letras y el paciente usa la forma
+        # verbal, no "veo". Se perdía el síntoma entero.
+        "estoy viendo borrroso",
+        "viendo borroso",
+        "veo todo nublado",
+        "se me nubla la vista",
+    ],
+)
+def test_la_vision_borrosa_se_detecta_como_la_dice_la_gente(texto):
+    assert "visión borrosa" in lexicon.extract(texto).other
+
+
+def test_las_letras_repetidas_no_rompen_el_lexico():
+    """"borrroso", "muuucho": salen del STT y de quien escribe alargando."""
+    assert lexicon.normalize("borrroso") == "borroso"   # consonante 3+ -> dos
+    assert lexicon.normalize("me duele muuucho") == "me duele mucho"  # vocal 3+ -> una
+    # Las dobles legítimas del español no se tocan: hacen falta tres.
+    for palabra in ("perro", "calle", "leer", "cooperar"):
+        assert lexicon.normalize(palabra) == palabra, palabra
+
+
+def test_el_dolor_alargado_se_sigue_extrayendo():
+    """El colapso de vocales existe para esto: "muuucho" tiene que llegar al léxico."""
+    assert lexicon.extract("me duele muuucho", slot="dolor").pain_level == 8

@@ -46,6 +46,12 @@ class Symptoms(BaseModel):
     medication_effective: bool | None = Field(
         None, description="¿La medicación controla el dolor?"
     )
+    # True  = dice que se la tomó (si además falta `temperature_c`, hay que pedir la cifra)
+    # False = no tiene termómetro o no se la ha tomado — respuesta legítima, no se insiste
+    # No es un hallazgo clínico: es lo que decide si el guion persigue el número.
+    temperature_measured: bool | None = Field(
+        None, description="¿El paciente se tomó la temperatura con termómetro?"
+    )
 
     # --- banderas rojas de emergencia -----------------------------------------
     # No están en el dataset, pero sí en los escenarios que el jurado interpreta
