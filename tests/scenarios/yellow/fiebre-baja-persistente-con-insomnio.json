@@ -1,0 +1,16 @@
+{
+  "name": "Fiebre baja persistente con insomnio",
+  "risk": "yellow",
+  "category": "yellow",
+  "messages": [
+    "Hola, buenas.",
+    "Sigo con el cuerpo caliente desde anoche.",
+    "37.5 marcó el termómetro.",
+    "Y no logro dormir nada bien."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

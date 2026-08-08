@@ -1,0 +1,612 @@
+[
+  {
+    "paciente_id": "pac_42_00000",
+    "nombre": "Mauricio Juan González Sánchez",
+    "procedimiento": "Apendicectomía",
+    "modulo": "appendicitis",
+    "fecha_cirugia": "2026-06-14",
+    "edad": 34,
+    "genero": "F",
+    "comorbilidades": [],
+    "ciudad": "Soacha",
+    "departamento": "Cundinamarca",
+    "documento_cc": "944082010",
+    "eps": "Compensar EPS"
+  },
+  {
+    "paciente_id": "pac_42_00001",
+    "nombre": "Jean León Sepúlveda",
+    "procedimiento": "Colecistectomía",
+    "modulo": "cholecystitis",
+    "fecha_cirugia": "2026-01-10",
+    "edad": 30,
+    "genero": "F",
+    "comorbilidades": [
+      "hipertension"
+    ],
+    "ciudad": "Bogotá D.C.",
+    "departamento": "Bogotá D.C.",
+    "documento_cc": "966790331",
+    "eps": "Famisanar EPS"
+  },
+  {
+    "paciente_id": "pac_42_00002",
+    "nombre": "María Adriana Montoya",
+    "procedimiento": "Colectomía",
+    "modulo": "colorectal_cancer",
+    "fecha_cirugia": "2026-05-20",
+    "edad": 52,
+    "genero": "F",
+    "comorbilidades": [],
+    "ciudad": "Yopal",
+    "departamento": "Casanare",
+    "documento_cc": "936539789",
+    "eps": "Sura EPS"
+  },
+  {
+    "paciente_id": "pac_42_00003",
+    "nombre": "Natalia Mónica Vargas Camargo",
+    "procedimiento": "Reemplazo de cadera/rodilla",
+    "modulo": "total_joint_replacement",
+    "fecha_cirugia": "2026-05-28",
+    "edad": 67,
+    "genero": "M",
+    "comorbilidades": [
+      "obesidad",
+      "hipertension"
+    ],
+    "ciudad": "Ibagué",
+    "departamento": "Tolima",
+    "documento_cc": "900849033",
+    "eps": "Salud Total EPS"
+  },
+  {
+    "paciente_id": "pac_42_00004",
+    "nombre": "Helena Esmeralda Pedraza",
+    "procedimiento": "Mastectomía",
+    "modulo": "breast_cancer",
+    "fecha_cirugia": "2026-07-02",
+    "edad": 70,
+    "genero": "M",
+    "comorbilidades": [
+      "ansiedad",
+      "diabetes_tipo_2"
+    ],
+    "ciudad": "Soacha",
+    "departamento": "Cundinamarca",
+    "documento_cc": "942832483",
+    "eps": "Aliansalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00005",
+    "nombre": "Elena Cecilia González Ardila",
+    "procedimiento": "Apendicectomía",
+    "modulo": "appendicitis",
+    "fecha_cirugia": "2026-04-20",
+    "edad": 41,
+    "genero": "M",
+    "comorbilidades": [],
+    "ciudad": "Medellín",
+    "departamento": "Antioquia",
+    "documento_cc": "916366429",
+    "eps": "Sura EPS"
+  },
+  {
+    "paciente_id": "pac_42_00006",
+    "nombre": "Manuel Castillo",
+    "procedimiento": "Colecistectomía",
+    "modulo": "cholecystitis",
+    "fecha_cirugia": "2026-06-17",
+    "edad": 54,
+    "genero": "M",
+    "comorbilidades": [
+      "obesidad",
+      "hipertension"
+    ],
+    "ciudad": "Soacha",
+    "departamento": "Cundinamarca",
+    "documento_cc": "967312897",
+    "eps": "Sanitas EPS"
+  },
+  {
+    "paciente_id": "pac_42_00007",
+    "nombre": "Janeth Álvarez Garzón",
+    "procedimiento": "Colectomía",
+    "modulo": "colorectal_cancer",
+    "fecha_cirugia": "2026-05-08",
+    "edad": 67,
+    "genero": "M",
+    "comorbilidades": [
+      "diabetes_tipo_2",
+      "enfermedad_cardiovascular"
+    ],
+    "ciudad": "Soacha",
+    "departamento": "Cundinamarca",
+    "documento_cc": "914386477",
+    "eps": "Famisanar EPS"
+  },
+  {
+    "paciente_id": "pac_42_00008",
+    "nombre": "Jennifer Camila Arias",
+    "procedimiento": "Reemplazo de cadera/rodilla",
+    "modulo": "total_joint_replacement",
+    "fecha_cirugia": "2026-04-14",
+    "edad": 67,
+    "genero": "M",
+    "comorbilidades": [
+      "obesidad",
+      "diabetes_tipo_2"
+    ],
+    "ciudad": "Riohacha",
+    "departamento": "La Guajira",
+    "documento_cc": "989193355",
+    "eps": "Compensar EPS"
+  },
+  {
+    "paciente_id": "pac_42_00009",
+    "nombre": "Andrea Lilia Gamboa",
+    "procedimiento": "Mastectomía",
+    "modulo": "breast_cancer",
+    "fecha_cirugia": "2026-01-15",
+    "edad": 53,
+    "genero": "M",
+    "comorbilidades": [
+      "hipertension"
+    ],
+    "ciudad": "Medellín",
+    "departamento": "Antioquia",
+    "documento_cc": "994851627",
+    "eps": "Salud Total EPS"
+  },
+  {
+    "paciente_id": "pac_42_00010",
+    "nombre": "José Jiménez Rodríguez",
+    "procedimiento": "Apendicectomía",
+    "modulo": "appendicitis",
+    "fecha_cirugia": "2026-03-24",
+    "edad": 24,
+    "genero": "F",
+    "comorbilidades": [],
+    "ciudad": "Santa Marta",
+    "departamento": "Magdalena",
+    "documento_cc": "983375103",
+    "eps": "Compensar EPS"
+  },
+  {
+    "paciente_id": "pac_42_00011",
+    "nombre": "Hernando Vásquez Ortiz",
+    "procedimiento": "Colecistectomía",
+    "modulo": "cholecystitis",
+    "fecha_cirugia": "2026-03-24",
+    "edad": 65,
+    "genero": "F",
+    "comorbilidades": [
+      "obesidad",
+      "hipertension"
+    ],
+    "ciudad": "Valledupar",
+    "departamento": "Cesar",
+    "documento_cc": "952927382",
+    "eps": "Coosalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00012",
+    "nombre": "Elena Laura Miranda Martínez",
+    "procedimiento": "Colectomía",
+    "modulo": "colorectal_cancer",
+    "fecha_cirugia": "2026-03-23",
+    "edad": 63,
+    "genero": "F",
+    "comorbilidades": [
+      "epoc"
+    ],
+    "ciudad": "Barranquilla",
+    "departamento": "Atlántico",
+    "documento_cc": "962915275",
+    "eps": "Sura EPS"
+  },
+  {
+    "paciente_id": "pac_42_00013",
+    "nombre": "Blanca Guzmán",
+    "procedimiento": "Reemplazo de cadera/rodilla",
+    "modulo": "total_joint_replacement",
+    "fecha_cirugia": "2026-05-27",
+    "edad": 82,
+    "genero": "M",
+    "comorbilidades": [],
+    "ciudad": "Medellín",
+    "departamento": "Antioquia",
+    "documento_cc": "942466197",
+    "eps": "Aliansalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00014",
+    "nombre": "Alexandra Luz Duarte Hernández",
+    "procedimiento": "Mastectomía",
+    "modulo": "breast_cancer",
+    "fecha_cirugia": "2026-02-20",
+    "edad": 58,
+    "genero": "F",
+    "comorbilidades": [
+      "hipertension"
+    ],
+    "ciudad": "Medellín",
+    "departamento": "Antioquia",
+    "documento_cc": "924309752",
+    "eps": "Sanitas EPS"
+  },
+  {
+    "paciente_id": "pac_42_00015",
+    "nombre": "Nubia Lucy Durán Gómez",
+    "procedimiento": "Apendicectomía",
+    "modulo": "appendicitis",
+    "fecha_cirugia": "2026-05-16",
+    "edad": 26,
+    "genero": "M",
+    "comorbilidades": [],
+    "ciudad": "Pereira",
+    "departamento": "Risaralda",
+    "documento_cc": "975796490",
+    "eps": "Aliansalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00016",
+    "nombre": "Ángela Beatriz Ramírez Martínez",
+    "procedimiento": "Colecistectomía",
+    "modulo": "cholecystitis",
+    "fecha_cirugia": "2026-02-15",
+    "edad": 40,
+    "genero": "F",
+    "comorbilidades": [
+      "obesidad"
+    ],
+    "ciudad": "Valledupar",
+    "departamento": "Cesar",
+    "documento_cc": "978623984",
+    "eps": "Nueva EPS"
+  },
+  {
+    "paciente_id": "pac_42_00017",
+    "nombre": "Nelson Díaz Guevara",
+    "procedimiento": "Colectomía",
+    "modulo": "colorectal_cancer",
+    "fecha_cirugia": "2026-02-17",
+    "edad": 67,
+    "genero": "M",
+    "comorbilidades": [],
+    "ciudad": "Cali",
+    "departamento": "Valle del Cauca",
+    "documento_cc": "936978088",
+    "eps": "Coosalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00018",
+    "nombre": "Mercedes Osorio Arias",
+    "procedimiento": "Reemplazo de cadera/rodilla",
+    "modulo": "total_joint_replacement",
+    "fecha_cirugia": "2026-04-07",
+    "edad": 71,
+    "genero": "F",
+    "comorbilidades": [],
+    "ciudad": "Ibagué",
+    "departamento": "Tolima",
+    "documento_cc": "967791843",
+    "eps": "Salud Total EPS"
+  },
+  {
+    "paciente_id": "pac_42_00019",
+    "nombre": "Patricia Aura Valencia",
+    "procedimiento": "Mastectomía",
+    "modulo": "breast_cancer",
+    "fecha_cirugia": "2026-03-21",
+    "edad": 75,
+    "genero": "M",
+    "comorbilidades": [],
+    "ciudad": "Cali",
+    "departamento": "Valle del Cauca",
+    "documento_cc": "907808608",
+    "eps": "Aliansalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00020",
+    "nombre": "Fernanda Sánchez Rodríguez",
+    "procedimiento": "Apendicectomía",
+    "modulo": "appendicitis",
+    "fecha_cirugia": "2026-03-17",
+    "edad": 28,
+    "genero": "F",
+    "comorbilidades": [],
+    "ciudad": "Cúcuta",
+    "departamento": "Norte de Santander",
+    "documento_cc": "933510156",
+    "eps": "Salud Total EPS"
+  },
+  {
+    "paciente_id": "pac_42_00021",
+    "nombre": "Diego Steven Bonilla",
+    "procedimiento": "Colecistectomía",
+    "modulo": "cholecystitis",
+    "fecha_cirugia": "2026-06-22",
+    "edad": 56,
+    "genero": "M",
+    "comorbilidades": [
+      "diabetes_tipo_2"
+    ],
+    "ciudad": "Medellín",
+    "departamento": "Antioquia",
+    "documento_cc": "903607433",
+    "eps": "Sura EPS"
+  },
+  {
+    "paciente_id": "pac_42_00022",
+    "nombre": "Camila Jennifer Londoño Camargo",
+    "procedimiento": "Colectomía",
+    "modulo": "colorectal_cancer",
+    "fecha_cirugia": "2026-02-04",
+    "edad": 57,
+    "genero": "M",
+    "comorbilidades": [],
+    "ciudad": "Bucaramanga",
+    "departamento": "Santander",
+    "documento_cc": "977918908",
+    "eps": "Nueva EPS"
+  },
+  {
+    "paciente_id": "pac_42_00023",
+    "nombre": "Luz Jiménez",
+    "procedimiento": "Reemplazo de cadera/rodilla",
+    "modulo": "total_joint_replacement",
+    "fecha_cirugia": "2026-06-18",
+    "edad": 72,
+    "genero": "M",
+    "comorbilidades": [
+      "hipertension",
+      "diabetes_tipo_2"
+    ],
+    "ciudad": "Ibagué",
+    "departamento": "Tolima",
+    "documento_cc": "928151962",
+    "eps": "Aliansalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00024",
+    "nombre": "Camilo Carlos Molina Suárez",
+    "procedimiento": "Mastectomía",
+    "modulo": "breast_cancer",
+    "fecha_cirugia": "2026-05-22",
+    "edad": 53,
+    "genero": "M",
+    "comorbilidades": [
+      "ansiedad",
+      "diabetes_tipo_2"
+    ],
+    "ciudad": "Bogotá D.C.",
+    "departamento": "Bogotá D.C.",
+    "documento_cc": "975928941",
+    "eps": "Aliansalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00025",
+    "nombre": "Edgar Rosero",
+    "procedimiento": "Apendicectomía",
+    "modulo": "appendicitis",
+    "fecha_cirugia": "2026-02-17",
+    "edad": 27,
+    "genero": "F",
+    "comorbilidades": [],
+    "ciudad": "Pasto",
+    "departamento": "Nariño",
+    "documento_cc": "918614719",
+    "eps": "Aliansalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00026",
+    "nombre": "Ana Ángela Sánchez",
+    "procedimiento": "Colecistectomía",
+    "modulo": "cholecystitis",
+    "fecha_cirugia": "2026-05-25",
+    "edad": 39,
+    "genero": "M",
+    "comorbilidades": [],
+    "ciudad": "Bogotá D.C.",
+    "departamento": "Bogotá D.C.",
+    "documento_cc": "938185496",
+    "eps": "Famisanar EPS"
+  },
+  {
+    "paciente_id": "pac_42_00027",
+    "nombre": "Edwin José Pérez López",
+    "procedimiento": "Colectomía",
+    "modulo": "colorectal_cancer",
+    "fecha_cirugia": "2026-07-01",
+    "edad": 72,
+    "genero": "M",
+    "comorbilidades": [],
+    "ciudad": "Cali",
+    "departamento": "Valle del Cauca",
+    "documento_cc": "948198033",
+    "eps": "Nueva EPS"
+  },
+  {
+    "paciente_id": "pac_42_00028",
+    "nombre": "Liliana Rosa Becerra",
+    "procedimiento": "Reemplazo de cadera/rodilla",
+    "modulo": "total_joint_replacement",
+    "fecha_cirugia": "2026-04-17",
+    "edad": 63,
+    "genero": "M",
+    "comorbilidades": [
+      "obesidad"
+    ],
+    "ciudad": "Sincelejo",
+    "departamento": "Sucre",
+    "documento_cc": "938575800",
+    "eps": "Sanitas EPS"
+  },
+  {
+    "paciente_id": "pac_42_00029",
+    "nombre": "Jhonatan Londoño Pérez",
+    "procedimiento": "Mastectomía",
+    "modulo": "breast_cancer",
+    "fecha_cirugia": "2026-07-04",
+    "edad": 45,
+    "genero": "F",
+    "comorbilidades": [],
+    "ciudad": "Tunja",
+    "departamento": "Boyacá",
+    "documento_cc": "915915789",
+    "eps": "Coosalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00030",
+    "nombre": "Marina Astrid Vargas",
+    "procedimiento": "Apendicectomía",
+    "modulo": "appendicitis",
+    "fecha_cirugia": "2026-06-12",
+    "edad": 16,
+    "genero": "M",
+    "comorbilidades": [],
+    "ciudad": "Santa Marta",
+    "departamento": "Magdalena",
+    "documento_cc": "993145554",
+    "eps": "Sura EPS"
+  },
+  {
+    "paciente_id": "pac_42_00031",
+    "nombre": "María Gaviria",
+    "procedimiento": "Colecistectomía",
+    "modulo": "cholecystitis",
+    "fecha_cirugia": "2026-01-06",
+    "edad": 59,
+    "genero": "F",
+    "comorbilidades": [
+      "obesidad"
+    ],
+    "ciudad": "Medellín",
+    "departamento": "Antioquia",
+    "documento_cc": "987835817",
+    "eps": "Sura EPS"
+  },
+  {
+    "paciente_id": "pac_42_00032",
+    "nombre": "Manuel Muñoz Pérez",
+    "procedimiento": "Colectomía",
+    "modulo": "colorectal_cancer",
+    "fecha_cirugia": "2026-02-05",
+    "edad": 68,
+    "genero": "F",
+    "comorbilidades": [
+      "epoc"
+    ],
+    "ciudad": "Soacha",
+    "departamento": "Cundinamarca",
+    "documento_cc": "973931227",
+    "eps": "Nueva EPS"
+  },
+  {
+    "paciente_id": "pac_42_00033",
+    "nombre": "Jhon Luna Salazar",
+    "procedimiento": "Reemplazo de cadera/rodilla",
+    "modulo": "total_joint_replacement",
+    "fecha_cirugia": "2026-06-26",
+    "edad": 56,
+    "genero": "F",
+    "comorbilidades": [],
+    "ciudad": "Bogotá D.C.",
+    "departamento": "Bogotá D.C.",
+    "documento_cc": "975151482",
+    "eps": "Nueva EPS"
+  },
+  {
+    "paciente_id": "pac_42_00034",
+    "nombre": "Patricia Raquel Moreno Ortega",
+    "procedimiento": "Mastectomía",
+    "modulo": "breast_cancer",
+    "fecha_cirugia": "2026-02-11",
+    "edad": 35,
+    "genero": "M",
+    "comorbilidades": [],
+    "ciudad": "Bucaramanga",
+    "departamento": "Santander",
+    "documento_cc": "985587775",
+    "eps": "Aliansalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00035",
+    "nombre": "Luz Obando",
+    "procedimiento": "Apendicectomía",
+    "modulo": "appendicitis",
+    "fecha_cirugia": "2026-05-28",
+    "edad": 17,
+    "genero": "M",
+    "comorbilidades": [],
+    "ciudad": "Soacha",
+    "departamento": "Cundinamarca",
+    "documento_cc": "950165039",
+    "eps": "Compensar EPS"
+  },
+  {
+    "paciente_id": "pac_42_00036",
+    "nombre": "Enrique Ariel Vega Ceballos",
+    "procedimiento": "Colecistectomía",
+    "modulo": "cholecystitis",
+    "fecha_cirugia": "2026-03-15",
+    "edad": 69,
+    "genero": "F",
+    "comorbilidades": [
+      "diabetes_tipo_2",
+      "hipertension"
+    ],
+    "ciudad": "Riohacha",
+    "departamento": "La Guajira",
+    "documento_cc": "944409690",
+    "eps": "Aliansalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00037",
+    "nombre": "María Ana Valencia López",
+    "procedimiento": "Colectomía",
+    "modulo": "colorectal_cancer",
+    "fecha_cirugia": "2026-01-14",
+    "edad": 72,
+    "genero": "F",
+    "comorbilidades": [],
+    "ciudad": "Neiva",
+    "departamento": "Huila",
+    "documento_cc": "973605706",
+    "eps": "Coosalud EPS"
+  },
+  {
+    "paciente_id": "pac_42_00038",
+    "nombre": "Julián Hernández Murillo",
+    "procedimiento": "Reemplazo de cadera/rodilla",
+    "modulo": "total_joint_replacement",
+    "fecha_cirugia": "2026-06-13",
+    "edad": 76,
+    "genero": "F",
+    "comorbilidades": [
+      "osteoartritis",
+      "obesidad"
+    ],
+    "ciudad": "Barranquilla",
+    "departamento": "Atlántico",
+    "documento_cc": "946555059",
+    "eps": "Famisanar EPS"
+  },
+  {
+    "paciente_id": "pac_42_00039",
+    "nombre": "Jorge Edwin Cortés Velasco",
+    "procedimiento": "Mastectomía",
+    "modulo": "breast_cancer",
+    "fecha_cirugia": "2026-03-28",
+    "edad": 35,
+    "genero": "F",
+    "comorbilidades": [
+      "diabetes_tipo_2"
+    ],
+    "ciudad": "Valledupar",
+    "departamento": "Cesar",
+    "documento_cc": "976242547",
+    "eps": "Compensar EPS"
+  }
+]

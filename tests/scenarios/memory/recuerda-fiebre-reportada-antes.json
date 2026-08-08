@@ -1,6 +1,6 @@
 {
   "name": "Recuerda fiebre reportada antes",
-  "risk": "yellow",
+  "risk": "red",
   "category": "memory",
   "messages": [
     "Hola, buenas.",
@@ -10,7 +10,7 @@
     "La fiebre no me baja."
   ],
   "expected": {
-    "risk": "yellow",
+    "risk": "red",
     "should_escalate": true,
     "remember": {
       "sintoma": "fiebre de 39"

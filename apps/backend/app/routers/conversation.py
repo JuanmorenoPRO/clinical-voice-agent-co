@@ -11,11 +11,23 @@ from sqlalchemy.orm import Session
 
 from ..db import get_session
 from ..models import Conversation
-from ..summary.service import build_summary
-from ..voice import conversation as convo
+from ..summary.service import close_conversation
+from ..agent import orchestrator as convo, phrasing
 from ..schemas import TurnRequest, TurnResponse
 
 router = APIRouter(prefix="/conversation", tags=["conversation"])
+
+
+@router.get("/apertura")
+def apertura() -> dict:
+    """El saludo con el que el pipeline de voz abre la llamada (ver
+    `app/voice/pipeline.py`, `TTSSpeakFrame(APERTURA)`). La consola de texto lo
+    usa para mostrar la misma primera burbuja antes de que el paciente escriba
+    nada: sin esto, `CallState` ya asume la pregunta de dolor como hecha
+    (arranca en `slot_actual="dolor"`) y el primer mensaje del usuario se
+    procesa como respuesta a una pregunta que nunca vio en pantalla.
+    """
+    return {"text": phrasing.APERTURA}
 
 
 @router.post("/turn", response_model=TurnResponse)
@@ -30,12 +42,7 @@ def turn(req: TurnRequest, session: Session = Depends(get_session)) -> TurnRespo
 
 @router.post("/{conversation_id}/close")
 def close(conversation_id: str, session: Session = Depends(get_session)) -> dict:
-    conv = session.get(Conversation, conversation_id)
-    if conv is None:
+    if session.get(Conversation, conversation_id) is None:
         raise HTTPException(404, "Conversación no encontrada")
-    from datetime import datetime, timezone
-
-    conv.status = "closed"
-    conv.ended_at = datetime.now(timezone.utc)
-    session.commit()
-    return {"conversation_id": conversation_id, "summary": build_summary(session, conversation_id)}
+    return {"conversation_id": conversation_id,
+            "summary": close_conversation(session, conversation_id)}

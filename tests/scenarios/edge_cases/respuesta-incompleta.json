@@ -1,6 +1,6 @@
 {
   "name": "Respuesta incompleta",
-  "risk": "green",
+  "risk": "red",
   "category": "edge_cases",
   "messages": [
     "Hola, buenas.",
@@ -9,7 +9,7 @@
     "Ahí más o menos."
   ],
   "expected": {
-    "risk": "green",
-    "should_escalate": false
+    "risk": "red",
+    "should_escalate": true
   }
 }

@@ -1,0 +1,15 @@
+{
+  "name": "Herida enrojecida y sin apetito",
+  "risk": "yellow",
+  "category": "yellow",
+  "messages": [
+    "Hola, buenas.",
+    "La herida se ve un poco rojita alrededor.",
+    "Casi no he podido comer, se me quitaron las ganas."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

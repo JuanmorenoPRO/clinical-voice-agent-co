@@ -1,0 +1,16 @@
+{
+  "name": "Dolor moderado con febrícula",
+  "risk": "yellow",
+  "category": "yellow",
+  "messages": [
+    "Hola, buenas.",
+    "Me operaron hace dos días.",
+    "El dolor está en un 5.",
+    "Me tomé la temperatura y marca 37.5."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

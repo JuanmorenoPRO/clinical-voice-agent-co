@@ -5,8 +5,8 @@
   "messages": [
     "Hola, buenas.",
     "No me duele nada.",
-    "Bueno, en realidad tengo un dolor de 9.",
-    "No, no me duele... sí me duele mucho y la medicación no sirve."
+    "Bueno, en realidad tengo un dolor de 6.",
+    "No, no me duele... sí me duele y además la herida se ve rojita."
   ],
   "expected": {
     "risk": "yellow",

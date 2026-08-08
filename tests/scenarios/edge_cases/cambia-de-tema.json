@@ -5,7 +5,7 @@
   "messages": [
     "Hola, buenas.",
     "¿Vio el partido de ayer?",
-    "Ah, bueno. Tengo un dolor de 8 que no cede con la pastilla.",
+    "Ah, bueno. Tengo un dolor de 5 y algo de fiebre, 37.5.",
     "¿Y cómo estará el clima mañana?"
   ],
   "expected": {

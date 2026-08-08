@@ -1,6 +1,6 @@
 {
   "name": "Cree que algo salió mal",
-  "risk": "yellow",
+  "risk": "red",
   "category": "emotional",
   "messages": [
     "Hola, buenas.",
@@ -9,7 +9,7 @@
   ],
   "expected": {
     "should_reassure": true,
-    "risk": "yellow",
+    "risk": "red",
     "should_escalate": true
   }
 }

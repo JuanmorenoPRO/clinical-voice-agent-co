@@ -1,6 +1,6 @@
 {
   "name": "Recuerda que es diabético",
-  "risk": "yellow",
+  "risk": "red",
   "category": "memory",
   "messages": [
     "Hola, buenas.",
@@ -10,7 +10,7 @@
     "Ahora tengo fiebre de 39."
   ],
   "expected": {
-    "risk": "yellow",
+    "risk": "red",
     "should_escalate": true,
     "remember": {
       "antecedente": "diabético"

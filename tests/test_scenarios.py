@@ -41,6 +41,7 @@ def test_todas_las_categorias_presentes():
     categorias = {s.category for s in scenarios}
     esperadas = {
         "green", "yellow", "red", "emotional", "edge_cases", "memory", "colombian_language",
+        "adversarial", "knowledge",
     }
     assert esperadas <= categorias, f"Faltan categorías: {esperadas - categorias}"
 

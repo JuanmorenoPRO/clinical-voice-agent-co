@@ -1,0 +1,15 @@
+{
+  "name": "Dolor que no deja dormir bien",
+  "risk": "yellow",
+  "category": "yellow",
+  "messages": [
+    "Hola, buenas.",
+    "El dolor está en un 6, molesto pero soportable.",
+    "Casi no pegué el ojo en toda la noche, me desperté a cada rato."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

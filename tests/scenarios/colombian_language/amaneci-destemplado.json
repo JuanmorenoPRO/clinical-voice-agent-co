@@ -1,0 +1,18 @@
+{
+  "name": "Amanecí destemplado",
+  "risk": "yellow",
+  "category": "colombian_language",
+  "messages": [
+    "Hola, buenas.",
+    "Amanecí destemplado, como afiebrado.",
+    "Me tomé la temperatura por si acaso, 37.6.",
+    "Y la herida se ve rojita."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "must_interpret": [
+      "amanecí destemplado"
+    ]
+  }
+}

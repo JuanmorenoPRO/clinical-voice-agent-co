@@ -1,0 +1,15 @@
+{
+  "name": "Dolor moderado con la herida irritada",
+  "risk": "yellow",
+  "category": "yellow",
+  "messages": [
+    "Hola, buenas.",
+    "El dolor es un 5, se aguanta.",
+    "Pero la herida se ve rojita alrededor de los puntos."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

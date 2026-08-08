@@ -22,14 +22,16 @@ _handler = None
 
 
 def _missing_config() -> list[str]:
+    """Qué falta para poder hablar.
+
+    Solo una credencial: la de Groq, para el reconocimiento de voz. El TTS (Kokoro)
+    y el LLM (Ollama) corren en local y no piden clave, que es lo que permite
+    documentar un arranque con un único secreto.
+    """
     s = get_settings()
     missing = []
-    if not s.deepgram_api_key:
-        missing.append("DEEPGRAM_API_KEY")
-    if not s.elevenlabs_api_key:
-        missing.append("ELEVENLABS_API_KEY")
-    if not s.elevenlabs_voice_id:
-        missing.append("ELEVENLABS_VOICE_ID")
+    if not s.groq_api_key:
+        missing.append("GROQ_API_KEY")
     return missing
 
 
@@ -65,7 +67,8 @@ async def offer(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(
             400,
             f"Modo de voz sin configurar. Faltan variables en .env: {', '.join(missing)}. "
-            "Elige además una voz nativa es-CO para ELEVENLABS_VOICE_ID (ADR-007).",
+            "La clave de Groq es gratuita y se obtiene en https://console.groq.com "
+            "(un minuto, sin tarjeta).",
         )
 
     try:
@@ -74,16 +77,19 @@ async def offer(request: Request, background_tasks: BackgroundTasks):
     except ImportError as exc:  # pragma: no cover
         raise HTTPException(
             503,
-            "Las dependencias de voz (Pipecat) no están instaladas. Reconstruye con "
-            "INSTALL_VOICE=true: `INSTALL_VOICE=true docker compose up --build`. "
+            "Las dependencias de voz no están instaladas. Ejecuta: "
+            "pip install -r apps/backend/requirements-voice.txt. "
             f"Detalle: {exc}",
         )
 
     body = await request.json()
+    # `patient_id` es nuestro, no del contrato de Pipecat: se saca antes de
+    # construir el request o `SmallWebRTCRequest` falla por campo desconocido.
+    patient_id = body.pop("patient_id", None)
     handler = _get_handler()
 
     async def _on_connection(connection):
-        background_tasks.add_task(run_bot, connection)
+        background_tasks.add_task(run_bot, connection, patient_id)
 
     answer = await handler.handle_web_request(
         request=SmallWebRTCRequest(**body),

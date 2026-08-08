@@ -131,6 +131,8 @@ def _summary_cards(m: SuiteMetrics) -> str:
         ("Seguridad", _score(m.avg_safety), False),
         ("Clínico", _score(m.avg_clinical), False),
         ("Memoria", _score(m.avg_memory), False),
+        ("Límites", _score(m.avg_boundaries), False),
+        ("Conocimiento", _score(m.avg_knowledge), False),
         ("Global", _score(m.avg_overall), False),
     ]
     out = ['<div class="cards">']

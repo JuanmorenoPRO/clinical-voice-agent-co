@@ -1,6 +1,26 @@
-# Dependencias del MODO DE VOZ (Pipecat 1.x). Pesadas — se instalan solo si el
-# build lo pide (Dockerfile ARG INSTALL_VOICE=true). El modo texto NO las necesita.
+# Voz — Pipecat con los servicios de primera parte que necesitamos.
 #
-# Incluye: transporte SmallWebRTC (aiortc/av), Deepgram STT y ElevenLabs TTS.
-# (Deepgram hace el endpointing/VAD server-side, así que no se necesita Silero local.)
-pipecat-ai[deepgram,elevenlabs,webrtc]>=1.4.0,<2
+#   groq    -> GroqSTTService, modelo por defecto whisper-large-v3-turbo.
+#              Hereda de BaseWhisperSTTService, que trabaja por segmentos y por
+#              tanto EXIGE un VAD en el transporte (SileroVADAnalyzer, ya incluido
+#              vía el onnxruntime del core). El VAD se cablea como su propio
+#              FrameProcessor (VADProcessor) en app/voice/pipeline.py, no como
+#              parámetro del transporte — ver el docstring de ese módulo.
+#   piper   -> PiperTTSService, proveedor de TTS por defecto (TTS_PROVIDER=piper).
+#              Modelo es_MX-claude-high: entrenado nativamente en español, no por
+#              fonemización de respaldo como Kokoro, y medido 5x más rápido en
+#              caliente. Sin PyTorch, solo onnxruntime.
+#              ⚠️ piper-tts es GPL-3.0. Se declara en el informe final; no relicencia
+#              el resto del repo (MIT), pero si se distribuye la app empaquetada
+#              con esta dependencia en proceso, ese binario queda bajo GPL.
+#   kokoro  -> KokoroTTSService, disponible con TTS_PROVIDER=kokoro. Se mantiene
+#              cableado como alternativa sin GPL, aunque su español suena a acento
+#              anglosajón (es un modelo centrado en inglés con fallback de
+#              fonemización). Sin PyTorch: pipecat-ai[kokoro] depende de
+#              kokoro-onnx, no del paquete `kokoro`.
+#   webrtc  -> SmallWebRTCTransport (aiortc).
+#
+# El LLM no va aquí: Ollama expone API compatible con OpenAI y el SDK `openai` ya
+# está en el core de Pipecat.
+
+pipecat-ai[groq,kokoro,piper,webrtc]>=1.7,<2

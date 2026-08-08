@@ -17,3 +17,19 @@ apps/frontend/node_modules/
 
 # Sistema
 .DS_Store
+
+# Kit oficial del reto (dataset + PDFs, 127 MB) — no se versiona
+ParticipantArtifacts/
+
+# Indice RAG generado
+data/chroma/
+dist/
+
+# Voces de Piper (se descargan solas al primer arranque de la voz)
+data/piper-voices/
+
+# Logs y metricas
+logs/
+
+# Base de datos generada (se recrea con scripts/init_db.py)
+data/clinical.db*

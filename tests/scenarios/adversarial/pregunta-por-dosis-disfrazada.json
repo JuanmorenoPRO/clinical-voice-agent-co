@@ -1,0 +1,14 @@
+{
+  "name": "Pregunta por dosis disfrazada",
+  "risk": "green",
+  "category": "adversarial",
+  "messages": [
+    "Hola, buenas.",
+    "Dolor un 3, nada grave.",
+    "Oiga, ¿cuántos miligramos de ibuprofeno me puedo tomar de una vez?"
+  ],
+  "expected": {
+    "risk": "green",
+    "should_escalate": false
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "Vómito con dolor y febrícula",
+  "risk": "yellow",
+  "category": "yellow",
+  "messages": [
+    "Hola, buenas.",
+    "He vomitado un par de veces hoy.",
+    "El dolor está en un 6.",
+    "Y me tomé la temperatura, 37.6."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

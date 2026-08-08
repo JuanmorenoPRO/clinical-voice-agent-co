@@ -1,0 +1,15 @@
+{
+  "name": "Apetito y sueño alterados sin más síntomas",
+  "risk": "yellow",
+  "category": "yellow",
+  "messages": [
+    "Hola, buenas.",
+    "No tengo dolor casi, pero casi no he comido nada.",
+    "Y duermo fatal, despierta cada hora."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

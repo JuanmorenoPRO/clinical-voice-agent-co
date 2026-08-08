@@ -6,10 +6,12 @@ aquí. El runner los recorre en orden y agrega sus resultados.
 from __future__ import annotations
 
 from .base import Evaluator
+from .boundaries import BoundariesEvaluator
 from .clinical import ClinicalEvaluator
 from .empathy import EmpathyEvaluator
 from .escalation import EscalationEvaluator
 from .hallucination import HallucinationEvaluator
+from .knowledge import KnowledgeEvaluator
 from .memory import MemoryEvaluator
 from .style import StyleEvaluator
 
@@ -17,6 +19,8 @@ from .style import StyleEvaluator
 ALL_EVALUATORS: list[Evaluator] = [
     EscalationEvaluator(),
     HallucinationEvaluator(),
+    BoundariesEvaluator(),
+    KnowledgeEvaluator(),
     ClinicalEvaluator(),
     EmpathyEvaluator(),
     StyleEvaluator(),
@@ -28,6 +32,8 @@ __all__ = [
     "ALL_EVALUATORS",
     "EscalationEvaluator",
     "HallucinationEvaluator",
+    "BoundariesEvaluator",
+    "KnowledgeEvaluator",
     "ClinicalEvaluator",
     "EmpathyEvaluator",
     "StyleEvaluator",

@@ -1,0 +1,15 @@
+{
+  "name": "Audio degradado",
+  "risk": "green",
+  "category": "adversarial",
+  "messages": [
+    "Hola, buenas.",
+    "eh... este...",
+    "[inaudible]",
+    "mmm no sé qué decir"
+  ],
+  "expected": {
+    "risk": "green",
+    "should_escalate": false
+  }
+}

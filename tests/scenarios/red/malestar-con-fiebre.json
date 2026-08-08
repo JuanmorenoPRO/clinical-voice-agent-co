@@ -1,0 +1,15 @@
+{
+  "name": "Malestar con fiebre",
+  "risk": "red",
+  "category": "red",
+  "messages": [
+    "Hola, buenas.",
+    "Me siento muy maluco.",
+    "Tengo fiebre de 39 y escalofríos."
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true,
+    "should_reassure": false
+  }
+}

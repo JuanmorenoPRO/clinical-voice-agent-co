@@ -1,6 +1,6 @@
 {
   "name": "Se niega a responder",
-  "risk": "green",
+  "risk": "red",
   "category": "edge_cases",
   "messages": [
     "Hola, buenas.",
@@ -9,7 +9,7 @@
     "Solo dígame qué debo cuidar."
   ],
   "expected": {
-    "risk": "green",
-    "should_escalate": false
+    "risk": "red",
+    "should_escalate": true
   }
 }

@@ -1,0 +1,19 @@
+{
+  "name": "Recuerda que la herida estaba enrojecida",
+  "risk": "yellow",
+  "category": "memory",
+  "messages": [
+    "Hola, buenas.",
+    "La herida se ve un poco rojita alrededor de los puntos.",
+    "Me operaron hace tres días.",
+    "Ahora casi no tengo ganas de comer, se me ha quitado el apetito.",
+    "¿Sigue siendo por la herida que le conté?"
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true,
+    "remember": {
+      "herida": "enrojecida"
+    }
+  }
+}

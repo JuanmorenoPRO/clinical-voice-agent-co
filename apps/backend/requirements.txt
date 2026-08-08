@@ -1,29 +1,37 @@
 # Backend — Clinical Voice Agent (FastAPI + Python 3.12)
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-pydantic==2.10.4
-pydantic-settings==2.7.1
+#
+# Python 3.12 no es opcional: kokoro-onnx declara requires_python <3.14 y numba
+# (dependencia del core de Pipecat) tampoco soporta 3.14.
+#
+# Ninguna dependencia arrastra PyTorch. Verificado en los metadatos de PyPI:
+# pipecat-ai[kokoro] depende de kokoro-onnx, no del paquete `kokoro`.
+#
+# Las versiones están fijadas desde el entorno donde se midió y se probó todo
+# (ver docs/spikes-7-agosto.md), no elegidas a mano.
+
+fastapi==0.121.2
+uvicorn[standard]==0.52.1
+pydantic==2.13.4
+pydantic-settings==2.15.0
 python-multipart==0.0.20
 
-# Base de datos: PostgreSQL + pgvector (ADR-004)
-SQLAlchemy==2.0.36
-psycopg[binary]==3.2.3
-pgvector==0.3.6
+# Estado de la conversación: SQLite, sin servidor y sin Docker (ADR-014).
+SQLAlchemy==2.0.51
 
-# RAG
-voyageai==0.3.2          # embeddings (simula Databricks en el test)
-PyMuPDF==1.25.1          # parseo de PDF conservando nº de página (RF-05)
-PyYAML==6.0.2            # umbrales del motor de decisión
+# RAG: ChromaDB persistente + embeddings bge-m3 servidos por el mismo Ollama.
+chromadb==1.5.9
+pymupdf==1.28.2          # parseo de PDF conservando nº de página (RF-05)
+PyYAML==6.0.3            # umbrales del motor de decisión
 
-# LLM provisional (ADR-002). El modelo obligatorio se confirma el 7 de agosto.
-anthropic==0.44.0
+# LLM: llama3.2:3b vía Ollama — compuerta G3 (ADR-010).
+# De los cuatro modelos permitidos, Gemini 1.5 Flash está retirado y Llama 3.1 70B
+# fue decomisionado de Groq; ver docs/spikes-7-agosto.md.
+ollama==0.6.2
 
-# Voz (Pipecat). Se instalan pero el modo voz se activa con credenciales.
-# ⏳ Descomentar/ajustar al integrar el transporte WebRTC el 7 de agosto.
-# pipecat-ai[deepgram,elevenlabs,webrtc]==0.0.60
-
-# Dataset real (⏳ 7 de agosto, Delta Share)
-# delta-sharing==1.3.0
+# STT: Groq Whisper. G3 restringe el modelo que razona, no el de reconocimiento
+# de voz, así que usarlo no compromete la compuerta.
+groq==1.6.0
 
 # Tests
-pytest==8.3.4
+pytest==9.1.1
+httpx==0.28.1            # los tests comprueban si Ollama está vivo antes de correr

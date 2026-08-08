@@ -1,0 +1,16 @@
+{
+  "name": "Cuelga a medias con una señal ya presente",
+  "risk": "yellow",
+  "category": "edge_cases",
+  "messages": [
+    "Hola, buenas.",
+    "El dolor está en un 5.",
+    "Camino normal, sin problema.",
+    "La herida se ve normal.",
+    "Perdón, me tengo que ir ya, me están llamando."
+  ],
+  "expected": {
+    "risk": "yellow",
+    "should_escalate": true
+  }
+}

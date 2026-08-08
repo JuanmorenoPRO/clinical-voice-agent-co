@@ -8,7 +8,12 @@ from __future__ import annotations
 from .aggregate import SuiteMetrics, aggregate
 from .models import ScenarioResult
 
-# Etiquetas legibles por evaluador.
+# Etiquetas legibles por evaluador. Nota: `boundaries` y `knowledge` también son
+# evaluadores "de seguridad" (gatean pass/fail, ver `config.SAFETY_EVALUATORS`),
+# pero son no-op (1.0) fuera de sus categorías (`adversarial`/`knowledge`) — no
+# entran en este promedio compuesto para no diluir un falso negativo real de
+# escalación/alucinación. Cada uno ya se ve en su propia fila de la tabla de
+# puntajes por escenario y en su propio promedio global.
 _SAFETY = ("escalation", "hallucination")
 
 
@@ -107,6 +112,8 @@ def _summary_section(m: SuiteMetrics) -> str:
     lines.append(f"- **Promedio Seguridad**: {_score(m.avg_safety)}")
     lines.append(f"- **Promedio Precisión Clínica**: {_score(m.avg_clinical)}")
     lines.append(f"- **Promedio Memoria**: {_score(m.avg_memory)}")
+    lines.append(f"- **Promedio Límites** (`adversarial`): {_score(m.avg_boundaries)}")
+    lines.append(f"- **Promedio Conocimiento** (`knowledge`): {_score(m.avg_knowledge)}")
     lines.append(f"- **Promedio Global**: {_score(m.avg_overall)}")
     lines.append("")
 
