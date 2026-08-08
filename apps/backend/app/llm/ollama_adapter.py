@@ -538,7 +538,15 @@ _DOLOR_ROJO = 8
 # escalaría a CRÍTICO; no se exige para valores por debajo del umbral rojo,
 # donde equivocarse pesa menos y restringir de más le quitaría al modelo el
 # trabajo que sí sabe hacer (mapear una paráfrasis real que no está en el léxico).
-_MENCIONA_DOLOR = re.compile(r"dolor|duel")
+# Cubre también las paráfrasis de dolor que no llevan la raíz, porque la guarda
+# se aplica ahora a CUALQUIER valor del modelo, no solo a los ≥8 (ver
+# `_to_symptoms`). Sin esta ampliación se perdería "no aguanto" o "me está
+# matando", que es justo el trabajo que solo el modelo sabe hacer.
+_MENCIONA_DOLOR = re.compile(
+    r"dolor|duel|adolori|aguant|molest|punza|puntada|arde|ardor|quema"
+    r"|matando|insoportable|escala|del\s+(uno|cero)\s+al|de\s+10|/10"
+    r"|\b(un|como\s+un)\s+(10|[0-9])\b"
+)
 
 # Generalización de `_MENCIONA_DOLOR` al resto de slots que pueden escalar a
 # CRÍTICO desde un solo valor. Medido contra llama3.2:3b el 8-ago:
@@ -627,7 +635,12 @@ def _to_symptoms(data: dict, slot: str, utterance: str) -> Symptoms:
     field, _ = SLOT_FIELDS[slot]
     if slot == "dolor":
         valor = int(raw)
-        if valor >= _DOLOR_ROJO and not _MENCIONA_DOLOR.search(lexicon.normalize(utterance)):
+        # La guarda se aplica a CUALQUIER valor, no solo a los que escalan.
+        # Medido: ante "Y la herida se ve rojita" —con la pregunta de dolor en su
+        # contexto— el 3B devolvió 7. No escalaba por sí solo, pero `merge_symptoms`
+        # toma el máximo, así que ese 7 inventado tapaba el "un 4" real que el
+        # paciente daba dos turnos después, y además el agente lo decía en voz alta.
+        if not _MENCIONA_DOLOR.search(lexicon.normalize(utterance)):
             log.warning(
                 "dolor=%d del LLM descartado: la frase no menciona dolor (%r)",
                 valor, utterance[:80],

@@ -184,7 +184,13 @@ _FIEBRE_SI = re.compile(
     # "me siento caliente" no casaba: `siento.*calor` no cubre "caliente" y la
     # alternativa de abajo exige "ando/estoy". Se unifican en un solo patrón de
     # verbo de sensación + raíz térmica.
-    r"|(siento|sentido|senti|ando|estoy|estaba|amaneci)\s+.{0,14}(calor|calient|tibi|arde)"
+    r"|(siento|sentido|senti|ando|estoy|estaba|estado|amaneci)\s+.{0,14}(calor|calient|tibi|arde)"
+    # "acalorada" es la forma colombiana corriente de referir febrícula, y no
+    # llevaba verbo reconocido delante ("he estado como acalorada un poco"), así
+    # que solo la salvaba el LLM — y solo si le tocaba el slot de fiebre. Costaba
+    # un rojo entero: en caso_tray_pac_42_00030_7 la fiebre de 38.9 nunca se mide,
+    # y sin `fever=True` la regla de fiebre referida no puede dispararse.
+    r"|acalorad\w+|sofocad\w+|con\s+bochorno"
 )
 _FIEBRE_NO = re.compile(
     r"no\s+(he\s+tenido|tengo|ha\s+tenido)\s+(fiebre|calentura|temperatura)"

@@ -24,13 +24,49 @@ def test_primer_turno_critico_escala():
 
 
 def test_segundo_turno_critico_no_repite_el_guion():
-    """El bug reportado: sin este corte, esto seguiría devolviendo 'escalar'."""
+    """El bug reportado: sin este corte, esto seguiría devolviendo 'escalar'.
+
+    Ya no cierra: por la vía de enfermería la llamada pasa a CONFIRMACIÓN y espera
+    a que el paciente diga que entendió. Lo que sí se conserva —y es el bug
+    original— es que el guion NO se vuelve a entregar.
+    """
     tras_escalar = apply(CallState(), Action(kind="escalar", phase=Phase.ESCALAMIENTO), CRITICO)
     assert tras_escalar.phase is Phase.ESCALAMIENTO
 
     a = next_action(tras_escalar, CRITICO, escalar=True)
+    assert a.kind != "escalar", "el guion de seguridad no puede repetirse"
+    assert a.kind == "confirmar"
+    assert a.phase is Phase.CONFIRMACION
+
+
+def test_en_emergencia_123_si_se_cuelga_rapido():
+    """Retener al paciente en la línea compite con la llamada al 123."""
+    tras_escalar = apply(CallState(), Action(kind="escalar", phase=Phase.ESCALAMIENTO), CRITICO)
+    a = next_action(tras_escalar, CRITICO, escalar=True, emergencia=True)
     assert a.kind == "cerrar"
     assert a.phase is Phase.TERMINADA
+
+
+def test_la_confirmacion_cierra_cuando_el_paciente_se_despide():
+    estado = CallState(phase=Phase.CONFIRMACION)
+    assert next_action(estado, CRITICO, quiere_colgar=True).kind == "cerrar"
+    # Y mientras no se despida, se le sigue atendiendo.
+    assert next_action(estado, CRITICO).kind == "confirmar"
+
+
+def test_la_confirmacion_no_se_eterniza():
+    """Tope de seguridad: sin él, ruido de STT dejaría la llamada abierta siempre."""
+    estado = CallState(phase=Phase.CONFIRMACION, sin_progreso=script.SIN_PROGRESO_CERRAR)
+    assert next_action(estado, CRITICO).kind == "cerrar"
+
+
+def test_el_guion_agotado_pregunta_antes_de_colgar():
+    """Terminar la lista de preguntas no es terminar la llamada."""
+    completo = Symptoms(pain_level=2, fever=False, mobility="normal", wound="normal",
+                        appetite="normal", sleep="normal")
+    estado = CallState(phase=Phase.ABIERTO, slot_actual=None)
+    assert next_action(estado, completo).kind == "confirmar"
+    assert next_action(estado, completo, quiere_colgar=True).kind == "cerrar"
 
 
 def test_tercer_turno_sigue_cerrado_no_revive_el_guion():
@@ -134,3 +170,15 @@ def test_el_estado_nuevo_sobrevive_a_la_serializacion():
     assert vuelta.seguido == ["fiebre"]
     assert vuelta.ultimo_hash == "abc123"
     assert vuelta.sin_progreso == 2
+
+
+def test_un_saludo_no_gasta_un_reintento():
+    """Reformular es para quien esquivó la pregunta, no para quien no la ha oído."""
+    estado = CallState(phase=Phase.TAMIZAJE, slot_actual="dolor")
+    accion = next_action(estado, Symptoms())
+    assert accion.kind == "repreguntar"
+    tras_saludo = apply(estado, accion, Symptoms(), intento_real=False)
+    assert tras_saludo.repreguntas.get("dolor", 0) == 0
+    # Una evasiva real sí lo gasta.
+    tras_evasiva = apply(estado, accion, Symptoms(), intento_real=True)
+    assert tras_evasiva.repreguntas["dolor"] == 1

@@ -210,9 +210,13 @@ ACUSES: tuple[str, ...] = (
 # Cuando el paciente reporta algo que no está bien. Reconoce sin dramatizar ni
 # tranquilizar: tranquilizar ante un síntoma de alarma es una de las conductas
 # que la rúbrica penaliza explícitamente.
+# Ocho, no cuatro: la ventana anti-repetición es de cinco turnos, así que con
+# cuatro opciones se agotaban y `_rotar` caía al respaldo repitiendo.
 ACUSES_PREOCUPANTE: tuple[str, ...] = (
     "Gracias por contármelo.", "Hizo bien en decírmelo.",
     "Qué bueno que me lo cuenta.", "Me alegra que me lo mencione.",
+    "Menos mal me lo dice.", "Vale, eso me sirve saberlo.",
+    "Le agradezco que me lo comparta.", "Tomo nota de eso.",
 )
 
 # El saludo lleva ya la primera pregunta. No es cosmética: si abre pidiendo permiso
@@ -250,6 +254,35 @@ RECHAZO = (
     "comuníquese con el hospital. Que siga bien."
 )
 NO_ENTENDI = "Perdone, no le escuché bien. ¿Me lo repite?"
+
+# El paciente saluda. Se le devuelve el saludo y se retoma la pregunta pendiente
+# en su forma abierta. Antes esto caía en `respuesta`, no aportaba dato y gastaba
+# un reintento: el agente contestaba a un "Hola, buenas." con la reformulación
+# cerrada del dolor ("¿más cerca de tres o de ocho?"), que es exactamente lo que
+# hace que suene a máquina.
+SALUDO_DE_VUELTA: tuple[str, ...] = (
+    "Buenos días, gracias por contestar.",
+    "Hola, muy buenas, gracias por atenderme.",
+    "Buenas, qué bueno que lo encuentro.",
+)
+
+
+def saludo_de_vuelta(semilla: str, usadas: list[str] | None = None) -> str:
+    return _rotar(SALUDO_DE_VUELTA, semilla, usadas or [])
+
+
+# Fase de CONFIRMACIÓN: el agente ya dijo lo suyo y le devuelve el turno al
+# paciente en vez de colgar. NO repite el guion de seguridad —ese bug ya está
+# cubierto por test_orchestrator_close.py—, solo comprueba que quedó claro.
+CONFIRMAR_CIERRE: tuple[str, ...] = (
+    "¿Le quedó claro lo que va a pasar? ¿Tiene alguna otra duda antes de colgar?",
+    "¿Hay algo más en lo que le pueda ayudar antes de despedirnos?",
+    "¿Quedamos así, o quiere preguntarme algo más?",
+)
+
+
+def confirmar_cierre(semilla: str, usadas: list[str] | None = None) -> str:
+    return _rotar(CONFIRMAR_CIERRE, semilla, usadas or [])
 TERCERO = "Gracias por acompañarlo, lo que me cuente también me sirve."
 
 
@@ -259,7 +292,12 @@ def _rotar(opciones: tuple[str, ...], semilla: str, usadas: list[str]) -> str:
     Determinista a partir de `semilla` (el id del turno) para que una llamada sea
     reproducible en los tests, y no `random`, que haría irrepetibles los fallos.
     """
-    libres = [o for o in opciones if o not in usadas] or list(opciones)
+    # `usadas` son las RESPUESTAS completas de los últimos turnos, no las opciones
+    # sueltas, así que comparar por igualdad nunca casaba y la rotación no evitaba
+    # nada: el agente decía "Gracias por contármelo." dos turnos seguidos. Se
+    # comprueba por contención.
+    libres = [o for o in opciones
+              if not any(o in u for u in usadas)] or list(opciones)
     idx = int(hashlib.sha256(semilla.encode()).hexdigest(), 16) % len(libres)
     return libres[idx]
 
@@ -324,10 +362,18 @@ _CAMPO_DE_SLOT = {"dolor": "pain_level", "fiebre": "fever", "movilidad": "mobili
                   "herida": "wound", "apetito": "appetite", "sueno": "sleep"}
 
 
-def reflejo(slot: str | None, symptoms) -> str | None:
-    """Devuelve el dato entendido dicho en voz alta, o None si no hay qué reflejar."""
+def reflejo(slot: str | None, symptoms, del_turno=None) -> str | None:
+    """Devuelve el dato entendido dicho en voz alta, o None si no hay qué reflejar.
+
+    `del_turno` son los síntomas que aportó ESTE turno. Si se pasa, solo se
+    refleja lo que el paciente acaba de decir: `symptoms` es el acumulado de la
+    llamada, así que sin este filtro el agente repetía "Con calentura, entonces."
+    en cada turno posterior a la fiebre, que suena a bucle.
+    """
     campo = _CAMPO_DE_SLOT.get(slot or "")
     if campo is None:
+        return None
+    if del_turno is not None and getattr(del_turno, campo, None) is None:
         return None
     valor = getattr(symptoms, campo, None)
     if valor is None:
@@ -381,6 +427,8 @@ def textos_cacheables() -> list[str]:
     fijos.extend(SLOT_PERDIDO)
     fijos.extend(OFRECER_SALIDA)
     fijos.extend(VOLVIENDO)
+    fijos.extend(SALUDO_DE_VUELTA)
+    fijos.extend(CONFIRMAR_CIERRE)
     for opciones in SEGUIMIENTOS.values():
         fijos.extend(opciones)
     # Los reflejos del dolor llevan {n}: se enumeran los once valores para que
@@ -394,6 +442,8 @@ def textos_cacheables() -> list[str]:
         fijos.extend(valores.values())
     # ACUSE_OTRO lleva una etiqueta variable: se pre-sintetizan las combinaciones
     # de una sola etiqueta, que son la inmensa mayoría de los turnos.
-    for plantilla in ACUSE_OTRO:
+    # Las que llevan una etiqueta variable se expanden por etiqueta, que es el
+    # caso de la inmensa mayoría de los turnos (una sola señal).
+    for plantilla in (*ACUSE_OTRO, *SINTOMA_CONSULTADO):
         fijos.extend(plantilla.format(e) for e in otros_sintomas.etiquetas())
     return fijos

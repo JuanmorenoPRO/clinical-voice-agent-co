@@ -118,7 +118,8 @@ def _aporto_dato(del_turno: Symptoms, nuevos_otros: list[str]) -> bool:
 def _texto_de(action: Action, *, semilla: str, recientes: list[str],
               nombre: str | None, preocupante: bool, con_acuse: bool = True,
               slot_respondido: str | None = None,
-              acumulado: Symptoms | None = None) -> str:
+              acumulado: Symptoms | None = None,
+              del_turno: Symptoms | None = None) -> str:
     """Traduce la acción del guion a lo que se dice. Todo determinista.
 
     `con_acuse=False` suprime el acuse de recibo. Se usa cuando el turno ya se
@@ -126,13 +127,15 @@ def _texto_de(action: Action, *, semilla: str, recientes: list[str],
     anotado" después de un turno del que no se extrajo nada afirma algo falso, y
     en la llamada que motivó este cambio el agente lo dijo cuatro veces seguidas.
     """
-    if action.kind == "repreguntar":
-        # Una repregunta significa que el turno anterior no dejó dato: aquí nunca
-        # hay acuse, y por eso esta rama no lo lleva.
-        return phrasing.repregunta(action.slot, action.intento)
     if action.kind == "ofrecer_salida":
         return phrasing.ofrecer_salida(semilla, recientes)
-    if action.kind == "seguimiento":
+    if action.kind == "repreguntar":
+        # Normalmente una repregunta no lleva acuse: el slot no se resolvió y
+        # decir "anotado" sería falso. Pero el turno puede haber traído OTRO dato
+        # ("y la herida se ve rojita" mientras se pregunta por el dolor), y ahí
+        # sí hay algo que reconocer — lo decide `con_acuse` abajo.
+        pregunta = phrasing.repregunta(action.slot, action.intento)
+    elif action.kind == "seguimiento":
         # El paciente sí contestó, así que aquí el acuse es sincero: reconoce lo
         # que dijo y pide el dato que falta.
         pregunta = phrasing.seguimiento(action.seguimiento, semilla, recientes)
@@ -151,9 +154,28 @@ def _texto_de(action: Action, *, semilla: str, recientes: list[str],
     # Si se puede decir QUÉ se entendió, se dice. El acuse genérico ("vale,
     # anotado") es el respaldo para cuando el dato no tiene reflejo — por ejemplo
     # el que llegó por extracción cruzada de un slot que no se preguntó.
+    # El reflejo se intenta SIEMPRE, también con riesgo alto. Antes se saltaba
+    # cuando `preocupante`, y el resultado era que en cuanto la llamada subía a
+    # ALTO el agente dejaba de decir qué había entendido y pasaba a soltar
+    # simpatía genérica ("Qué bueno que me lo cuenta") en cada turno. Los reflejos
+    # no tranquilizan ni valoran gravedad —eso lo sigue haciendo el motor de
+    # decisión—, así que son seguros en cualquier nivel de riesgo.
     ack = None
-    if not preocupante and acumulado is not None:
-        ack = phrasing.reflejo(slot_respondido, acumulado)
+    if acumulado is not None:
+        ack = phrasing.reflejo(slot_respondido, acumulado, del_turno)
+        if ack is None and del_turno is not None:
+            # El dato llegó por extracción cruzada: el paciente contestó sobre un
+            # slot distinto al que se preguntaba ("y la herida se ve rojita"
+            # mientras se pregunta por el dolor). Reflejarlo es lo que demuestra
+            # que se oyó; si no, el turno se responde con una repregunta seca.
+            for otro, campo in script.SLOT_FIELD.items():
+                if otro != slot_respondido and getattr(del_turno, campo) is not None:
+                    ack = phrasing.reflejo(otro, acumulado)
+                    if ack:
+                        break
+    # Un reflejo repetido suena a bucle igual que un acuse repetido.
+    if ack is not None and any(ack in r for r in recientes):
+        ack = None
     if ack is None:
         ack = phrasing.acuse(semilla, recientes, preocupante=preocupante)
     return f"{ack} {pregunta}"
@@ -212,7 +234,14 @@ async def process_turn_async(
     repetido = hash_turno == estado.ultimo_hash
     progreso = _aporto_dato(del_turno, nuevos_otros)
 
-    action = script.next_action(estado, acumulado, escalar=critico, repetido=repetido)
+    # `emergencia` distingue las 6 banderas del 123 de la vía de enfermería: ante
+    # una emergencia real, retener al paciente en la línea compite con la llamada
+    # que de verdad importa, así que ahí sí se cuelga rápido.
+    emergencia = decision.escalation_action == "emergencia_123"
+    quiere_colgar = extraccion.intent == "despedida"
+
+    action = script.next_action(estado, acumulado, escalar=critico, repetido=repetido,
+                                emergencia=emergencia, quiere_colgar=quiere_colgar)
     recientes = _aperturas_recientes(prior)
     evidence: RagResult | None = None
 
@@ -236,6 +265,16 @@ async def process_turn_async(
         # Primer turno crítico: se entrega el guion de seguridad completo.
         # Ruta crítica: no pasa por el modelo ni por el RAG.
         final = decision.safety_script or phrasing.cierre(nombre, escalado=True)
+    elif action.kind == "confirmar":
+        # El agente ya dijo lo suyo (guion de seguridad o fin del tamizaje) y le
+        # devuelve el turno al paciente en vez de colgar. Va antes que la rama de
+        # `critico` para que el guion de seguridad NO se repita aquí.
+        semilla = conv.id + str(len(prior))
+        final = phrasing.confirmar_cierre(semilla, recientes)
+        if nuevos_otros:
+            # Si en este turno contó algo nuevo —"y la herida se ve rojita"—, se
+            # reconoce antes de volver a preguntar si quiere colgar.
+            final = f"{phrasing.acuse_otro(nuevos_otros, semilla, recientes)} {final}"
     elif critico or estado.phase is Phase.ESCALAMIENTO:
         # `phase is ESCALAMIENTO` cubre el escalamiento que nace de la política de
         # incertidumbre al cerrar: ese `no_se_pudo_evaluar` no vive en `acumulado`
@@ -254,8 +293,22 @@ async def process_turn_async(
     elif extraccion.intent == "rechazo":
         final = phrasing.RECHAZO
         action = Action(kind="cerrar", phase=Phase.TERMINADA)
+    elif extraccion.intent == "despedida":
+        # El paciente da la llamada por terminada. `next_action` ya lo convirtió
+        # en `cerrar` vía `quiere_colgar`; aquí solo se elige la despedida, que es
+        # cálida y no la fórmula seca del rechazo.
+        final = phrasing.cierre(nombre, escalado=decision.risk_level != "NORMAL")
     elif extraccion.intent == "ininteligible":
         final = phrasing.NO_ENTENDI
+    elif extraccion.intent == "saludo":
+        # El paciente saluda: se le devuelve el saludo y se le hace la pregunta
+        # pendiente en su forma ABIERTA, no la reformulación cerrada. Un saludo no
+        # es una respuesta esquivada — ver `intento_real` en script.apply.
+        semilla = conv.id + str(len(prior))
+        slot_pendiente = action.slot or estado.slot_actual
+        pregunta = (phrasing.pregunta(slot_pendiente, semilla, recientes)
+                    if slot_pendiente else phrasing.PREGUNTA_ABIERTA)
+        final = f"{phrasing.saludo_de_vuelta(semilla, recientes)} {pregunta}"
     elif extraccion.intent == "meta":
         siguiente = _texto_de(action, semilla=conv.id + str(len(prior)),
                               recientes=recientes, nombre=nombre, preocupante=False)
@@ -346,10 +399,14 @@ async def process_turn_async(
                                     preocupante=preocupante,
                                     con_acuse=not nuevos_otros and progreso,
                                     slot_respondido=estado.slot_actual,
-                                    acumulado=acumulado)
+                                    acumulado=acumulado, del_turno=del_turno)
 
-    nuevo_estado = script.apply(estado, action, acumulado,
-                                hash_turno=hash_turno, progreso=progreso)
+    # Saludar, pedir que se repita la pregunta o decir algo social no es intentar
+    # contestarla: esos turnos no gastan reintentos del slot.
+    nuevo_estado = script.apply(
+        estado, action, acumulado, hash_turno=hash_turno, progreso=progreso,
+        intento_real=extraccion.intent not in ("saludo", "meta", "social"),
+    )
 
     # --- alerta, deduplicada por reglas nuevas -------------------------------
     alert_id = _crear_alerta_si_procede(session, conv, decision, acumulado, text)

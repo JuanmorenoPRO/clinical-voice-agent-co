@@ -18,7 +18,7 @@ from typing import Literal
 Intent = Literal[
     "respuesta", "pregunta_clinica", "pregunta_administrativa",
     "fuera_de_mision", "rechazo", "tercero", "ininteligible",
-    "meta", "social",
+    "meta", "social", "saludo", "despedida",
 ]
 
 
@@ -105,11 +105,45 @@ _PREGUNTA = re.compile(
     re.I,
 )
 
+# Negarse a seguir. Antes incluía "adiós/chao/hasta luego", que no es lo mismo:
+# despedirse al final de una llamada bien llevada es cooperar, no rechazar, y
+# ahora es la señal de que se puede colgar (ver `despedida`).
 _RECHAZO = re.compile(
     r"\bno\s+(quiero|voy a)\s+(hablar|contestar|seguir)"
-    r"|dejeme\s+en\s+paz|no\s+me\s+moleste|cuelgue|adios|chao|hasta\s+luego"
-    r"|no\s+tengo\s+tiempo",
+    r"|dejeme\s+en\s+paz|no\s+me\s+moleste|cuelgue\s+ya|no\s+tengo\s+tiempo"
+    r"|no\s+me\s+llame\s+mas",
     re.I,
+)
+
+# Despedirse o dar por terminada la conversación. Es lo que el agente espera en
+# fase de CONFIRMACIÓN para colgar: la llamada no acaba cuando el sistema termina
+# su lista, acaba cuando el paciente entendió y se despide.
+_DESPEDIDA = re.compile(
+    r"\badios\b|\bchao\b|hasta\s+luego|nos\s+vemos|que\s+(este|le\s+vaya)\s+bien"
+    r"|gracias,?\s+(hasta|adios|chao)|listo\s+entonces|ya\s+quedamos"
+    r"|eso\s+es\s+todo|no\s+tengo\s+mas\s+(dudas|preguntas)"
+    r"|(nada|ninguna)\s+mas\b|no,?\s+nada\s+mas|todo\s+claro|quedo\s+claro"
+    r"|ya\s+entendi|entendido\s+gracias|puede\s+colgar",
+    re.I,
+)
+
+# Saludo puro: el turno no dice nada más. "Buenas, el dolor va en un 3" NO entra
+# aquí —el léxico tiene que sacar el 3—, por eso se ancla a toda la cadena.
+# Medido: sin esto, "Hola, buenas." se clasificaba como `respuesta`, no aportaba
+# dato y se comía uno de los dos reintentos del slot de dolor; el agente le
+# contestaba a un saludo con la reformulación cerrada del dolor.
+# Sin "si", "claro" ni "gracias" sueltos: un "sí" pelado es una RESPUESTA legítima
+# a "¿ha tenido fiebre?", y clasificarlo como saludo perdería el dato. "Sí, dígame"
+# sí entra, porque el "dígame" lo desambigua.
+_SALUDO_PIEZA = (
+    r"(?:hola+|buenas|buenos\s+dias|buenas\s+(?:tardes|noches)|alo+|si,?\s+digame"
+    r"|a\s+la\s+orden|con\s+quien\s+hablo|quien\s+habla|digame|que\s+mas"
+    r"|doctor\w*|doctora|senor\w*|senora|senorita|muy\s+amable)"
+)
+# Se encadenan: "Hola, buenas.", "Buenas, doctora", "Aló, sí dígame". Una sola
+# pieza no basta.
+_SALUDO = re.compile(
+    rf"^\W*{_SALUDO_PIEZA}(?:[\s,]+{_SALUDO_PIEZA})*[\s.,!¡¿?]*$", re.I
 )
 
 _TERCERO = re.compile(
@@ -196,6 +230,12 @@ def classify(text: str) -> Intent:
         return "tercero"
     if _RECHAZO.search(t):
         return "rechazo"
+    # El saludo puro va antes que todo lo demás porque el patrón exige que el
+    # turno no diga nada más; si trae contenido clínico ya no casa y sigue.
+    if _SALUDO.match(t):
+        return "saludo"
+    if _DESPEDIDA.search(t):
+        return "despedida"
     if _ADMIN.search(t):
         return "pregunta_administrativa"
 

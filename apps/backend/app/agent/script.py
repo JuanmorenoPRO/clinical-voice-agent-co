@@ -28,6 +28,13 @@ class Phase(StrEnum):
     APERTURA = "apertura"        # identificarse, confirmar paciente y día postop
     TAMIZAJE = "tamizaje"        # los seis slots, en orden
     ABIERTO = "abierto"          # "¿algo más que quiera contarme?"
+    # El agente ya dijo todo lo que tenía que decir y espera a que el paciente
+    # confirme que entendió y quiere colgar. Una llamada de seguimiento no
+    # termina cuando el sistema acaba su lista: termina cuando el paciente se
+    # despide. Sin esta fase, tras el guion de seguridad el paciente seguía
+    # hablando —incluso aportando señales nuevas, "y la herida se ve rojita"— y
+    # el agente le repetía la despedida.
+    CONFIRMACION = "confirmacion"
     CIERRE = "cierre"            # recapitulación y próximos pasos
     ESCALAMIENTO = "escalamiento"  # guion de seguridad; entra desde cualquier fase
     TERMINADA = "terminada"
@@ -160,7 +167,8 @@ def seguimiento_pendiente(state: CallState, symptoms: Symptoms) -> str | None:
 
 
 def next_action(state: CallState, symptoms: Symptoms, *,
-                escalar: bool = False, repetido: bool = False) -> Action:
+                escalar: bool = False, repetido: bool = False,
+                emergencia: bool = False, quiere_colgar: bool = False) -> Action:
     """Decide el siguiente movimiento. Función pura: se testea sin LLM ni red.
 
     `escalar` lo impone el motor de decisión desde fuera; cuando llega, corta el
@@ -171,11 +179,37 @@ def next_action(state: CallState, symptoms: Symptoms, *,
     forma de "des-escalar" dentro de la llamada—, así que `escalar` seguiría
     siendo True en todos los turnos siguientes. Sin este corte, `next_action`
     devolvería `escalar` una y otra vez y el guion de seguridad se repetiría
-    palabra por palabra mientras el paciente siga hablando. El guion solo se
-    entrega una vez; el turno después de entregarlo cierra la llamada.
+    palabra por palabra mientras el paciente siga hablando.
+
+    Entregado el guion, la llamada NO cuelga sola: pasa a `CONFIRMACION` y espera
+    a que el paciente diga que entendió (`quiere_colgar`). La excepción es
+    `emergencia`: ante una de las seis banderas del 123, retener al paciente en la
+    línea compite con la llamada que de verdad importa, así que ahí sí se cierra
+    en el turno siguiente.
     """
-    if state.phase in (Phase.ESCALAMIENTO, Phase.TERMINADA):
+    if state.phase is Phase.TERMINADA:
         return Action(kind="cerrar", phase=Phase.TERMINADA)
+
+    # El paciente da la llamada por terminada, esté donde esté el guion. Va antes
+    # que todo lo demás: seguir preguntando a quien acaba de decir "chao" es lo
+    # contrario de escuchar. La política de incertidumbre se aplica igual al
+    # cerrar (`engine.evaluate(final=True)`), así que colgar aquí no pierde el
+    # cuadro incompleto — lo escala.
+    if quiere_colgar and state.phase is not Phase.ESCALAMIENTO:
+        return Action(kind="cerrar", phase=Phase.CIERRE)
+
+    # Guion de seguridad ya entregado. `quiere_colgar` aquí también: el paciente
+    # puede despedirse en el mismo turno que sigue al guion ("ya entendí, chao"),
+    # y hacerle una pregunta de confirmación después de eso es no escucharlo.
+    if state.phase is Phase.ESCALAMIENTO:
+        if emergencia or quiere_colgar or state.sin_progreso >= SIN_PROGRESO_CERRAR:
+            return Action(kind="cerrar", phase=Phase.TERMINADA)
+        return Action(kind="confirmar", phase=Phase.CONFIRMACION)
+
+    if state.phase is Phase.CONFIRMACION:
+        if quiere_colgar or state.sin_progreso >= SIN_PROGRESO_CERRAR:
+            return Action(kind="cerrar", phase=Phase.TERMINADA)
+        return Action(kind="confirmar", phase=Phase.CONFIRMACION)
 
     if escalar:
         return Action(kind="escalar", phase=Phase.ESCALAMIENTO)
@@ -227,15 +261,28 @@ def next_action(state: CallState, symptoms: Symptoms, *,
 
     if state.phase is not Phase.ABIERTO:
         return Action(kind="preguntar", slot=None, phase=Phase.ABIERTO)
-    return Action(kind="cerrar", phase=Phase.CIERRE)
+    # Se acabó el guion, pero no necesariamente la llamada: si el paciente aún
+    # tiene dudas, se le atienden. Solo se cuelga cuando lo dice él, o cuando
+    # lleva varios turnos sin aportar nada (el tope que protege la demo en vivo).
+    if quiere_colgar or state.sin_progreso >= SIN_PROGRESO_CERRAR:
+        return Action(kind="cerrar", phase=Phase.CIERRE)
+    return Action(kind="confirmar", phase=Phase.CONFIRMACION)
 
 
 def apply(state: CallState, action: Action, symptoms: Symptoms, *,
-          hash_turno: str | None = None, progreso: bool = True) -> CallState:
+          hash_turno: str | None = None, progreso: bool = True,
+          intento_real: bool = True) -> CallState:
     """Avanza el estado tras ejecutar `action`. Devuelve un estado nuevo.
 
     `hash_turno` y `progreso` los calcula el orquestador, que es quien ve el texto
     del paciente y lo que se extrajo de él.
+
+    `intento_real=False` cuando el paciente ni siquiera intentó contestar —saludó,
+    pidió que le repitieran la pregunta, o dijo algo social—. Esos turnos no
+    consumen `MAX_REPREGUNTAS`: reformular es para quien esquivó la pregunta, no
+    para quien todavía no la ha oído. Sin esto, "Hola, buenas." se comía uno de
+    los dos intentos del slot de dolor y el agente le respondía a un saludo con la
+    reformulación cerrada ("¿más cerca de tres o de ocho?").
     """
     nuevo = CallState(
         phase=action.phase, slot_actual=action.slot,
@@ -258,6 +305,11 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
         # quiere seguir. El slot sigue abierto.
         return nuevo
 
+    if action.kind == "confirmar":
+        # La llamada está esperando al paciente, no recorriendo el guion: no hay
+        # slot que resolver ni que dar por perdido.
+        return nuevo
+
     # El slot que se estaba preguntando: o se resolvió, o consume un intento.
     anterior = state.slot_actual
     if anterior:
@@ -266,7 +318,8 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
                 nuevo.resueltos.append(anterior)
             nuevo.repreguntas.pop(anterior, None)
         elif action.kind == "repreguntar" and action.slot == anterior:
-            nuevo.repreguntas[anterior] = action.intento
+            if intento_real:
+                nuevo.repreguntas[anterior] = action.intento
         elif anterior not in nuevo.sin_responder:
             nuevo.sin_responder.append(anterior)
 

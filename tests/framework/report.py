@@ -51,6 +51,12 @@ def _scenario_section(r: ScenarioResult) -> str:
     # Conversación.
     lines.append("**Conversación:**")
     lines.append("")
+    # La llamada la abre el agente, no el paciente. Sin esta línea el informe
+    # empezaba por el paciente y la primera respuesta del agente parecía salida
+    # de la nada (una reformulación de una pregunta que nunca se veía).
+    if r.transcript.apertura:
+        lines.append(f"> 🤖 **Agente** (apertura): {r.transcript.apertura}")
+        lines.append(">")
     for t in r.transcript.turns:
         lines.append(f"> 🧑 **Paciente:** {t.patient_text}")
         marker = "  ⚠️ CRÍTICO" if t.critical_override else ""

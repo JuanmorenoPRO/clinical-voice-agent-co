@@ -479,3 +479,70 @@ def test_las_letras_repetidas_no_rompen_el_lexico():
 def test_el_dolor_alargado_se_sigue_extrayendo():
     """El colapso de vocales existe para esto: "muuucho" tiene que llegar al léxico."""
     assert lexicon.extract("me duele muuucho", slot="dolor").pain_level == 8
+
+
+# --- saludo y despedida -------------------------------------------------------
+# Regresión: "Hola, buenas." caía en `respuesta`, no aportaba dato y se comía uno
+# de los dos reintentos del slot de dolor. El agente le contestaba a un saludo con
+# la reformulación cerrada ("¿más cerca de tres o de ocho?").
+
+@pytest.mark.parametrize(
+    "texto",
+    ["Hola, buenas.", "Buenos días", "Aló", "Sí, dígame", "Buenas, doctora", "buenas"],
+)
+def test_el_saludo_se_reconoce_como_saludo(texto):
+    assert intent.classify(texto) == "saludo"
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        # Un saludo CON contenido clínico sigue siendo respuesta: el léxico tiene
+        # que poder sacar el dato.
+        ("buenas, el dolor va en un 3", "respuesta"),
+        ("Hola, me duele mucho", "respuesta"),
+        # Un "sí" pelado es una respuesta a "¿ha tenido fiebre?", no un saludo.
+        ("sí", "respuesta"),
+        ("no", "respuesta"),
+        ("claro", "respuesta"),
+    ],
+)
+def test_el_saludo_no_se_traga_una_respuesta(texto, esperado):
+    assert intent.classify(texto) == esperado
+
+
+def test_el_dato_sobrevive_al_saludo_pegado():
+    assert lexicon.extract("buenas, el dolor va en un 3", slot="dolor").pain_level == 3
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("chao", "despedida"),
+        ("adiós", "despedida"),
+        ("No tengo más dudas", "despedida"),
+        ("Todo claro, gracias", "despedida"),
+        ("Ya entendí, gracias, chao", "despedida"),
+        # Negarse a hablar NO es despedirse: se separaron a propósito porque en
+        # CONFIRMACIÓN la despedida es la señal para colgar.
+        ("no quiero hablar", "rechazo"),
+        ("déjeme en paz", "rechazo"),
+    ],
+)
+def test_despedirse_no_es_rechazar(texto, esperado):
+    assert intent.classify(texto) == esperado
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Regresión de un rojo perdido (caso_tray_pac_42_00030_7): la fiebre de
+        # 38.9 nunca se mide, así que el rojo depende de `fever=True`, y
+        # "acalorada" no llevaba verbo reconocido delante.
+        "he estado como acalorada un poco",
+        "ando sofocado desde ayer",
+        "he estado con calentura",
+    ],
+)
+def test_la_febricula_referida_en_colombiano_se_recoge(texto):
+    assert lexicon.extract(texto, slot="fiebre").fever is True

@@ -60,7 +60,13 @@ class EscalationEvaluator:
                 problems.append(
                     f"Emergencia no clasificada como CRÍTICO (fue {max_risk})."
                 )
-            if not any(t.critical_override for t in transcript.turns):
+            # El guion solo se exige si el cuadro crítico apareció MIENTRAS el
+            # paciente estaba en la línea. Cuando la criticidad la produce la
+            # política de incertidumbre al cerrar —el paciente colgó sin dejar
+            # evaluarse— no hay a quién decírselo: lo que tiene que existir
+            # entonces es la alerta a enfermería, no un guion hablado al vacío.
+            critico_en_llamada = any(t.risk_level == "CRÍTICO" for t in transcript.turns)
+            if critico_en_llamada and not any(t.critical_override for t in transcript.turns):
                 problems.append("No se activó el guion de seguridad (critical_override).")
 
         # Riesgo amarillo: debe alcanzar al menos ALTO.

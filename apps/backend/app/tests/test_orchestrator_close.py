@@ -36,24 +36,42 @@ def test_el_primer_turno_critico_entrega_el_guion_completo(session):
     assert "berraco" not in r.response  # es el guion determinista, no un eco
 
 
-def test_el_segundo_turno_critico_cierra_en_vez_de_repetir(session):
+def test_el_segundo_turno_critico_no_repite_el_guion(session):
+    """El bug original: el guion de seguridad se repetía palabra por palabra.
+
+    Ya no se cuelga en el segundo turno —por la vía de enfermería la llamada
+    espera a que el paciente confirme—, pero la propiedad que motivó este archivo
+    sigue siendo la misma: el guion se entrega UNA vez.
+    """
     primero = process_turn(session, text="Me duele un berraco, no aguanto")
     segundo = process_turn(
         session, text="Sigo con el mismo dolor", conversation_id=primero.conversation_id
     )
 
-    assert segundo.call_ended is True
-    # No es el mismo texto: si lo fuera, seguiríamos teniendo el bug reportado.
     assert segundo.response != primero.response
     assert len(segundo.response) < len(primero.response), (
-        "el cierre debe ser corto, no el guion clínico completo otra vez"
+        "no puede ser el guion clínico completo otra vez"
     )
+    assert segundo.call_ended is False, "no se cuelga sin que el paciente confirme"
 
 
-def test_la_conversacion_queda_cerrada_en_la_base(session):
+def test_el_paciente_puede_seguir_hablando_tras_escalar(session):
+    """Lo que se perdía: tras el guion, un "y la herida se ve rojita" no se oía."""
+    primero = process_turn(session, text="Me duele un berraco, no aguanto")
+    segundo = process_turn(session, text="Y la herida se ve rojita.",
+                           conversation_id=primero.conversation_id)
+
+    assert segundo.call_ended is False
+    assert segundo.symptoms.wound == "eritema_leve", "la señal nueva se recoge"
+
+
+def test_la_conversacion_se_cierra_cuando_el_paciente_se_despide(session):
     primero = process_turn(session, text="Me duele un berraco, no aguanto")
     process_turn(session, text="Ok", conversation_id=primero.conversation_id)
+    ultimo = process_turn(session, text="Listo, muchas gracias, chao",
+                          conversation_id=primero.conversation_id)
 
+    assert ultimo.call_ended is True
     conv = session.get(Conversation, primero.conversation_id)
     assert conv.status == "closed"
     assert conv.ended_at is not None
@@ -64,7 +82,8 @@ def test_el_resumen_queda_listo_sin_llamar_a_close_aparte(session):
     from app.models import Summary
 
     primero = process_turn(session, text="Me duele un berraco, no aguanto")
-    process_turn(session, text="Listo", conversation_id=primero.conversation_id)
+    process_turn(session, text="Ya entendí, gracias, chao",
+                 conversation_id=primero.conversation_id)
 
     resumen = session.query(Summary).filter(
         Summary.conversation_id == primero.conversation_id
@@ -73,14 +92,12 @@ def test_el_resumen_queda_listo_sin_llamar_a_close_aparte(session):
     assert resumen.data["risk_level"] == "CRÍTICO"
 
 
-def test_turnos_posteriores_siguen_cerrando_sin_reabrir_el_guion(session):
-    """Si el paciente insiste tras el cierre, no revive el guion largo."""
+def test_turnos_posteriores_no_reabren_el_guion(session):
+    """Si el paciente insiste, no revive el guion clínico largo."""
     primero = process_turn(session, text="Me duele un berraco, no aguanto")
-    segundo = process_turn(session, text="Espere", conversation_id=primero.conversation_id)
-    tercero = process_turn(session, text="Otra cosa", conversation_id=primero.conversation_id)
-
-    assert tercero.call_ended is True
-    assert tercero.response == segundo.response  # cierre estable, no el guion largo
+    for texto in ("Espere", "Otra cosa", "Ajá"):
+        r = process_turn(session, text=texto, conversation_id=primero.conversation_id)
+        assert r.response != primero.response, f"el guion revivió tras {texto!r}"
 
 
 def test_una_llamada_normal_no_se_cierra_sola(session):
