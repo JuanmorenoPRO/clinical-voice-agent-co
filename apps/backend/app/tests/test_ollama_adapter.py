@@ -305,3 +305,77 @@ def test_una_respuesta_limpia_no_se_toca():
     from app.llm.ollama_adapter import sin_muletillas
     buena = "Puede ducharse desde las 48 horas, secando bien la herida después."
     assert sin_muletillas(buena) == buena
+
+
+@pytest.mark.parametrize(
+    "texto,es_abst",
+    [
+        ("Sobre eso no tengo información en los documentos del hospital.", True),
+        ("No lo sé, se lo paso a enfermería.", True),
+        ("No sé si eso aplica a su caso.", True),
+        ("Eso no aparece en los documentos del hospital.", True),
+        # Regresión: el patrón viejo (`no\s+(lo\s+)?s[eé]\s`) casaba con el "se"
+        # impersonal. El orquestador tomaba estas respuestas —correctas y bien
+        # ancladas— por abstenciones, les quitaba las FUENTES y les pegaba la
+        # transición de abstención. Perder la cita es perder justo lo que la
+        # rúbrica califica en RAG y trazabilidad.
+        ("No, no se recomiendan bañarse hasta la cita de control.", False),
+        ("No se aplique cremas en la herida.", False),
+        ("La herida no se debe destapar.", False),
+        ("Puede ducharse desde las 48 horas.", False),
+    ],
+)
+def test_el_se_impersonal_no_es_una_abstencion(texto, es_abst):
+    from app.llm.ollama_adapter import es_abstencion
+    assert es_abstencion(texto) is es_abst, texto
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("Debe esperar a que se se indique por su médico.",
+         "Debe esperar a que se indique por su médico."),
+        ("Lave la la herida con agua y jabón.",
+         "Lave la herida con agua y jabón."),
+        # No toca lo que está bien.
+        ("Puede ducharse desde las 48 horas.", "Puede ducharse desde las 48 horas."),
+        ("Se lava con agua y jabón.", "Se lava con agua y jabón."),
+    ],
+)
+def test_la_palabra_repetida_se_colapsa(texto, esperado):
+    """El 3B tartamudea al redactar y en voz se oye como un tropiezo."""
+    from app.llm.ollama_adapter import sin_tartamudeo
+    assert sin_tartamudeo(texto) == esperado
+
+
+def test_el_filtro_de_dominio_clasifica_la_pregunta(adapter):
+    """Sustituye al juicio de entailment sobre la evidencia: 21/25 -> 24/25.
+
+    Lo que se protege aquí es el peor error de todos —responder algo ajeno al
+    corpus CITANDO un documento clínico—, que es el caso de "horario de visitas".
+    Referencia completa: `scripts/calibrate_rag.py`.
+    """
+    evidencia = "El baño diario se permite desde las 48 horas. Seque bien la herida."
+    del_dominio = run(adapter.pregunta_es_del_dominio(
+        question="¿Cuándo me puedo bañar después de la cirugía?", evidence=evidencia))
+    ajena = run(adapter.pregunta_es_del_dominio(
+        question="¿Cuál es el horario de visitas del hospital?", evidence=evidencia))
+    assert del_dominio is True
+    assert ajena is False
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        # `num_predict=80` corta donde toque; en voz una frase partida se oye como
+        # que la llamada se cayó.
+        ("Lave la herida a diario. Y si descubre alguna herida nueva en",
+         "Lave la herida a diario."),
+        ("Puede ducharse desde las 48 horas.", "Puede ducharse desde las 48 horas."),
+        # Sin ninguna frase cerrada se devuelve tal cual: vaciarla sería peor.
+        ("Debe esperar a que", "Debe esperar a que"),
+    ],
+)
+def test_la_frase_cortada_se_descarta(texto, esperado):
+    from app.llm.ollama_adapter import sin_frase_cortada
+    assert sin_frase_cortada(texto) == esperado

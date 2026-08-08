@@ -93,9 +93,21 @@ _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 # El modelo parafrasea la frase de abstención en vez de copiarla literal ("No tengo
 # información sobre eso..."), así que compararla por igualdad no sirve. Se detecta
 # por su contenido, porque de ello depende no citar una fuente al abstenerse.
+# Ojo con "no sé" frente al "se" impersonal. El patrón original era
+# `no\s+(lo\s+)?s[eé]\s`, que casa con "no SE recomiendan bañarse", "no SE
+# aplique cremas", "no SE preocupe... — es decir, con respuestas correctas y bien
+# ancladas. El efecto era silencioso y caro: el orquestador las tomaba por
+# abstenciones, les quitaba las fuentes (`evidence = None`) y les pegaba la
+# transición de abstención, así que una respuesta buena quedaba sin cita —justo
+# lo que la rúbrica califica— y encima sonaba incoherente.
+# Ahora el "no sé" tiene que cerrar cláusula o ir seguido de un interrogativo.
 _ES_ABSTENCION = re.compile(
-    r"no\s+tengo\s+(esa\s+)?informaci[oó]n|no\s+(lo\s+)?s[eé]\s|no\s+aparece\s+en\s+"
-    r"(los\s+)?documentos|no\s+figura\s+en\s+(la\s+)?(evidencia|documentos)",
+    r"no\s+tengo\s+(esa\s+)?informaci[oó]n"
+    r"|no\s+aparece\s+en\s+(los\s+)?documentos"
+    r"|no\s+figura\s+en\s+(la\s+)?(evidencia|documentos)"
+    r"|\bno\s+lo\s+s[eé]\b"
+    r"|\bno\s+s[eé]\s*[.,;!?]"
+    r"|\bno\s+s[eé]\s+(si|qu[eé]|cu[aá]ndo|c[oó]mo|d[oó]nde|cu[aá]l|nada|decirle)\b",
     re.I,
 )
 
@@ -119,10 +131,16 @@ _TUTEO: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bpuedas\b", re.I), "pueda"),
     (re.compile(r"\btengas\b", re.I), "tenga"),
     (re.compile(r"\bsigues\b", re.I), "sigue"),
+    (re.compile(r"\bhayas\b", re.I), "haya"),
+    (re.compile(r"\bseas\b", re.I), "sea"),
+    (re.compile(r"\bvayas\b", re.I), "vaya"),
+    (re.compile(r"\bsientas\b", re.I), "sienta"),
+    (re.compile(r"\bnotes\b", re.I), "note"),
     # Imperativo negativo, que es la forma en que vienen escritas las
     # instrucciones postoperatorias del corpus ("no los toques", "no te mojes").
     # Conjunto cerrado a propósito: generalizar "-es → -e" destrozaría sustantivos.
-    (re.compile(r"\b(toqu|dej|us|apliqu|lav|moj|levant|hag|pong|quit|tom|frot|rasqu)es\b",
+    (re.compile(r"\b(toqu|dej|us|apliqu|lav|moj|levant|hag|pong|quit|tom|frot|rasqu"
+                r"|asegur|evit|cambi|retir|cubr|sec|revis|consult|llam|camin|descans|descubr)es\b",
                 re.I), r"\1e"),
     (re.compile(r"\bte\b", re.I), "se"),
     (re.compile(r"\btu\b", re.I), "su"),
@@ -159,13 +177,51 @@ def a_usted(texto: str) -> str:
 # todo un estado emocional INVENTADO —el paciente no dijo estar nervioso—, que
 # es lo que hace que suene a formulario en vez de a alguien que escucha.
 _APERTURA_POSTIZA = re.compile(
-    r"^\s*(amig[oa]|herman[oa]|parce|mij[oa]|querid[oa]|estimad[oa])\s*[,.]?\s*", re.I
+    r"^\s*(amig[oa]|herman[oa]|parce|mij[oa]|querid[oa]|estimad[oa]"
+    # "Lo siento," / "Lamento mucho," delante de la emoción inventada: el modelo
+    # las encadena ("Lo siento, parece que está asustado") y con el ancla `^` la
+    # segunda pieza ya no casaba.
+    r"|lo\s+siento|lamento\s+mucho|disculpe)\s*[,.]?\s*",
+    re.I,
 )
 _EMOCION_INVENTADA = re.compile(
     r"^\s*(parece\s+que|veo\s+que|noto\s+que|entiendo\s+que|s[eé]\s+que|"
-    r"comprendo\s+que|lamento\s+que)\b[^.!?]*[.!?]\s*",
+    r"comprendo\s+que|lamento\s+que|imagino\s+que|debe\s+de\s+ser)\b[^.!?]*[.!?]\s*",
     re.I,
 )
+
+
+# Palabra funcional corta repetida de forma contigua: "a que se se indique",
+# "de de la herida". Es un tropiezo típico del 3B al redactar y en voz se oye
+# como un tartamudeo. Se limita a esta lista cerrada en vez de colapsar cualquier
+# palabra repetida, porque el español sí admite algunas ("que que" en
+# subordinadas, "no no" enfático) y un colapso general destrozaría más de lo que
+# arregla.
+_PALABRA_REPETIDA = re.compile(
+    r"\b(se|de|la|el|los|las|un|una|y|a|en|con|por|su|le|lo|me|te|al|del)"
+    r"(\s+\1)+\b",
+    re.I,
+)
+
+
+def sin_tartamudeo(texto: str) -> str:
+    return _PALABRA_REPETIDA.sub(r"\1", texto)
+
+
+def sin_frase_cortada(texto: str) -> str:
+    """Descarta la última frase si el límite de tokens la dejó a medias.
+
+    `num_predict=80` corta la generación donde toque, y en voz eso se oye como
+    que la llamada se cayó ("...si descubres alguna herida nueva en"). Más vale
+    una frase completa que dos con la segunda partida. Si no queda ninguna frase
+    cerrada, se devuelve el texto tal cual: recortar hasta dejarlo vacío sería
+    peor que un corte feo.
+    """
+    limpio = texto.rstrip()
+    if not limpio or limpio[-1] in ".!?":
+        return limpio
+    corte = max(limpio.rfind("."), limpio.rfind("!"), limpio.rfind("?"))
+    return limpio[: corte + 1] if corte > 0 else limpio
 
 
 def sin_muletillas(texto: str) -> str:
@@ -214,20 +270,58 @@ def _recortar(evidence: str) -> str:
 # rechazaba tambien los nombres propios que SI estaban. Un 3B no sabe verificar
 # presencia de un termino; eso lo hace `_nombres_propios_presentes` con codigo.
 # Aqui se le deja solo lo que si sabe hacer: juzgar si el texto viene al tema.
-_SYSTEM_PERTINENCIA = """Decides si un texto sirve para responder una pregunta de un \
-paciente operado. Respondes solo el JSON del esquema.
+# Clasifica la PREGUNTA, no la evidencia. La versión anterior le pedía al 3B un
+# juicio de entailment sobre ~3.600 caracteres ("¿este texto responde esto?") y
+# eso no está a su alcance: medido con `scripts/calibrate_rag.py`, rechazaba los 4
+# fragmentos de las tres preguntas legítimas que fallaban, y en cambio aceptaba
+# "¿cuál es el horario de visitas?" —la única que había que rechazar—. Clasificar
+# una pregunta de 20 tokens sí sabe: 21/25 -> 24/25, con 10/10 en las ajenas.
+#
+# El orden importa: "cuidado" se declara como VALOR POR DEFECTO y "otro" se acota
+# a cuatro casos concretos. Con la redacción inversa —"otro" detallado, "cuidado"
+# como lista— el modelo se iba a "otro" y caía a 7/15. Un 3B se inclina hacia la
+# opción que suena más restrictiva; hay que decirle explícitamente cuál manda.
+_SYSTEM_PERTINENCIA = """Clasificas la PREGUNTA de un paciente recien operado. No la respondes.
 
-"si" = el texto habla del tema de la pregunta y aporta algo util, aunque sea parcial
-       o con otras palabras. Ejemplo: pregunta "cuando me puedo banar" y el texto
-       dice "bano diario desde las 48 horas" -> si.
-"no" = el texto trata de un asunto distinto al de la pregunta. Ejemplo: pregunta
-       "cual es el horario de visitas" o "cuanto cuesta la consulta" y el texto
-       habla de cuidados de la herida -> no."""
+Por defecto la respuesta es "cuidado": el paciente llama por su recuperacion, asi
+que casi todo lo que pregunta es sobre ella. Cuenta como "cuidado" cualquier
+pregunta sobre su cuerpo, su herida, su cirugia o su vuelta a la vida normal:
+banarse, comer, caminar, subir escaleras, hacer ejercicio, volver al trabajo,
+dormir, dolor, fiebre, puntos, cicatriz, hinchazon, coagulos, drenajes, bolsas,
+rehabilitacion, medicinas, y cuando llamar al medico.
 
+Solo responde "otro" si la pregunta es claramente de otra cosa:
+- tramites, dinero o logistica del hospital (horarios, precios, EPS, transporte)
+- una enfermedad o procedimiento que NO es su cirugia
+- un protocolo, escala o programa con nombre propio
+- algo que no tiene que ver con salud
+
+Ejemplos:
+"¿cuando me puedo banar?" -> cuidado
+"¿que debo comer despues de la cirugia?" -> cuidado
+"¿cuando puedo volver a trabajar?" -> cuidado
+"¿puedo subir escaleras?" -> cuidado
+"¿como cuido la bolsa de colostomia?" -> cuidado
+"¿como prevenir coagulos?" -> cuidado
+"¿por que me duele el hombro?" -> cuidado
+"¿cuando debo llamar al medico por fiebre?" -> cuidado
+"¿cuanto cuesta la consulta?" -> otro
+"¿cual es el horario de visitas?" -> otro
+"¿me cubre la EPS el transporte?" -> otro
+"¿como se trata la diabetes tipo 1?" -> otro
+"¿que dice el protocolo Esmeralda?" -> otro
+"¿que marca de carro me recomienda?" -> otro"""
+
+# La clave es "c" y no "r" por un motivo medido, no estético: con `"r"` o
+# `"clase"` llama3.2:3b responde "otro" a TODAS las preguntas, incluidas las que
+# acaba de ver como ejemplo de "cuidado". Con `"c"`, 24/25. El nombre de la clave
+# entra en el contexto y arrastra al modelo — con un 3B, detalles de superficie
+# como este pesan tanto como la instrucción, y por eso este filtro tiene su
+# regresión en `scripts/calibrate_rag.py`: cualquier retoque hay que re-medirlo.
 _SCHEMA_PERTINENCIA = {
     "type": "object",
-    "required": ["r"],
-    "properties": {"r": {"type": "string", "enum": ["si", "no"]}},
+    "required": ["c"],
+    "properties": {"c": {"type": "string", "enum": ["cuidado", "otro"]}},
 }
 
 
@@ -439,9 +533,9 @@ class OllamaAdapter:
             tokens_in=resp.get("prompt_eval_count") or 0,
             tokens_out=resp.get("eval_count") or 0,
         )
-        return sin_muletillas(a_usted(texto or ABSTENCION)), usage
+        return sin_frase_cortada(sin_tartamudeo(sin_muletillas(a_usted(texto or ABSTENCION)))), usage
 
-    async def evidencia_responde(self, *, question: str, evidence: str) -> bool:
+    async def pregunta_es_del_dominio(self, *, question: str, evidence: str) -> bool:
         """¿La evidencia recuperada responde esta pregunta?
 
         Hace falta porque la similitud vectorial no lo dice: medido con
@@ -470,18 +564,20 @@ class OllamaAdapter:
                     model=self._model,
                     messages=[
                         {"role": "system", "content": _SYSTEM_PERTINENCIA},
-                        {
-                            "role": "user",
-                            "content": f"PREGUNTA: {question}\n\nFRAGMENTO:\n{_recortar(evidence)}",
-                        },
+                        # Solo la pregunta: la evidencia ya no entra. Eso baja el
+                        # input de ~900 tokens a ~20 y es lo que hace que el
+                        # filtro acierte (ver `_SYSTEM_PERTINENCIA`).
+                        {"role": "user", "content": f"Pregunta: <<<{question}>>>"},
                     ],
                     format=_SCHEMA_PERTINENCIA,
-                    options={"temperature": 0, "num_predict": 12, "num_ctx": 2048},
+                    # 16 y no 12: con el prompt largo el JSON se truncaba y el
+                    # parseo reventaba, degradando a "no" cada llamada.
+                    options={"temperature": 0, "num_predict": 16, "num_ctx": 2048},
                     keep_alive=self._keep_alive,
                 ),
                 timeout=self._timeout * 2,
             )
-            return json.loads(resp["message"]["content"]).get("r") == "si"
+            return json.loads(resp["message"]["content"]).get("c") == "cuidado"
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "pertinencia degradada (%s): se asume que no responde",

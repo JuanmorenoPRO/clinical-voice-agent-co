@@ -255,6 +255,16 @@ RECHAZO = (
 )
 NO_ENTENDI = "Perdone, no le escuché bien. ¿Me lo repite?"
 
+# Trámites: horarios, costos, EPS, transporte, citas. No los responde el corpus
+# clínico y no son de esta llamada, pero callarlos tampoco vale: `intent ==
+# pregunta_administrativa` no tenía rama propia y caía en el `else` genérico, así
+# que el paciente preguntaba por el horario de visitas y el agente seguía con la
+# siguiente pregunta del guion como si no hubiera oído nada.
+ADMINISTRATIVA = (
+    "Eso es de administración y desde aquí no se lo puedo consultar. "
+    "Llamando al conmutador del hospital se lo resuelven."
+)
+
 # El paciente saluda. Se le devuelve el saludo y se retoma la pregunta pendiente
 # en su forma abierta. Antes esto caía en `respuesta`, no aportaba dato y gastaba
 # un reintento: el agente contestaba a un "Hola, buenas." con la reformulación
@@ -417,7 +427,7 @@ def cierre(nombre: str | None, escalado: bool) -> str:
 # un turno normal cuesta 0 ms.
 def textos_cacheables() -> list[str]:
     fijos = [APERTURA, PREGUNTA_ABIERTA, META_REPETIR, META_PROGRESO, SOCIAL,
-             FUERA_DE_MISION, RECHAZO, NO_ENTENDI, TERCERO]
+             FUERA_DE_MISION, RECHAZO, NO_ENTENDI, TERCERO, ADMINISTRATIVA]
     for banco in (PREGUNTAS, REPREGUNTAS):
         for opciones in banco.values():
             fijos.extend(opciones)

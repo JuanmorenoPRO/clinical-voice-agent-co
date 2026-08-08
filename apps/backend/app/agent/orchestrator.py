@@ -129,6 +129,15 @@ def _texto_de(action: Action, *, semilla: str, recientes: list[str],
     """
     if action.kind == "ofrecer_salida":
         return phrasing.ofrecer_salida(semilla, recientes)
+    if action.kind == "confirmar":
+        # Fase CONFIRMACIÓN: el agente ya dijo lo suyo y le devuelve el turno al
+        # paciente. Se emite como "la siguiente pregunta", igual que las del
+        # guion, para que las ramas de arriba —la pregunta clínica, sobre todo—
+        # puedan responder PRIMERO y pegar esto después. Tratarlo como una rama
+        # aparte y temprana era el bug: ante "¿qué cuidados debo tener con la
+        # herida?" el agente contestaba "¿hay algo más antes de despedirnos?",
+        # que desde fuera es no escuchar.
+        return phrasing.confirmar_cierre(semilla, recientes)
     if action.kind == "repreguntar":
         # Normalmente una repregunta no lleva acuse: el slot no se resolvió y
         # decir "anotado" sería falso. Pero el turno puede haber traído OTRO dato
@@ -265,17 +274,7 @@ async def process_turn_async(
         # Primer turno crítico: se entrega el guion de seguridad completo.
         # Ruta crítica: no pasa por el modelo ni por el RAG.
         final = decision.safety_script or phrasing.cierre(nombre, escalado=True)
-    elif action.kind == "confirmar":
-        # El agente ya dijo lo suyo (guion de seguridad o fin del tamizaje) y le
-        # devuelve el turno al paciente en vez de colgar. Va antes que la rama de
-        # `critico` para que el guion de seguridad NO se repita aquí.
-        semilla = conv.id + str(len(prior))
-        final = phrasing.confirmar_cierre(semilla, recientes)
-        if nuevos_otros:
-            # Si en este turno contó algo nuevo —"y la herida se ve rojita"—, se
-            # reconoce antes de volver a preguntar si quiere colgar.
-            final = f"{phrasing.acuse_otro(nuevos_otros, semilla, recientes)} {final}"
-    elif critico or estado.phase is Phase.ESCALAMIENTO:
+    elif action.kind == "cerrar" and (critico or estado.phase is Phase.ESCALAMIENTO):
         # `phase is ESCALAMIENTO` cubre el escalamiento que nace de la política de
         # incertidumbre al cerrar: ese `no_se_pudo_evaluar` no vive en `acumulado`
         # —se sintetiza con `final=True`—, así que `critico` vuelve a ser False al
@@ -300,6 +299,14 @@ async def process_turn_async(
         final = phrasing.cierre(nombre, escalado=decision.risk_level != "NORMAL")
     elif extraccion.intent == "ininteligible":
         final = phrasing.NO_ENTENDI
+    elif extraccion.intent == "pregunta_administrativa":
+        # Se responde el límite y se retoma. Sin esta rama caía en el `else` y la
+        # pregunta se quedaba sin contestar: el paciente pedía el horario de
+        # visitas y recibía la siguiente pregunta del guion, sin más.
+        semilla = conv.id + str(len(prior))
+        siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
+                              nombre=nombre, preocupante=False, con_acuse=False)
+        final = f"{phrasing.ADMINISTRATIVA} {phrasing.volviendo(semilla, recientes)} {siguiente}"
     elif extraccion.intent == "saludo":
         # El paciente saluda: se le devuelve el saludo y se le hace la pregunta
         # pendiente en su forma ABIERTA, no la reformulación cerrada. Un saludo no
@@ -341,7 +348,7 @@ async def process_turn_async(
         # pregunta. La similitud vectorial no lo dice (ver rag/retrieve.py), y sin
         # este paso el agente contestaba preguntas sobre protocolos inventados
         # citando documentos sin relación: una afirmación falsa CON fuente.
-        pertinente = evidence.has_evidence and await llm.evidencia_responde(
+        pertinente = evidence.has_evidence and await llm.pregunta_es_del_dominio(
             question=text, evidence=evidence.answer)
         if evidence.has_evidence and not pertinente:
             log.info("evidencia recuperada pero no pertinente para: %r", text[:60])
@@ -492,8 +499,12 @@ _MATIZ_SIN_TRANQUILIZAR = (
 # Quién decide la gravedad es el motor de decisión, y el prompt ya se lo dice al
 # modelo; esto es la versión que no depende de que obedezca.
 _VEREDICTO_NORMALIDAD = re.compile(
-    r"(no|s[ií])[,\s]+(eso\s+)?(s[ií]|no)?\s*es\s+(algo\s+|completamente\s+)?normal"
-    r"|(no|s[ií])\s+es\s+(algo\s+|completamente\s+)?normal"
+    # Cualquier forma de "es normal", con o sin negación delante. La variante sin
+    # negación faltaba y se colaba tal cual: "Es normal sentirse así después de
+    # una operación" es tranquilizar, que es justo la conducta que la rúbrica
+    # penaliza (`rubrica-evaluacion.md:236-241`), y además el agente no valora
+    # gravedad — de eso se encarga el motor de decisión.
+    r"\bes\s+(algo\s+|completamente\s+|totalmente\s+|del\s+todo\s+)?normal\b"
     r"|(eso|esto)\s+(no\s+)?es\s+normal"
     r"|es\s+(algo\s+)?(preocupante|de\s+cuidado|grave)",
     re.I,
