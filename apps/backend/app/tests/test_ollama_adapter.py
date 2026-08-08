@@ -111,6 +111,27 @@ def test_el_valor_siempre_esta_en_el_vocabulario(adapter):
         assert ext.symptoms.wound in (None, "normal", "eritema_leve", "secrecion_purulenta")
 
 
+def test_el_ruido_que_pasa_el_filtro_de_intencion_no_alucina_severidad(adapter):
+    """Regresión del incidente: "unufwef", "fewf", "ojoj" no los atrapa
+    `_es_ruido_transcripcion` (ver test_nlu.py) porque alternan vocal y
+    consonante como español real, así que SÍ llegan al LLM. Antes nada los
+    frenaba y el modelo los mandaba a "incapacitante_nueva" -- la severidad
+    más alta del enum -- disparando un CRÍTICO falso vía
+    `_incapacitating_mobility`.
+    """
+    from app.nlu import intent as ir
+
+    for texto in ["ojoj", "fewf", "unufwef", "asdkjfh qwerty"]:
+        assert ir.classify(texto) != "ininteligible", (
+            f"{texto!r} ahora es determinista: mover a test_nlu.py"
+        )
+        ext = run(adapter.extract(
+            slot="movilidad", question=PREGUNTAS["movilidad"], utterance=texto))
+        assert ext.symptoms.mobility is None, (
+            f"{texto!r} -> {ext.symptoms.mobility!r} (alucinación de severidad)"
+        )
+
+
 def test_no_inventa_cuando_el_paciente_no_contesta(adapter):
     ext = run(adapter.extract(slot="dolor", question=PREGUNTAS["dolor"],
                               utterance="Este... no, nada, siga con la otra pregunta."))

@@ -122,6 +122,56 @@ _TERCERO = re.compile(
 # Silencios y audio degradado, tal como aparecen en la capa 2 del dataset.
 _ININTELIGIBLE = re.compile(r"^\W*$|\[inaudible\]|^\.{2,}$|^(eh+|mm+|este\.{2,})\W*$", re.I)
 
+# Vocales españolas (con tilde y diéresis). Ninguna palabra real del idioma
+# carece de una en cada sílaba, así que su ausencia total en un token es la
+# única señal fonotáctica sin falsos positivos conocidos.
+_VOCALES = set("aeiouáéíóúü")
+_CONSONANTES = set("bcdfghjklmnñpqrstvwxyz")
+
+
+def _es_ruido_transcripcion(raw: str) -> bool:
+    """Basura del STT en vez de silencio: "unufwef]", "asdkjhaskjdh", "xk29".
+
+    `_ININTELIGIBLE` no los atrapaba porque no son vacíos ni el marcador
+    `[inaudible]`: tienen letras, así que llegaban a `classify` como
+    "respuesta" y de ahí al LLM, que —forzado por el esquema a elegir un
+    valor del enum— alucinaba el más grave (así se coló
+    `mobility=incapacitante_nueva` desde texto que nunca dijo eso).
+
+    No hay una regla fonotáctica que separe TODO el ruido del español real:
+    "ojoj" alterna vocal y consonante igual que "ojo", y "fewf"/"unufwef" no
+    violan ningún límite razonable de racha de consonantes (comprobado a
+    mano: "instrucciones", palabra real que ya vive en `_INJECTION`, tiene
+    una racha de 4 con "nstr"; por eso el umbral de abajo es 5, no 4). Esos
+    casos quedan para el LLM, con un ejemplo explícito en `_SYSTEM_EXTRACT`.
+
+    Lo que sí es inequívoco en cualquier español: un token sin ninguna
+    vocal, una racha de 5+ consonantes seguidas, o letras mezcladas con
+    dígitos. Restringido a un solo token (sin espacios) porque en una frase
+    real esa racha queda partida entre palabras y el riesgo de falso
+    positivo sube.
+    """
+    core = raw.strip("¿?¡!.,;:()[]\"' \t")
+    if not core or " " in core or len(core) < 3:
+        return False
+    tiene_letra = any(c.isalpha() for c in core)
+    tiene_digito = any(c.isdigit() for c in core)
+    if tiene_letra and tiene_digito:
+        return True  # "xk29": letras y dígitos mezclados en un solo token
+    if not tiene_letra:
+        return False  # solo dígitos o símbolos, ej. "38.5": no es esto
+    letras = [c for c in core.lower() if c.isalpha()]
+    if len(letras) < 3:
+        return False
+    if not any(c in _VOCALES for c in letras):
+        return True  # sin ninguna vocal: "asdkjh"
+    racha = 0
+    for c in letras:
+        racha = racha + 1 if c in _CONSONANTES else 0
+        if racha >= 5:
+            return True  # racha de 5+ consonantes seguidas: "asdkjhaskjdh"
+    return False
+
 # Un turno mezcla respuesta y pregunta con frecuencia: "un 4, pero ¿eso es normal?".
 # Se aísla cada fragmento interrogativo para clasificarlo por separado.
 _FRAGMENTO = re.compile(r"¿[^?]{1,80}\?|[^.!?¿]{3,80}\?")
@@ -135,7 +185,7 @@ def classify(text: str) -> Intent:
     clasificarse como ataque, no como pregunta clínica.
     """
     raw = text.strip()
-    if not raw or _ININTELIGIBLE.match(raw):
+    if not raw or _ININTELIGIBLE.match(raw) or _es_ruido_transcripcion(raw):
         return "ininteligible"
 
     t = _norm(raw)

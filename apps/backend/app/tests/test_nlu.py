@@ -250,6 +250,34 @@ def test_intencion(texto, esperado):
     assert intent.classify(texto) == esperado
 
 
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "asdkjhaskjdh",  # racha de 5+ consonantes seguidas
+        "xk29",          # letras y dígitos mezclados en un token
+        "trmpfxk",       # sin ninguna vocal
+        "sdkjh;",        # puntuación suelta alrededor del token de ruido
+    ],
+)
+def test_ruido_de_transcripcion_es_ininteligible(texto):
+    """Bug real: estos tokens se clasificaban como "respuesta" y el LLM,
+    forzado a elegir un valor del enum, alucinaba el más grave (ver
+    _incapacitating_mobility en rules.py)."""
+    assert intent.classify(texto) == "ininteligible"
+
+
+@pytest.mark.parametrize(
+    "texto", ["tos", "no", "si", "ojoj", "un 3", "fewf", "unufwef"]
+)
+def test_el_detector_de_ruido_no_atrapa_palabras_reales(texto):
+    """"ojoj" alterna vocal/consonante igual que "ojo", y "fewf"/"unufwef"
+    no violan ningún límite razonable de racha de consonantes: no se pueden
+    distinguir de español real sin una regla que también dispare sobre
+    palabras cortas legítimas. Ese caso residual lo cubre el few-shot de
+    _SYSTEM_EXTRACT, no esta regla (ver test_ollama_adapter.py)."""
+    assert intent.classify(texto) != "ininteligible"
+
+
 # --- regresiones halladas midiendo sobre los 2.071 turnos reales ---------------
 # Cada una era un falso positivo que disparaba el RAG o marcaba una respuesta
 # normal como salida de guion. Todas venían de regex sin límites de palabra.
