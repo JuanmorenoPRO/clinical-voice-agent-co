@@ -34,8 +34,12 @@ _BANDERAS: list[tuple[str, re.Pattern[str]]] = [
     (
         "heavy_bleeding",
         re.compile(
-            r"botando\s+(mucha\s+)?sangre|sangr(ando|a)\s+(mucho|muchisimo|un\s+resto|bastante)"
-            r"|no\s+para\s+de\s+sangrar|chorro\s+de\s+sangre|empapad\w+\s+de\s+sangre"
+            r"botando\s+(mucha\s+)?sangre"
+            r"|sangr(ando|a)\s+(mucho|muchisimo|un\s+resto|bastante|abundante|harto)"
+            # "no para" solo cuenta cerca de una mención de sangre, para no
+            # capturar "no para de llorar"/"no para el dolor" fuera de contexto.
+            r"|no\s+para\s+de\s+sangrar|sangr\w*.{0,25}no\s+para\b"
+            r"|chorro\s+de\s+sangre|empapad\w+\s+de\s+sangre"
             r"|hemorragia"
         ),
     ),
@@ -234,6 +238,10 @@ _APETITO: list[tuple[str, re.Pattern[str]]] = [
             r"no\s+me\s+provoca\s+(nada|casi\s+nada)"
             r"|no\s+(he\s+)?com(o|ido|iendo)\s+(casi\s+)?nada"
             r"|casi\s+no\s+(he\s+)?com(o|ido)"
+            # "no he podido comer" (con "podido") no matcheaba: el patrón exigía
+            # "comido/como" pegado a "no he", sin espacio para el verbo auxiliar.
+            r"|casi\s+no\s+he\s+podido\s+comer|no\s+(he\s+)?podido\s+comer\s+casi\s+nada"
+            r"|se\s+me\s+quitaron\s+las\s+ganas(\s+de\s+comer)?"
             r"|no\s+me\s+pasa\s+(la\s+)?comida|sin\s+ganas\s+de\s+comer"
             r"|se\s+me\s+cerro\s+el\s+estomago|no\s+tengo\s+(nada\s+de\s+)?(hambre|apetito)"
             r"|todo\s+me\s+sabe\s+mal|perdi\s+(el\s+)?apetito"
@@ -266,6 +274,10 @@ _SUENO: list[tuple[str, re.Pattern[str]]] = [
         "muy_alterado",
         re.compile(
             r"no\s+(he\s+)?p(u|o)(dido|de)\s+(pegar\s+el\s+ojo|dormir)"
+            # "no pegué el ojo" es la forma más común del modismo, sin "pude/pudo"
+            # delante — mismo bug que el tiempo verbal de apetito/sueño de
+            # docs/spikes-7-agosto.md ("como bien" vs. "he comido bien").
+            r"|(casi\s+)?no\s+pegu[eé]\s+el\s+ojo"
             r"|no\s+(he\s+)?d(uermo|ormido)\s+(casi\s+)?nada|casi\s+no\s+(he\s+)?d(uermo|ormido)"
             r"|paso\s+la\s+noche\s+en\s+vela|toda\s+la\s+noche\s+despiert\w+"
             r"|dando\s+vueltas\s+toda\s+la\s+noche|no\s+concilio\s+el\s+sueno"
@@ -356,10 +368,14 @@ def extract(text: str, slot: str | None = None) -> Symptoms:
         sym.medication_effective = True
         sym.sources["medication_effective"] = "lexicon"
 
-    if slot == "dolor" or slot is None:
-        if (nivel := _dolor(t)) is not None:
-            sym.pain_level = nivel
-            sym.sources["pain_level"] = "lexicon"
+    # El dolor se busca siempre, se esté preguntando o no: mismo motivo que el
+    # bucle de los categóricos más abajo (el paciente suelta el número del dolor
+    # mientras el guion ya pregunta por fiebre o movilidad, y perderlo es perder
+    # una escalada real — ver "Recuerda ubicación del dolor" y "Dolor creciente
+    # con medicación inútil" en tests/reports/).
+    if (nivel := _dolor(t)) is not None:
+        sym.pain_level = nivel
+        sym.sources["pain_level"] = "lexicon"
 
     # El slot que se preguntó se resuelve primero, y solo ahí vale la afirmación
     # genérica de normalidad: "todo bien" significa lo que se acaba de preguntar.

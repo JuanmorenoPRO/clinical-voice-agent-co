@@ -11,8 +11,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from ..models import Conversation, Patient, Summary, Turn
-from ..schemas import RiskLevel
+from ..decision import engine
+from ..models import Alert, Conversation, Patient, Summary, Turn
+from ..nlu.merge import merge_symptoms
+from ..schemas import RiskLevel, Symptoms
 
 _ORDER: dict[str, int] = {"NORMAL": 0, "ALTO": 1, "CRÍTICO": 2}
 _RECOMMENDATION: dict[str, str] = {
@@ -63,6 +65,7 @@ def build_summary(session: Session, conversation_id: str) -> dict:
     triggered: list[str] = []
     symptoms: dict = {}
     cited: dict[str, list[int]] = {}
+    acumulado = Symptoms()
 
     for turn in turns:
         if _ORDER[turn.risk_level] > _ORDER[max_level]:
@@ -70,6 +73,7 @@ def build_summary(session: Session, conversation_id: str) -> dict:
         for rule in turn.triggered_rules:
             if rule not in triggered:
                 triggered.append(rule)
+        acumulado = merge_symptoms(acumulado, Symptoms.model_validate(turn.extracted_symptoms or {}))
         # Última mención de cada síntoma gana.
         for k, v in (turn.extracted_symptoms or {}).items():
             if v not in (None, [], False):
@@ -78,6 +82,21 @@ def build_summary(session: Session, conversation_id: str) -> dict:
             cited.setdefault(src["document"], [])
             if src["page"] not in cited[src["document"]]:
                 cited[src["document"]].append(src["page"])
+
+    # Política de incertidumbre (docs/calibracion-triage.md): al cerrar se
+    # reevalúa con `final=True`. `orchestrator.py` no puede aplicarla turno a
+    # turno —una llamada casi vacía, o con un dato capaz de disparar rojo sin
+    # responder, no puede cerrarse como si el paciente estuviera bien—, así que
+    # el resumen es el único punto que ve la conversación completa y puede
+    # aplicarla. `merge_symptoms` es monótono (nada baja el riesgo), así que esto
+    # solo puede IGUALAR o ELEVAR lo que ya reflejaban los turnos, nunca bajarlo.
+    decision_final = engine.evaluate(acumulado, final=True)
+    if _ORDER[decision_final.risk_level] > _ORDER[max_level]:
+        max_level = decision_final.risk_level
+    for rule in decision_final.triggered_rules:
+        if rule not in triggered:
+            triggered.append(rule)
+    _crear_alerta_de_cierre(session, conv, decision_final, acumulado)
 
     duration_s = None
     if conv.ended_at and conv.started_at:
@@ -111,3 +130,33 @@ def build_summary(session: Session, conversation_id: str) -> dict:
         summary.data = data
     session.commit()
     return data
+
+
+def _crear_alerta_de_cierre(
+    session: Session, conv: Conversation, decision, symptoms: Symptoms
+) -> str | None:
+    """Alerta para lo que solo la política de incertidumbre ve al cerrar.
+
+    Espejo deliberado de `_crear_alerta_si_procede` en `agent/orchestrator.py`
+    (mismo criterio de deduplicación: una regla ya alertada no vuelve a
+    disparar), pero vive aparte porque corre en el cierre, no en cada turno —
+    `no_se_pudo_evaluar`/`informacion_insuficiente` solo existen con
+    `final=True`, así que nunca pudieron haber generado una alerta antes.
+    """
+    if decision.risk_level not in ("ALTO", "CRÍTICO"):
+        return None
+    ya: set[str] = set()
+    for a in session.query(Alert).filter(Alert.conversation_id == conv.id).all():
+        ya.update(a.triggered_rules or [])
+    nuevas = [r for r in decision.triggered_rules if r not in ya]
+    if not nuevas:
+        return None
+    alerta = Alert(
+        conversation_id=conv.id, patient_id=conv.patient_id,
+        risk_level=decision.risk_level, triggered_rules=decision.triggered_rules,
+        symptoms=symptoms.model_dump(),
+        transcript="(generada al cerrar la llamada — política de incertidumbre)",
+    )
+    session.add(alerta)
+    session.flush()
+    return alerta.id

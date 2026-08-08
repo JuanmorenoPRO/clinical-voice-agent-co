@@ -476,6 +476,23 @@ _SEVERIDAD_CRITICA_LLM = {
     "wound": "secrecion_purulenta",
 }
 
+# Umbral rojo de dolor (thresholds.yaml, docs/calibracion-triage.md): desde la
+# recalibración del 7-ago, dolor≥8 dispara CRÍTICO por sí solo, sin necesitar
+# medicación inefectiva. Antes de esa fecha ese único número no bastaba, así que
+# un dolor mal extraído pesaba menos.
+_DOLOR_ROJO = 8
+
+# Guarda para el mismo fallo que `_SEVERIDAD_CRITICA_LLM`, pero de dolor: cuando
+# el léxico no resuelve el slot y se llama al modelo, el esquema lo OBLIGA a
+# devolver un número. Medido: ante frases que no hablan de dolor —describen
+# fiebre ("amanecí destemplado") o ánimo ("con el ánimo por el piso")— el 3B
+# adivina un valor alto en vez de `no_dice`. Se exige que la frase original
+# mencione la raíz "dolor"/"duele" para confiar un valor que por sí solo
+# escalaría a CRÍTICO; no se exige para valores por debajo del umbral rojo,
+# donde equivocarse pesa menos y restringir de más le quitaría al modelo el
+# trabajo que sí sabe hacer (mapear una paráfrasis real que no está en el léxico).
+_MENCIONA_DOLOR = re.compile(r"dolor|duel")
+
 
 def _es_un_solo_token(utterance: str) -> bool:
     core = utterance.strip()
@@ -505,7 +522,14 @@ def _to_symptoms(data: dict, slot: str, utterance: str) -> Symptoms:
 
     field, _ = SLOT_FIELDS[slot]
     if slot == "dolor":
-        sym.pain_level = int(raw)
+        valor = int(raw)
+        if valor >= _DOLOR_ROJO and not _MENCIONA_DOLOR.search(lexicon.normalize(utterance)):
+            log.warning(
+                "dolor=%d del LLM descartado: la frase no menciona dolor (%r)",
+                valor, utterance[:80],
+            )
+            return sym
+        sym.pain_level = valor
     elif slot == "fiebre":
         if raw in ("si", "no"):
             sym.fever = raw == "si"

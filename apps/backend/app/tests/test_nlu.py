@@ -21,6 +21,10 @@ from app.schemas import Symptoms
     [
         ("Estoy botando mucha sangre por la herida", "heavy_bleeding"),
         ("No para de sangrar, doctora", "heavy_bleeding"),
+        # Regresión: "abundante"/"harto" y "no para" sin "de sangrar" pegado no
+        # matcheaban — falsos negativos reales en tests/reports/report-20260808.
+        ("Estoy sangrando abundante y no se detiene", "heavy_bleeding"),
+        ("Está sangrando harto y no para", "heavy_bleeding"),
         ("Es que no puedo respirar bien", "breathing_difficulty"),
         ("Me falta el aire desde anoche", "breathing_difficulty"),
         ("Me siento ahogada", "breathing_difficulty"),
@@ -162,12 +166,29 @@ def test_fiebre_negada_y_afirmada():
         ("apetito", "Como menos que antes", "appetite", "levemente_disminuido"),
         ("apetito", "Como de todo, buen apetito", "appetite", "normal"),
         ("sueno", "No he podido pegar el ojo", "sleep", "muy_alterado"),
+        # Regresión: "no pegué el ojo" (sin "pude/pudo") es la forma más común
+        # del modismo y no matcheaba.
+        ("sueno", "Casi no pegué el ojo en toda la noche", "sleep", "muy_alterado"),
         ("sueno", "Me despierto varias veces", "sleep", "levemente_alterado"),
         ("sueno", "Duermo bien, de corrido", "sleep", "normal"),
+        # Regresión: "no he podido comer" y "se me quitaron las ganas" no
+        # matcheaban (solo cubría "no he comido").
+        ("apetito", "Casi no he podido comer, se me quitaron las ganas", "appetite", "muy_disminuido"),
     ],
 )
 def test_slots_categoricos(slot, texto, campo, esperado):
     assert getattr(lexicon.extract(texto, slot=slot), campo) == esperado
+
+
+def test_el_dolor_se_busca_aunque_no_sea_el_slot_activo():
+    """Regresión: antes solo se extraía dolor si `slot=='dolor'`, a diferencia
+    de herida/movilidad/apetito/sueño, que ya se buscan siempre. Un paciente que
+    da el número de dolor mientras el guion pregunta por otra cosa lo perdía
+    para siempre (ver "Dolor creciente con medicación inútil" y "Recuerda
+    ubicación del dolor" en tests/reports/report-20260808-093927.md).
+    """
+    assert lexicon.extract("Ahora es 9 y la pastilla no funciona.", slot="fiebre").pain_level == 9
+    assert lexicon.extract("El dolor ahí sigue en 9.", slot="movilidad").pain_level == 9
 
 
 def test_el_slot_desambigua():

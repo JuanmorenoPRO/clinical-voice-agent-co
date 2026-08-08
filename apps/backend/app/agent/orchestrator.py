@@ -229,10 +229,17 @@ async def process_turn_async(
     # --- alerta, deduplicada por reglas nuevas -------------------------------
     alert_id = _crear_alerta_si_procede(session, conv, decision, acumulado, text)
 
-    # La llamada termina aquí: es el segundo turno tras un escalamiento crítico
-    # (el primero entregó el guion; este solo confirma y cierra). El pipeline de
-    # voz usa `call_ended` para colgar de verdad después de decir el cierre.
-    call_ended = critico and action.kind == "cerrar"
+    # La llamada termina aquí: o es el segundo turno tras un escalamiento crítico
+    # (el primero entregó el guion; este solo confirma y cierra), o el guion se
+    # agotó normalmente, o el paciente se despidió/rechazó seguir. Antes esto
+    # exigía `critico`, así que una llamada que cerraba SIN pasar por CRÍTICO
+    # —agotó el guion, o el paciente colgó— nunca llegaba a `close_conversation`,
+    # y la política de incertidumbre (`engine.evaluate(..., final=True)`, ver
+    # `summary/service.py`) nunca se aplicaba. `action.kind == "cerrar"` ya es la
+    # señal correcta de "la llamada termina ahora" venga de donde venga. El
+    # pipeline de voz usa `call_ended` para colgar de verdad después de decir el
+    # cierre.
+    call_ended = action.kind == "cerrar"
 
     sources = evidence.sources if evidence else []
     turn = Turn(

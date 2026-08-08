@@ -83,7 +83,7 @@ class AnthropicJudge:
             default_model = settings.anthropic_model
         except Exception:
             api_key = os.getenv("ANTHROPIC_API_KEY")
-            default_model = os.getenv("ANTHROPIC_MODEL", "claude-opus-4-8")
+            default_model = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5")
 
         self._client = anthropic.Anthropic(api_key=api_key)
         self._model = model or default_model

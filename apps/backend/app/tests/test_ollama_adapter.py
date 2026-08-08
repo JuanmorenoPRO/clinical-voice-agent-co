@@ -103,6 +103,27 @@ def test_el_modelo_cubre_la_parafrasis_que_el_lexico_no_tiene(adapter, slot, tex
     assert ext.usage.tokens_out > 0, "debería haber consultado al modelo"
 
 
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Regresión: el esquema de "dolor" obliga al modelo a devolver un
+        # número. Ante frases que hablan de FIEBRE o de ÁNIMO —no de dolor—
+        # llama3.2:3b adivinaba un valor alto en vez de `no_dice` (ver
+        # "Estoy mamado", "Amanecí destemplado" y "Con el ánimo por el piso"
+        # en tests/reports/report-20260808-084500.md). Con la recalibración
+        # del 7-ago, dolor≥8 dispara CRÍTICO por sí solo.
+        "Amanecí destemplado, como afiebrado.",
+        "Ando con el ánimo por el piso, aporreado del todo.",
+    ],
+)
+def test_el_dolor_no_se_alucina_desde_otro_sintoma(adapter, texto):
+    ext = run(adapter.extract(slot="dolor", question=PREGUNTAS["dolor"], utterance=texto))
+    assert ext.symptoms.pain_level is None, (
+        f"{texto!r} no habla de dolor y no debería producir pain_level "
+        f"(salió {ext.symptoms.pain_level!r})"
+    )
+
+
 def test_el_valor_siempre_esta_en_el_vocabulario(adapter):
     """La gramática del esquema hace imposible un valor inventado."""
     raros = ["asdkjfh qwerty", "...", "[inaudible]", "🙂🙂🙂", "¿?"]

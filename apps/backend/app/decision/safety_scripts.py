@@ -115,7 +115,7 @@ _PRIORITARIA_DEFAULT = (
 )
 
 # Apertura más contenida para la vía de enfermería: reconoce sin dramatizar.
-_CALM_OPENER = "Gracias por contármelo, hizo bien en decírmelo. "
+_CALM_OPENER = "Gracias por contármelo,"
 
 
 def script_for(triggered_rules: list[str], action: str = "emergencia_123") -> str:

@@ -87,3 +87,68 @@ def test_una_llamada_normal_no_se_cierra_sola(session):
     r = process_turn(session, text="Un 2, apenas se nota")
     assert r.risk_level != "CRÍTICO"
     assert r.call_ended is False
+
+
+def test_guion_agotado_normalmente_cierra_la_llamada(session):
+    """Antes de Fix 5b, `call_ended` exigía `critico`: una llamada que termina
+    por agotar el guion (sin pasar por CRÍTICO) nunca llegaba a
+    `close_conversation`, y la política de incertidumbre (`final=True`, ver
+    `summary/service.py`) nunca se aplicaba porque nada la disparaba.
+    """
+    from app.models import Summary
+
+    respuestas = [
+        "Un 2, apenas se nota, tranquilo.",   # dolor
+        "No tengo fiebre, nada.",              # fiebre
+        "Camino bien, sin problema.",          # movilidad
+        "La herida se ve bien.",               # herida
+        "Como bien, normal.",                  # apetito
+        "Duermo bien, tranquilo.",              # sueño
+        "No, nada más, gracias.",              # pregunta abierta -> cierra
+    ]
+    conversation_id = None
+    ultimo = None
+    for texto in respuestas:
+        ultimo = process_turn(session, text=texto, conversation_id=conversation_id)
+        conversation_id = ultimo.conversation_id
+
+    assert ultimo.call_ended is True
+    assert ultimo.risk_level != "CRÍTICO"
+
+    resumen = session.query(Summary).filter(
+        Summary.conversation_id == conversation_id
+    ).first()
+    assert resumen is not None
+    assert resumen.data["risk_level"] == "NORMAL"
+
+
+def test_rechazo_con_pocos_slots_escala_al_cerrar_por_incertidumbre(session):
+    """Antes de Fix 5a, `build_summary` solo tomaba el máximo de los
+    `risk_level` ya persistidos turno a turno —ninguno usó `final=True`—, así
+    que una llamada que cierra con casi nada respondido quedaba en NORMAL. Con
+    Fix 5a, el resumen reevalúa con `final=True` y aplica
+    `no_se_pudo_evaluar` (completeness < 0.34, ver `thresholds.yaml`).
+    """
+    from app.models import Alert, Summary
+
+    primero = process_turn(session, text="El dolor es un 2, tranquilo.")
+    segundo = process_turn(
+        session,
+        text="No quiero seguir hablando de esto, cuelgue ya.",
+        conversation_id=primero.conversation_id,
+    )
+
+    assert segundo.call_ended is True
+
+    resumen = session.query(Summary).filter(
+        Summary.conversation_id == primero.conversation_id
+    ).first()
+    assert resumen is not None
+    assert resumen.data["risk_level"] == "CRÍTICO"
+    assert "no_se_pudo_evaluar" in resumen.data["triggered_rules"]
+
+    alerta = session.query(Alert).filter(
+        Alert.conversation_id == primero.conversation_id
+    ).first()
+    assert alerta is not None
+    assert alerta.risk_level == "CRÍTICO"
