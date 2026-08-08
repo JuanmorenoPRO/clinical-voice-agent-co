@@ -3,6 +3,7 @@
 Estas tres piezas son las que sostienen la seguridad del sistema, porque son las
 que no dependen de que un modelo de 3B acierte. Corren sin Ollama y sin red.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -13,6 +14,7 @@ from app.schemas import Symptoms
 
 
 # --- banderas de emergencia: se buscan siempre, se pregunte lo que se pregunte --
+
 
 @pytest.mark.parametrize(
     "texto,campo",
@@ -44,14 +46,21 @@ def test_no_inventa_banderas_en_frases_benignas():
         "He dormido regular, me despierto a ratos.",
         "Estoy un poco desganado con la comida.",
     ]
-    campos = ("heavy_bleeding", "breathing_difficulty", "chest_pain",
-              "loss_of_consciousness", "seizure", "altered_mental_status")
+    campos = (
+        "heavy_bleeding",
+        "breathing_difficulty",
+        "chest_pain",
+        "loss_of_consciousness",
+        "seizure",
+        "altered_mental_status",
+    )
     for texto in benignas:
         sym = lexicon.extract(texto, slot="dolor")
         assert not any(getattr(sym, c) for c in campos), texto
 
 
 # --- dolor ---------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "texto,esperado",
@@ -64,10 +73,36 @@ def test_no_inventa_banderas_en_frases_benignas():
         ("Un dolorcito leve nada más", 2),
         ("No me duele nada", 0),
         ("Ahí va, más o menos", 5),
+        # Números en palabra: la escala dicha en letras, típica del paciente mayor.
+        # Sin esto, "Eh... nueve." quedaba sin slot y el guion pedía de nuevo lo
+        # ya contestado (regresión reportada por el usuario).
+        ("Eh... nueve.", 9),
+        ("Dije nueve.", 9),
+        ("El dolor es un ocho", 8),
+        ("Nueve de diez", 9),
+        ("Como un siete, que ni me deja moverme", 7),
+        ("Está en tres o cuatro", 3),
+        ("Un dos, casi nada", 2),
+        ("Diez, no aguanto", 10),
     ],
 )
 def test_dolor_por_digito_y_por_descriptor(texto, esperado):
     assert lexicon.extract(texto, slot="dolor").pain_level == esperado
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # "uno" como pronombre impersonal no es dolor 1 (muy común en Colombia).
+        "Uno come bien, con ganas.",
+        # La hora y el día no son dolor.
+        "Me levanto a las tres de la tarde.",
+        "Hace como cinco días que salí.",
+        "El aviso fue para las siete de la noche.",
+    ],
+)
+def test_no_confunde_palabras_con_la_escala_de_dolor(texto):
+    assert lexicon.extract(texto, slot="dolor").pain_level is None
 
 
 def test_el_digito_manda_sobre_el_descriptor():
@@ -87,11 +122,15 @@ def test_no_confunde_los_dias_con_el_dolor():
 
 # --- temperatura y fiebre ------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "texto,esperado",
     [
-        ("Marcó 38.5", 38.5), ("Tenía 38,2", 38.2), ("Como 39 grados", 39.0),
-        ("Me dio 37 y algo", 37.5), ("38 y medio", 38.5),
+        ("Marcó 38.5", 38.5),
+        ("Tenía 38,2", 38.2),
+        ("Como 39 grados", 39.0),
+        ("Me dio 37 y algo", 37.5),
+        ("38 y medio", 38.5),
     ],
 )
 def test_temperatura(texto, esperado):
@@ -100,10 +139,14 @@ def test_temperatura(texto, esperado):
 
 def test_fiebre_negada_y_afirmada():
     assert lexicon.extract("No he tenido fiebre", slot="fiebre").fever is False
-    assert lexicon.extract("Ando destemplado y con escalofrío", slot="fiebre").fever is True
+    assert (
+        lexicon.extract("Ando destemplado y con escalofrío", slot="fiebre").fever
+        is True
+    )
 
 
 # --- slots categóricos ---------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "slot,texto,campo,esperado",
@@ -135,6 +178,7 @@ def test_el_slot_desambigua():
 
 # --- fusión por severidad ------------------------------------------------------
 
+
 def test_una_bandera_encendida_no_se_apaga():
     """El minimizador dice primero la verdad y luego se desdice. Gana el primero."""
     antes = Symptoms(heavy_bleeding=True)
@@ -157,8 +201,12 @@ def test_el_llm_si_puede_subir_la_severidad():
 
 
 def test_el_dolor_se_queda_con_el_maximo():
-    assert merge_symptoms(Symptoms(pain_level=8), Symptoms(pain_level=3)).pain_level == 8
-    assert merge_symptoms(Symptoms(pain_level=3), Symptoms(pain_level=8)).pain_level == 8
+    assert (
+        merge_symptoms(Symptoms(pain_level=8), Symptoms(pain_level=3)).pain_level == 8
+    )
+    assert (
+        merge_symptoms(Symptoms(pain_level=3), Symptoms(pain_level=8)).pain_level == 8
+    )
 
 
 def test_el_termometro_gana_sobre_la_negacion():
@@ -175,6 +223,7 @@ def test_un_slot_ausente_no_borra_lo_que_ya_se_sabia():
 
 
 # --- intención -----------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "texto,esperado",
@@ -205,6 +254,7 @@ def test_intencion(texto, esperado):
 # Cada una era un falso positivo que disparaba el RAG o marcaba una respuesta
 # normal como salida de guion. Todas venían de regex sin límites de palabra.
 
+
 @pytest.mark.parametrize(
     "texto",
     [
@@ -231,16 +281,22 @@ def test_las_muletillas_no_son_preguntas():
 def test_la_cortesia_con_contenido_clinico_si_es_consulta():
     """'¿usted qué cree?' es charla; '¿usted cree que es normal?' es consulta."""
     assert intent.classify("Ahí vamos, ¿usted qué cree?") == "social"
-    assert intent.classify(
-        "Me muevo despacito, ¿usted cree que es normal sentirse así todavía?"
-    ) == "pregunta_clinica"
+    assert (
+        intent.classify(
+            "Me muevo despacito, ¿usted cree que es normal sentirse así todavía?"
+        )
+        == "pregunta_clinica"
+    )
 
 
 def test_la_pregunta_pegada_a_la_respuesta_se_detecta():
     """El turno mixto es la norma, no la excepción: 'un 4, pero ¿eso es normal?'."""
-    assert intent.classify(
-        "El dolor está como en un 2, apenas una puntadita. ¿Eso es normal?"
-    ) == "pregunta_clinica"
+    assert (
+        intent.classify(
+            "El dolor está como en un 2, apenas una puntadita. ¿Eso es normal?"
+        )
+        == "pregunta_clinica"
+    )
 
 
 def test_la_inyeccion_disfrazada_de_pregunta_es_ataque_no_pregunta():

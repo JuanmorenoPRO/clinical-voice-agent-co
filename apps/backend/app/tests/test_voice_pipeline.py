@@ -8,6 +8,7 @@ La validación de la conversación real es manual (navegador + micrófono) y la 
 calidad del audio está en `scripts/spike_voice.py`, que sintetiza y transcribe con
 Groq para comprobar que el español vuelve literal.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -70,10 +71,17 @@ def test_el_pipeline_se_arma_con_la_configuracion_real():
     # El VAD tiene que estar DENTRO del pipeline como su propio FrameProcessor,
     # no solo instanciado y descartado: así es como se descubrió el bug real de
     # este archivo (ver test_vad_no_se_pasa_como_parametro_del_transporte).
-    vad = VADProcessor(vad_analyzer=SileroVADAnalyzer(
-        params=VADParams(stop_secs=s.vad_stop_secs, start_secs=0.2)))
-    stt = GroqSTTService(api_key=s.groq_api_key or "sk-test", model=s.stt_model,
-                         language=Language.ES, prompt=_PROMPT_STT)
+    vad = VADProcessor(
+        vad_analyzer=SileroVADAnalyzer(
+            params=VADParams(stop_secs=s.vad_stop_secs, start_secs=0.2)
+        )
+    )
+    stt = GroqSTTService(
+        api_key=s.groq_api_key or "sk-test",
+        model=s.stt_model,
+        language=Language.ES,
+        prompt=_PROMPT_STT,
+    )
     tts = _build_tts(s)
     Pipeline([vad, stt, ClinicalProcessor(), tts])
 
@@ -134,16 +142,32 @@ def test_espeak_viaja_dentro_del_wheel():
     assert Path(espeakng_loader.get_data_path()).exists()
 
 
-def test_la_voz_por_defecto_es_piper_en_espanol_nativo():
-    """Kokoro cubre español por fonemización de respaldo (espeak-ng) sobre un
-    modelo entrenado en inglés: suena a acento anglosajón hablando español, no a
-    español latino. Piper entrena un modelo por idioma. Medido en
-    docs/spikes-7-agosto.md: es_MX-claude-high es además 5x más rápido en
-    caliente que Kokoro (RTF 0.05 frente a 0.24).
+def test_el_proveedor_configurado_y_su_g2p_espanol_se_cablean():
+    """El proveedor del .env manda, y el pipeline cablea el G2P correcto.
+
+        Dos proveedores posibles:
+
+    - `piper`: modelo entrenado por idioma, sin fonemización de respaldo; la
+            nomenclatura de voz es `es_*`/`en_*`. Medido en docs/spikes-7-agosto.md,
+            es_MX-claude-high es 5x más rápido en caliente que Kokoro (RTF 0.05 vs 0.24).
+          - `kokoro`: modelo centrado en inglés que cubre el español por G2P. Su
+            default es `Language.EN`, que produce acento anglosajón; el pipeline
+            fuerza `Language.ES` (el mismo respaldo espeak-ng de misaki que usa
+            `leonelhs/kokoro-tts-spanish`) — ver `_build_tts` en app/voice/pipeline.py.
     """
     s = get_settings()
-    assert s.tts_provider == "piper"
-    assert s.tts_voice.startswith(("es_", "en_"))  # nomenclatura de Piper
+    if s.tts_provider == "piper":
+        assert s.tts_voice.startswith(("es_", "en_"))  # nomenclatura de Piper
+    elif s.tts_provider == "kokoro":
+        from pipecat.transcriptions.language import Language
+        from app.voice.pipeline import _build_tts
+        from pipecat.services.kokoro.tts import KokoroTTSService
+
+        svc = _build_tts(s)
+        assert isinstance(svc, KokoroTTSService)
+        assert svc._settings.language == Language.ES  # noqa: SLF001
+    else:  # pragma: no cover
+        raise AssertionError(f"TTS_PROVIDER inesperado: {s.tts_provider!r}")
 
 
 def test_el_procesador_marca_el_fin_del_habla():

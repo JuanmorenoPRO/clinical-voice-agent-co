@@ -16,6 +16,7 @@ Decisiones de implementación, todas medidas y no supuestas:
     devuelve `degraded=True` y el turno se completa con el léxico determinista.
     El agente nunca se cae porque Ollama hipó.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -50,6 +51,7 @@ Como habla la gente:
 "me duele un berraco" / "no aguanto" -> 9
 "un 3, apenas se nota" -> 3
 "como un 7, la pastilla no me lo quita" -> 7
+"el dolor es nueve, nueve de diez" -> 9
 "un dolorcito leve" -> 2
 "ahi vamos, mas o menos" -> no_dice
 "esta botando materia" / "sale pus" -> secrecion_purulenta
@@ -125,7 +127,8 @@ def a_usted(texto: str) -> str:
     """
     for patron, reemplazo in _TUTEO:
         texto = patron.sub(
-            lambda m: _con_mayuscula_de(m.group(0), m.expand(reemplazo)), texto)
+            lambda m: _con_mayuscula_de(m.group(0), m.expand(reemplazo)), texto
+        )
     return texto
 
 
@@ -171,7 +174,8 @@ paciente operado. Respondes solo el JSON del esquema.
        habla de cuidados de la herida -> no."""
 
 _SCHEMA_PERTINENCIA = {
-    "type": "object", "required": ["r"],
+    "type": "object",
+    "required": ["r"],
     "properties": {"r": {"type": "string", "enum": ["si", "no"]}},
 }
 
@@ -182,8 +186,19 @@ _SCHEMA_PERTINENCIA = {
 # mayuscula por puntuacion y no por ser nombre propio: sin eso, "¿Cuándo me quitan
 # los puntos?" tomaba "Cuándo" como nombre propio y rechazaba la pregunta entera.
 _PROPIO = re.compile(r"(?<=[a-záéíóúñ]\s)([A-ZÁÉÍÓÚÑ][a-záéíóúñ]{3,})\b")
-_PROPIO_COMUN = frozenset({"colombia", "bogota", "bogotá", "usted", "doctor",
-                           "doctora", "hospital", "enfermeria", "enfermería"})
+_PROPIO_COMUN = frozenset(
+    {
+        "colombia",
+        "bogota",
+        "bogotá",
+        "usted",
+        "doctor",
+        "doctora",
+        "hospital",
+        "enfermeria",
+        "enfermería",
+    }
+)
 
 
 def _nombres_propios_presentes(pregunta: str, evidencia: str) -> bool:
@@ -193,8 +208,11 @@ def _nombres_propios_presentes(pregunta: str, evidencia: str) -> bool:
     inexistente, el agente respondia citando un documento de apendicitis sin
     relacion. Una afirmacion falsa CON fuente es peor que no responder.
     """
-    propios = {m.group(1) for m in _PROPIO.finditer(pregunta)
-               if m.group(1).lower() not in _PROPIO_COMUN}
+    propios = {
+        m.group(1)
+        for m in _PROPIO.finditer(pregunta)
+        if m.group(1).lower() not in _PROPIO_COMUN
+    }
     if not propios:
         return True
     ev = evidencia.lower()
@@ -252,19 +270,30 @@ class OllamaAdapter:
         # latencia. También se salta ante una emergencia (ahí manda el guion) y
         # ante intenciones que no contienen respuesta clínica: pedirle a un 3B que
         # extraiga el dolor de "déjeme en paz" es tiempo tirado.
-        if (slot is None or _resuelto(base, slot) or _bandera_roja(base)
-                or intent in _SIN_CONTENIDO_CLINICO):
-            return Extraction(symptoms=base, intent=intent,
-                              usage=LLMUsage(model=self._model, purpose="extract"))
+        if (
+            slot is None
+            or _resuelto(base, slot)
+            or _bandera_roja(base)
+            or intent in _SIN_CONTENIDO_CLINICO
+        ):
+            return Extraction(
+                symptoms=base,
+                intent=intent,
+                usage=LLMUsage(model=self._model, purpose="extract"),
+            )
 
         t0 = time.perf_counter()
         try:
             resp = await asyncio.wait_for(
                 self._client.chat(
                     model=self._model,
-                    messages=[{"role": "system", "content": _SYSTEM_EXTRACT},
-                              {"role": "user", "content":
-                               f'Pregunta: "{question}"\nPaciente: <<<{utterance}>>>'}],
+                    messages=[
+                        {"role": "system", "content": _SYSTEM_EXTRACT},
+                        {
+                            "role": "user",
+                            "content": f'Pregunta: "{question}"\nPaciente: <<<{utterance}>>>',
+                        },
+                    ],
                     format=schema_for_slot(slot),
                     options={"temperature": 0, "num_predict": 48, "num_ctx": 2048},
                     keep_alive=self._keep_alive,
@@ -275,15 +304,23 @@ class OllamaAdapter:
             # Degradar, nunca propagar: el léxico sostiene el turno. Pero dejar
             # rastro, porque un fallo silencioso aquí se ve igual que un paciente
             # que no contesta, y son cosas muy distintas.
-            log.warning("extract degradado (slot=%s): %s: %s", slot, type(exc).__name__, exc)
+            log.warning(
+                "extract degradado (slot=%s): %s: %s", slot, type(exc).__name__, exc
+            )
             return Extraction(
-                symptoms=base, intent=intent, degraded=True,
-                usage=LLMUsage(model=self._model, purpose="extract",
-                               latency_ms=(time.perf_counter() - t0) * 1000),
+                symptoms=base,
+                intent=intent,
+                degraded=True,
+                usage=LLMUsage(
+                    model=self._model,
+                    purpose="extract",
+                    latency_ms=(time.perf_counter() - t0) * 1000,
+                ),
             )
 
         usage = LLMUsage(
-            model=self._model, purpose="extract",
+            model=self._model,
+            purpose="extract",
             latency_ms=(time.perf_counter() - t0) * 1000,
             tokens_in=resp.get("prompt_eval_count") or 0,
             tokens_out=resp.get("eval_count") or 0,
@@ -307,15 +344,19 @@ class OllamaAdapter:
         if not evidence.strip():
             return ABSTENCION, LLMUsage(model=self._model, purpose="reply")
 
-        user = (f"{patient_context}\n\nEVIDENCIA:\n{_recortar(evidence)}\n\n"
-                f"PREGUNTA DEL PACIENTE: {question}")
+        user = (
+            f"{patient_context}\n\nEVIDENCIA:\n{_recortar(evidence)}\n\n"
+            f"PREGUNTA DEL PACIENTE: {question}"
+        )
         t0 = time.perf_counter()
         try:
             resp = await asyncio.wait_for(
                 self._client.chat(
                     model=self._model,
-                    messages=[{"role": "system", "content": _SYSTEM_REPLY},
-                              {"role": "user", "content": user}],
+                    messages=[
+                        {"role": "system", "content": _SYSTEM_REPLY},
+                        {"role": "user", "content": user},
+                    ],
                     # 80 tokens son dos frases holgadas, que es el máximo que pide
                     # el prompt. Con 120 el modelo se explayaba y expiraba.
                     options={"temperature": 0.2, "num_predict": 80, "num_ctx": 2048},
@@ -328,14 +369,21 @@ class OllamaAdapter:
             # real de evidencia, y son cosas muy distintas: la primera es un fallo
             # nuestro y la segunda es el comportamiento correcto. Sin este log, la
             # diferencia es invisible en la traza.
-            log.warning("reply_grounded degradado (%s: %s) — se abstiene",
-                        type(exc).__name__, exc)
-            return ABSTENCION, LLMUsage(model=self._model, purpose="reply",
-                                        latency_ms=(time.perf_counter() - t0) * 1000)
+            log.warning(
+                "reply_grounded degradado (%s: %s) — se abstiene",
+                type(exc).__name__,
+                exc,
+            )
+            return ABSTENCION, LLMUsage(
+                model=self._model,
+                purpose="reply",
+                latency_ms=(time.perf_counter() - t0) * 1000,
+            )
 
         texto = (resp["message"]["content"] or "").strip()
         usage = LLMUsage(
-            model=self._model, purpose="reply",
+            model=self._model,
+            purpose="reply",
             latency_ms=(time.perf_counter() - t0) * 1000,
             tokens_in=resp.get("prompt_eval_count") or 0,
             tokens_out=resp.get("eval_count") or 0,
@@ -369,9 +417,13 @@ class OllamaAdapter:
             resp = await asyncio.wait_for(
                 self._client.chat(
                     model=self._model,
-                    messages=[{"role": "system", "content": _SYSTEM_PERTINENCIA},
-                              {"role": "user", "content":
-                               f"PREGUNTA: {question}\n\nFRAGMENTO:\n{_recortar(evidence)}"}],
+                    messages=[
+                        {"role": "system", "content": _SYSTEM_PERTINENCIA},
+                        {
+                            "role": "user",
+                            "content": f"PREGUNTA: {question}\n\nFRAGMENTO:\n{_recortar(evidence)}",
+                        },
+                    ],
                     format=_SCHEMA_PERTINENCIA,
                     options={"temperature": 0, "num_predict": 12, "num_ctx": 2048},
                     keep_alive=self._keep_alive,
@@ -380,14 +432,19 @@ class OllamaAdapter:
             )
             return json.loads(resp["message"]["content"]).get("r") == "si"
         except Exception as exc:  # noqa: BLE001
-            log.warning("pertinencia degradada (%s): se asume que no responde", type(exc).__name__)
+            log.warning(
+                "pertinencia degradada (%s): se asume que no responde",
+                type(exc).__name__,
+            )
             return False
 
     async def summarize(self, *, system_prompt: str, user_prompt: str) -> str:
         resp = await self._client.chat(
             model=self._model,
-            messages=[{"role": "system", "content": system_prompt},
-                      {"role": "user", "content": user_prompt}],
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
             options={"temperature": 0.2, "num_predict": 300},
             keep_alive=self._keep_alive,
         )
@@ -432,5 +489,13 @@ def _resuelto(sym: Symptoms, slot: str) -> bool:
 
 
 def _bandera_roja(sym: Symptoms) -> bool:
-    return any((sym.heavy_bleeding, sym.breathing_difficulty, sym.chest_pain,
-                sym.loss_of_consciousness, sym.seizure, sym.altered_mental_status))
+    return any(
+        (
+            sym.heavy_bleeding,
+            sym.breathing_difficulty,
+            sym.chest_pain,
+            sym.loss_of_consciousness,
+            sym.seizure,
+            sym.altered_mental_status,
+        )
+    )
