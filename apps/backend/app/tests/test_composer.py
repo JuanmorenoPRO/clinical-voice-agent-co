@@ -163,3 +163,71 @@ def test_el_cierre_genera_su_nota_y_la_alarma_endurece():
     assert c.alarma is True
     assert any("TERMINA" in n for n in c.notas)
     assert any("visión borrosa" in n for n in c.notas)
+
+
+# --- anti-eco y anti-repetición (reporte del usuario, 9 de agosto) --------------
+
+
+def test_el_eco_largo_del_paciente_se_rechaza():
+    # Recitarle al paciente su frase entera de vuelta no es escuchar.
+    texto = (f"Usted mencionó que camina bien pero se cansa muy rapidito al "
+             f"subir escaleras. {PREGUNTA}")
+    c = ctx(utterance="camino bien pero me canso muy rapidito al subir escaleras")
+    assert composer.valida(texto, c) is False
+
+
+def test_el_reflejo_corto_si_pasa():
+    texto = f"Un 4, entonces. {PREGUNTA}"
+    c = ctx(utterance="pues yo creo que el dolor está como en un 4 más o menos")
+    assert composer.valida(texto, c) is True
+
+
+def test_la_frase_de_mision_se_rechaza():
+    # Medido con el 70B: la metía turno tras turno. El motivo de la llamada se
+    # dice UNA vez, en la apertura — que no pasa por el redactor.
+    texto = ("Queremos asegurarnos de que se esté recuperando adecuadamente "
+             f"después de la apendicectomía. {PREGUNTA}")
+    assert composer.valida(texto, ctx()) is False
+
+
+def test_la_muletilla_repetida_contra_el_historial_se_rechaza():
+    historial = [
+        {"rol": "paciente", "texto": "no, fiebre no he tenido"},
+        {"rol": "agente",
+         "texto": "Me alegra que se sienta cada día mejor con su recuperación. "
+                  "¿Camina bien, le cuesta, necesita ayuda?"},
+    ]
+    texto = (f"Me alegra que se sienta cada día mejor con todo esto. {PREGUNTA}")
+    assert composer.valida(texto, ctx(historial=historial)) is False
+
+
+def test_coincidir_solo_en_la_pregunta_del_guion_no_es_repetirse():
+    # El banco de preguntas rota entre variantes fijas: que la pregunta
+    # obligatoria coincida con una de un turno previo es legítimo.
+    historial = [
+        {"rol": "agente", "texto": f"Listo, tomo nota. {PREGUNTA}"},
+        {"rol": "paciente", "texto": "espere le pregunto a mi hija"},
+    ]
+    texto = f"Claro, tranquilo. {PREGUNTA}"
+    assert composer.valida(texto, ctx(historial=historial)) is True
+
+
+def test_la_fuente_fantasma_se_rechaza():
+    # Medido con el 8B: antes de preguntar por la herida afirmó "la herida está
+    # bien, según lo que me han informado" — nadie le informó nada.
+    texto = ("La herida de la cirugía está bien, según lo que me han informado. "
+             f"{PREGUNTA}")
+    assert composer.valida(texto, ctx()) is False
+
+
+def test_el_acuse_largo_en_respuesta_simple_se_rechaza():
+    # Sin nada que responder, todo lo anterior a la pregunta es el acuse, y un
+    # acuse de más de 12 palabras es re-narración aunque conjugue distinto.
+    texto = ("Veo que camina bien aunque se cansa un poco más rápido de lo "
+             f"normal al hacer esfuerzos. {PREGUNTA}")
+    assert composer.valida(texto, ctx()) is False
+
+
+def test_el_acuse_corto_en_respuesta_simple_pasa():
+    texto = f"Camina bien aunque se cansa, anotado. {PREGUNTA}"
+    assert composer.valida(texto, ctx()) is True

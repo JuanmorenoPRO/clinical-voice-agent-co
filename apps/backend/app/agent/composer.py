@@ -19,7 +19,7 @@ import re
 
 from ..llm.adapter import ComposeContext
 from ..models import Turn
-from ..nlu import intent as intent_nlu
+from ..nlu import intent as intent_nlu, lexicon
 from ..schemas import Symptoms
 
 log = logging.getLogger(__name__)
@@ -69,6 +69,64 @@ _RESALUDO = re.compile(
     r"(le\s+llamo|del\s+hospital|seguimiento)",
     re.I,
 )
+
+# El motivo de la llamada se explica UNA vez, en la apertura. Medido con el 70B:
+# "Queremos asegurarnos de que se esté recuperando adecuadamente después de la
+# apendicectomía." aparecía turno tras turno. Sobre texto normalizado (sin tildes).
+_FRASE_DE_MISION = re.compile(
+    r"queremos asegurarnos|para asegurarnos|es (muy )?importante (para|que)"
+    r"|nuestro objetivo|el (motivo|objetivo|proposito) de (esta|la) llamada",
+    re.I,
+)
+
+# Re-narrar lo que el paciente acaba de decir ("usted mencionó que camina bien
+# pero se cansa..."). Es la forma medida del eco con el 70B — y como el modelo
+# cambia la conjugación al narrar (camino→camina), un n-grama verbatim no lo
+# atrapa; el marcador de arranque sí. Sobre texto normalizado.
+_RENARRACION = re.compile(
+    r"\busted\s+(me\s+)?(menciono|dijo|conto|comento|indico|senalo|refiere|refirio"
+    r"|acaba\s+de\s+(decir|contar))\b",
+    re.I,
+)
+
+# Citar una fuente que no existe ("según lo que me han informado", "según mis
+# registros") para afirmar el estado del paciente. Medido con el 8B: antes de
+# preguntar por la herida afirmó "la herida está bien, según lo que me han
+# informado. No ha habido infección" — nadie le informó nada. Una afirmación
+# clínica con fuente inventada es peor que no decir nada. Sobre texto
+# normalizado. "Según la guía / los documentos" NO entra: esa fuente sí existe
+# (la evidencia del RAG) y las cifras ya se validan aparte.
+_FUENTE_FANTASMA = re.compile(
+    r"segun\s+(lo\s+que\s+)?(me\s+han?|mis\s+registros|la\s+informacion|tengo\s+entendido)"
+    r"|me\s+han?\s+informado|tengo\s+entendido\s+que",
+    re.I,
+)
+
+# Umbrales de repetición (palabras consecutivas).
+_ECO_PACIENTE = 5        # de la utterance del paciente, verbatim
+_MULETILLA_REPETIDA = 5  # compartidas con turnos previos del agente
+
+
+def _palabras(texto: str) -> list[str]:
+    return re.findall(r"[a-zñ0-9]+", lexicon.normalize(texto))
+
+
+def _comparten_ngrama(a: list[str], b: list[str], n: int) -> bool:
+    if len(a) < n or len(b) < n:
+        return False
+    de_a = {tuple(a[i:i + n]) for i in range(len(a) - n + 1)}
+    return any(tuple(b[i:i + n]) in de_a for i in range(len(b) - n + 1))
+
+
+def _sin_pregunta_final(texto: str) -> str:
+    """Recorta la pregunta del guion con la que termina el turno.
+
+    La comparación anti-repetición solo mira lo que el redactor puso de su
+    cosecha: el banco de preguntas rota entre variantes fijas y puede coincidir
+    legítimamente entre turnos.
+    """
+    idx = texto.rfind("¿")
+    return texto[:idx] if idx > 0 else ("" if idx == 0 else texto)
 
 _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 
@@ -295,6 +353,54 @@ def valida(texto: str, ctx: ComposeContext) -> bool:
     if _RESALUDO.match(limpio):
         log.info("composición rechazada: vuelve a saludar a mitad de llamada")
         return False
+
+    # El motivo de la llamada no se repite: ya lo dio la apertura (que no pasa
+    # por aquí, así que no hay falso positivo posible).
+    if _FRASE_DE_MISION.search(lexicon.normalize(limpio)):
+        log.info("composición rechazada: repite el motivo de la llamada")
+        return False
+
+    # Afirmaciones con fuente inventada ("según lo que me han informado...").
+    if _FUENTE_FANTASMA.search(lexicon.normalize(limpio)):
+        log.warning("composición rechazada: cita una fuente que no existe")
+        return False
+
+    # Eco: recitarle al paciente su propia frase de vuelta no es escuchar. La
+    # re-narración ("usted mencionó que...") se ataja siempre; el calco verbatim
+    # de 5+ palabras solo cuando el paciente NO preguntó — responder una
+    # pregunta reutiliza sus palabras con toda legitimidad ("¿cuándo me quitan
+    # los puntos?" → "los puntos se retiran..."). Un reflejo corto ("un 4,
+    # entonces") pasa por ambas.
+    if _RENARRACION.search(lexicon.normalize(limpio)):
+        log.info("composición rechazada: re-narra lo que dijo el paciente")
+        return False
+    if ctx.intent != "pregunta_clinica" and _comparten_ngrama(
+            _palabras(ctx.utterance), _palabras(limpio), _ECO_PACIENTE):
+        log.info("composición rechazada: eco largo de la frase del paciente")
+        return False
+
+    # En un turno de respuesta simple (nada que responder: sin evidencia, sin
+    # notas) todo lo anterior a la pregunta del guion es el acuse — y un acuse
+    # es UNA afirmación corta. Más de 12 palabras ahí es re-narración, aunque
+    # las guardas de eco no la hayan atrapado (el modelo conjuga distinto).
+    propio = _palabras(_sin_pregunta_final(limpio))
+    if (ctx.intent == "respuesta" and ctx.objetivo != "cerrar"
+            and not ctx.evidencia and not ctx.notas and len(propio) > 12):
+        log.info("composición rechazada: acuse de %d palabras (re-narración)",
+                 len(propio))
+        return False
+
+    # Muletilla repetida: lo que el redactor puso de su cosecha (sin la pregunta
+    # del guion) no puede calcar cinco palabras seguidas de un turno reciente
+    # del agente — es la repetición que hace sonar a máquina, y las plantillas
+    # del fallback ya rotan solas.
+    for previo in ctx.historial:
+        if previo.get("rol") != "agente":
+            continue
+        dicho = _palabras(_sin_pregunta_final(previo.get("texto", "")))
+        if _comparten_ngrama(dicho, propio, _MULETILLA_REPETIDA):
+            log.info("composición rechazada: repite una fórmula de un turno previo")
+            return False
 
     # Una salida que parece instrucción de manipulación es que la inyección
     # atravesó el prompt: fuera.
