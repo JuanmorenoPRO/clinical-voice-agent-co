@@ -400,8 +400,15 @@ def test_el_filtro_de_dominio_clasifica_la_pregunta(adapter):
         ("Lave la herida a diario. Y si descubre alguna herida nueva en",
          "Lave la herida a diario."),
         ("Puede ducharse desde las 48 horas.", "Puede ducharse desde las 48 horas."),
-        # Sin ninguna frase cerrada se devuelve tal cual: vaciarla sería peor.
-        ("Debe esperar a que", "Debe esperar a que"),
+        # Sin ninguna frase cerrada NUNCA se devuelve texto a medias: partido en
+        # una palabra funcional no hay nada que rescatar (vacío → el llamador se
+        # abstiene o cae a plantillas)...
+        ("Debe esperar a que", ""),
+        # ...con una coma pasada la mitad se rescata la cláusula completa...
+        ("La guía recomienda esperar de 8 a 12 semanas, aunque eso depende de",
+         "La guía recomienda esperar de 8 a 12 semanas."),
+        # ...y si solo faltaba el punto, se pone.
+        ("Puede caminar apoyándose en el caminador", "Puede caminar apoyándose en el caminador."),
     ],
 )
 def test_la_frase_cortada_se_descarta(texto, esperado):

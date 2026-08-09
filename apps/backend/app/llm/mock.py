@@ -85,5 +85,10 @@ class MockAdapter:
         )
         return LLMTurnOutput(sintomas=symptoms, respuesta=respuesta)
 
+    async def compose_reply(self, *, ctx) -> None:
+        """Sin modelo no hay redacción: None fuerza la ruta de plantillas, que
+        es determinista y es la que los tests pueden asertar."""
+        return None
+
     def summarize(self, *, system_prompt: str, user_prompt: str) -> str:
         return "Resumen generado por MockAdapter (sin LLM real)."

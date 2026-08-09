@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # mock  -> extractor determinista, para tests sin Ollama levantado.
     llm_provider: str = "groq"
     llm_model: str = "llama-3.3-70b-versatile"
+    # Proveedor de la llamada de REDACCIÓN (compose_reply): quién escribe lo que
+    # el agente dice en voz alta, con el guion como restricción. Vacío = el mismo
+    # de `llm_provider`. Separado para poder comparar redactores sin tocar la
+    # extracción.
+    compose_provider: str = ""
     ollama_host: str = "http://localhost:11434"
     # Si el modelo tarda más que esto, el turno se completa con el léxico
     # determinista y se marca degradado. Medido en Ollama: la extracción iba en
@@ -48,6 +53,10 @@ class Settings(BaseSettings):
     # La respuesta anclada al RAG procesa evidencia y genera dos frases: es la
     # ruta lenta del sistema y necesita más margen que la extracción de un slot.
     llm_reply_timeout_s: float = 12.0
+    # Redacción del turno (compose_reply). Más corto que el de reply: si el
+    # redactor tarda, el turno cae a las plantillas deterministas y la llamada
+    # no se queda esperando. Groq responde en ~1 s; 6 s es el margen de un mal día.
+    llm_compose_timeout_s: float = 6.0
     # Mantiene el modelo en RAM entre turnos (solo Ollama). Groq lo ignora.
     llm_keep_alive: str = "60m"
 
@@ -142,6 +151,9 @@ class Settings(BaseSettings):
 
     # --- Datos versionados fuera del código ---
     seed_dir: str = "data/seed"
+    # Prompts del redactor (RNF-05): viven como archivos versionados en /prompts,
+    # no hardcodeados, para poder iterarlos sin tocar código.
+    prompts_dir: str = "prompts"
 
 
 @lru_cache
@@ -152,6 +164,7 @@ def get_settings() -> Settings:
     s.chroma_dir = _abs(s.chroma_dir)
     s.piper_voices_dir = _abs(s.piper_voices_dir)
     s.seed_dir = _abs(s.seed_dir)
+    s.prompts_dir = _abs(s.prompts_dir)
     if s.database_url.startswith("sqlite:///./"):
         s.database_url = "sqlite:///" + _abs(
             s.database_url.removeprefix("sqlite:///./")

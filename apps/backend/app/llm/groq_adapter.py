@@ -34,6 +34,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 
 from groq import AsyncGroq
@@ -42,10 +43,12 @@ from ..config import get_settings
 from ..nlu import intent as intent_rules
 from ..nlu import lexicon
 from ..nlu.merge import merge_symptoms
-from .adapter import Extraction, LLMUsage
+from ..prompts_loader import load_prompt
+from .adapter import ComposeContext, Extraction, LLMUsage
 from .extraction_schema import SLOT_FIELDS, SLOT_KEY, schema_for_slot
 from .ollama_adapter import (
     ABSTENCION,
+    _APERTURA_POSTIZA,
     _SIN_CONTENIDO_CLINICO,
     _SYSTEM_EXTRACT,
     _SYSTEM_PERTINENCIA,
@@ -87,12 +90,50 @@ def _extraer_json(texto: str) -> dict:
     return json.loads(texto[inicio : fin + 1])
 
 
+def formatear_historial(historial: list[dict[str, str]]) -> str:
+    """El historial como diálogo plano para el prompt del redactor."""
+    if not historial:
+        return "(la llamada apenas empieza)"
+    lineas = []
+    for turno in historial:
+        quien = "Paciente" if turno.get("rol") == "paciente" else "Agente"
+        lineas.append(f"{quien}: {turno.get('texto', '')}")
+    return "\n".join(lineas)
+
+
+def prompt_de_composicion(ctx: ComposeContext) -> str:
+    """Rellena la plantilla versionada `prompts/compose_turn.md`."""
+    evidencia = (
+        "EVIDENCIA de los documentos del hospital (responde la pregunta del "
+        f"paciente SOLO desde aquí):\n{_recortar(ctx.evidencia)}\n"
+        if ctx.evidencia
+        else ""
+    )
+    notas = ("NOTAS del sistema para este turno:\n"
+             + "\n".join(f"- {n}" for n in ctx.notas) + "\n") if ctx.notas else ""
+    return load_prompt("compose_turn").format(
+        historial=formatear_historial(ctx.historial),
+        utterance=ctx.utterance,
+        sintomas=ctx.sintomas or "(todavía nada)",
+        procedimiento=ctx.procedimiento or "(sin registrar)",
+        evidencia=evidencia,
+        notas=notas,
+        pregunta_guion=ctx.pregunta_guion,
+    )
+
+
+# Comillas y fences con los que un modelo envuelve su salida cuando se le pide
+# "solo el texto". Se pelan antes de los saneadores.
+_ENVOLTORIO = re.compile(r'^\s*["“”\'`]+|["“”\'`]+\s*$')
+
+
 class GroqAdapter:
     def __init__(self) -> None:
         s = get_settings()
         self._model = s.llm_model
         self._timeout = s.llm_timeout_s
         self._reply_timeout = s.llm_reply_timeout_s
+        self._compose_timeout = s.llm_compose_timeout_s
         self._api_key = s.groq_api_key
         self._clients: dict[int, AsyncGroq] = {}
 
@@ -230,8 +271,13 @@ class GroqAdapter:
                     {"role": "system", "content": _SYSTEM_REPLY},
                     {"role": "user", "content": user},
                 ],
+                # 256 y no 80: con 80 un 70B corta la respuesta a media frase
+                # sin llegar a ningún punto ("...lo que sugiere que"), y el
+                # saneador no tenía nada que rescatar. El prompt sigue pidiendo
+                # 2 frases; el margen es para que el corte, si llega, caiga
+                # después de una frase completa.
                 temperature=0.2,
-                max_tokens=80,
+                max_tokens=256,
                 response_format=None,
                 timeout=self._reply_timeout,
             )
@@ -264,6 +310,54 @@ class GroqAdapter:
             return ABSTENCION, usage
         return sin_frase_cortada(sin_tartamudeo(sin_muletillas(a_usted(texto)))), usage
 
+    # --- redacción del turno completo -----------------------------------------
+
+    async def compose_reply(self, *, ctx: ComposeContext) -> tuple[str, LLMUsage] | None:
+        """Redacta lo que el agente dice en voz alta, con el guion como restricción.
+
+        `temperature=0.4` a propósito: la variación de fraseo es el objetivo de
+        esta llamada, no un riesgo — las decisiones clínicas ya están tomadas y
+        la validación dura la hace `agent/composer.py` después. No se aplica
+        `sin_muletillas` completo por la misma razón: `_EMOCION_INVENTADA`
+        recortaría aperturas legítimas de un 70B que sí vio el historial; solo
+        se pelan los vocativos informales (`_APERTURA_POSTIZA`).
+        """
+        t0 = time.perf_counter()
+        try:
+            result = await self._chat(
+                messages=[
+                    {"role": "system", "content": load_prompt("compose_system")},
+                    {"role": "user", "content": prompt_de_composicion(ctx)},
+                ],
+                temperature=0.4,
+                max_tokens=220,
+                response_format=None,
+                timeout=self._compose_timeout,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning(
+                "compose_reply degradado (%s: %s) — caen las plantillas",
+                type(exc).__name__, exc,
+            )
+            return None
+        if result is None:
+            return None
+        texto, inp, out = result
+        usage = LLMUsage(
+            model=self._model,
+            purpose="compose",
+            latency_ms=(time.perf_counter() - t0) * 1000,
+            tokens_in=inp,
+            tokens_out=out,
+        )
+        texto = _ENVOLTORIO.sub("", (texto or "").strip())
+        texto = sin_frase_cortada(sin_tartamudeo(a_usted(texto)))
+        texto = _APERTURA_POSTIZA.sub("", texto).strip()
+        if not texto:
+            return None
+        texto = texto[0].upper() + texto[1:]
+        return texto, usage
+
     async def pregunta_es_del_dominio(self, *, question: str, evidence: str) -> bool:
         if not _nombres_propios_presentes(question, evidence):
             return False
@@ -291,11 +385,16 @@ class GroqAdapter:
             content, _, _ = result
             return _extraer_json(content).get("c") == "cuidado"
         except Exception as exc:  # noqa: BLE001
+            # Fail-open y no fail-closed: un hipo de red aquí convertía una
+            # pregunta legítima en abstención seca. El precheck determinista de
+            # nombres propios ya corrió, y aguas abajo siguen las guardas de
+            # grounding; dejar pasar la evidencia recuperada es el menor de los
+            # dos males.
             log.warning(
-                "pertinencia degradada (%s): se asume que no responde",
+                "pertinencia degradada (%s): se asume que sí responde",
                 type(exc).__name__,
             )
-            return False
+            return True
 
     async def summarize(self, *, system_prompt: str, user_prompt: str) -> str:
         try:

@@ -68,6 +68,15 @@ SIN_PROGRESO_OFRECER_SALIDA = 3
 # llamada que no se pudo evaluar, y hasta ahora no se alcanzaba nunca.
 SIN_PROGRESO_CERRAR = 5
 
+# Turnos en fase de CONFIRMACIÓN antes de cerrar aunque el paciente no se haya
+# despedido con una fórmula reconocible. Dos es el margen justo: uno para
+# comprobar que quedó claro y otro por si trae una última duda. Sin este tope la
+# fase solo salía con el regex de despedida o con 5 turnos sin progreso, y como
+# cualquier dato nuevo reseteaba ese contador, el agente podía alternar "¿Hay
+# algo más...?" / "¿Quedamos así...?" indefinidamente con un paciente que ya
+# había dicho "no, nada más, gracias".
+MAX_TURNOS_CONFIRMACION = 2
+
 # Silencios SEGUIDOS antes de colgar. Tres es la escalera mínima que no cuelga a
 # nadie por error: el primero comprueba si sigue en línea (la llamada se pudo
 # cortar, o el paciente se levantó), el segundo avisa de que se va a terminar, y
@@ -122,6 +131,15 @@ class CallState:
     # acusaría ocho veces, que es el mismo error que `_aporto_dato` ya evita para
     # los síntomas fuera de catálogo.
     procedimiento_dicho: str | None = None
+    # Turnos que la llamada lleva en fase de CONFIRMACIÓN. Alimenta el tope
+    # MAX_TURNOS_CONFIRMACION; sin él la fase no tenía salida garantizada.
+    turnos_confirmacion: int = 0
+    # El guion de seguridad ya se entregó en esta llamada. Persistente a
+    # propósito, como `procedimiento_dicho`: la fase avanza (ESCALAMIENTO →
+    # CONFIRMACION) pero el hecho no se olvida, y es lo que impide que
+    # `engine.evaluate(final=True)` re-dispare el guion completo en cada intento
+    # de cierre posterior — el paciente lo oía dos y tres veces.
+    guion_entregado: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -131,6 +149,8 @@ class CallState:
             "seguido": self.seguido, "ultimo_hash": self.ultimo_hash,
             "sin_progreso": self.sin_progreso, "sin_respuesta": self.sin_respuesta,
             "procedimiento_dicho": self.procedimiento_dicho,
+            "turnos_confirmacion": self.turnos_confirmacion,
+            "guion_entregado": self.guion_entregado,
         }
 
     @classmethod
@@ -148,6 +168,8 @@ class CallState:
             sin_progreso=int(d.get("sin_progreso") or 0),
             sin_respuesta=int(d.get("sin_respuesta") or 0),
             procedimiento_dicho=d.get("procedimiento_dicho"),
+            turnos_confirmacion=int(d.get("turnos_confirmacion") or 0),
+            guion_entregado=bool(d.get("guion_entregado") or False),
         )
 
 
@@ -242,12 +264,15 @@ def next_action(state: CallState, symptoms: Symptoms, *,
     # puede despedirse en el mismo turno que sigue al guion ("ya entendí, chao"),
     # y hacerle una pregunta de confirmación después de eso es no escucharlo.
     if state.phase is Phase.ESCALAMIENTO:
-        if emergencia or quiere_colgar or state.sin_progreso >= SIN_PROGRESO_CERRAR:
+        if (emergencia or quiere_colgar
+                or state.sin_progreso >= SIN_PROGRESO_CERRAR
+                or state.turnos_confirmacion >= MAX_TURNOS_CONFIRMACION):
             return Action(kind="cerrar", phase=Phase.TERMINADA)
         return Action(kind="confirmar", phase=Phase.CONFIRMACION)
 
     if state.phase is Phase.CONFIRMACION:
-        if quiere_colgar or state.sin_progreso >= SIN_PROGRESO_CERRAR:
+        if (quiere_colgar or state.sin_progreso >= SIN_PROGRESO_CERRAR
+                or state.turnos_confirmacion >= MAX_TURNOS_CONFIRMACION):
             return Action(kind="cerrar", phase=Phase.TERMINADA)
         return Action(kind="confirmar", phase=Phase.CONFIRMACION)
 
@@ -312,7 +337,8 @@ def next_action(state: CallState, symptoms: Symptoms, *,
 def apply(state: CallState, action: Action, symptoms: Symptoms, *,
           hash_turno: str | None = None, progreso: bool = True,
           intento_real: bool = True, silencio: bool = False,
-          procedimiento_dicho: str | None = None) -> CallState:
+          procedimiento_dicho: str | None = None,
+          guion_entregado: bool = False) -> CallState:
     """Avanza el estado tras ejecutar `action`. Devuelve un estado nuevo.
 
     `hash_turno` y `progreso` los calcula el orquestador, que es quien ve el texto
@@ -339,6 +365,10 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
         # llamada: la primera vez se le reconoce, las siguientes ya no, y el
         # guard del RAG lo necesita en los turnos posteriores al que lo dijo.
         procedimiento_dicho=procedimiento_dicho or state.procedimiento_dicho,
+        turnos_confirmacion=state.turnos_confirmacion,
+        # Igual que `procedimiento_dicho`: una vez entregado, entregado. La fase
+        # avanza pero el hecho persiste hasta el final de la llamada.
+        guion_entregado=guion_entregado or state.guion_entregado,
     )
 
     if action.kind == "sondear":
@@ -361,7 +391,10 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
 
     if action.kind == "confirmar":
         # La llamada está esperando al paciente, no recorriendo el guion: no hay
-        # slot que resolver ni que dar por perdido.
+        # slot que resolver ni que dar por perdido. Sí cuenta para el tope de la
+        # fase: cada pregunta de confirmación gasta uno de los
+        # MAX_TURNOS_CONFIRMACION.
+        nuevo.turnos_confirmacion = state.turnos_confirmacion + 1
         return nuevo
 
     # El slot que se estaba preguntando: o se resolvió, o consume un intento.

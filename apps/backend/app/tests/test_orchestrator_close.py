@@ -203,3 +203,103 @@ def test_la_respuesta_generada_no_hace_preguntas():
         "No, no es normal. Debe ser compresible. ¿Se duele el abdomen?"
     ) == "No, no es normal. Debe ser compresible."
     assert _sin_preguntas("¿Y cómo sigue?") == ""
+
+
+# --- el bucle de cierre (chat real del 9 de agosto) -----------------------------
+
+
+def _tamizaje_completo(session) -> str:
+    """Recorre los seis slots con respuestas normales; devuelve el conversation_id
+    con la llamada parada en la pregunta abierta."""
+    respuestas = [
+        "Un 2, apenas se nota, tranquilo.",   # dolor
+        "No tengo fiebre, nada.",              # fiebre
+        "Camino bien, sin problema.",          # movilidad
+        "La herida se ve bien.",               # herida
+        "Como bien, normal.",                  # apetito
+        "Duermo bien, tranquilo.",              # sueño
+    ]
+    conversation_id = None
+    for texto in respuestas:
+        r = process_turn(session, text=texto, conversation_id=conversation_id)
+        conversation_id = r.conversation_id
+    return conversation_id
+
+
+def test_la_negacion_simple_cierra_la_confirmacion(session):
+    """El bug del chat: "no" → "¿Hay algo más...?" → "no, nada" → "¿Quedamos
+    así...?" → ... indefinidamente. Una negación simple en fase de cierre
+    significa que no hay más temas, y la llamada cierra."""
+    cid = _tamizaje_completo(session)
+    # "no" pelado a la pregunta abierta no es despedida formal: abre CONFIRMACION.
+    r = process_turn(session, text="no", conversation_id=cid)
+    assert r.call_ended is False
+    # La negación simple a la pregunta de confirmación SÍ cierra.
+    ultimo = process_turn(session, text="No, nada, así está bien.",
+                          conversation_id=cid)
+    assert ultimo.call_ended is True
+
+
+def test_la_confirmacion_cierra_por_tope_aunque_no_se_entienda_al_paciente(session):
+    """Aunque ninguna respuesta case con despedida ni negación, la fase de
+    confirmación no puede ser infinita: cierra al agotar el tope."""
+    cid = _tamizaje_completo(session)
+    respuestas_raras = ["pues yo creo que ya sería eso",
+                        "mmm pues era lo del control médico",
+                        "era eso del control",
+                        "lo del control pues"]
+    ultimo = None
+    for texto in respuestas_raras:
+        ultimo = process_turn(session, text=texto, conversation_id=cid)
+        if ultimo.call_ended:
+            break
+    assert ultimo is not None and ultimo.call_ended is True, (
+        "la fase de confirmación nunca cerró"
+    )
+
+
+# --- el guion de seguridad no se repite (chat real del 9 de agosto) -------------
+
+
+def test_el_guion_critico_no_se_repite_tras_el_cierre_anunciado(session):
+    """Chat real: tras "vamos a colgar aquí", un "Listo, gracias" recibió el
+    guion de seguridad completo otra vez, palabra por palabra."""
+    primero = process_turn(session, text="Me duele un berraco, no aguanto")
+    guion = primero.response
+    cid = primero.conversation_id
+
+    r = None
+    for texto in ("Listo, muchas gracias.", "No, todo muy claro. Muchas gracias.",
+                  "Listo, gracias."):
+        r = process_turn(session, text=texto, conversation_id=cid)
+        assert r.response != guion, f"el guion de seguridad revivió tras {texto!r}"
+        if r.call_ended:
+            break
+    assert r is not None and r.call_ended is True
+
+
+def test_el_guion_de_incertidumbre_no_se_repite(session):
+    """El agujero exacto del guard viejo: el guion que nace de la política de
+    incertidumbre (`no_se_pudo_evaluar`, sintetizado con `final=True`) no vive
+    en `acumulado`, así que `critico` vuelve a False al turno siguiente y la
+    fase ya avanzó a CONFIRMACION — el guard `phase is not ESCALAMIENTO` no
+    aplicaba y cada intento de cierre re-disparaba el guion completo."""
+    primero = process_turn(session, text="El dolor es un 2, tranquilo.")
+    cid = primero.conversation_id
+
+    # Se despide con el cuadro casi vacío → política de incertidumbre → guion.
+    con_guion = process_turn(session, text="Tengo que colgar, hasta luego",
+                             conversation_id=cid)
+    assert "enfermería" in con_guion.response.lower() or "123" in con_guion.response
+    guion = con_guion.response
+    assert con_guion.call_ended is False
+
+    # Sigue hablando sin despedirse: pregunta de confirmación, no el guion.
+    medio = process_turn(session, text="bueno", conversation_id=cid)
+    assert medio.response != guion
+
+    # Se despide otra vez: cierra de verdad, sin repetir el guion.
+    ultimo = process_turn(session, text="Listo, gracias, chao",
+                          conversation_id=cid)
+    assert ultimo.response != guion, "el guion de incertidumbre se repitió"
+    assert ultimo.call_ended is True

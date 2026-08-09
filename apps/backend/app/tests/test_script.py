@@ -182,3 +182,63 @@ def test_un_saludo_no_gasta_un_reintento():
     # Una evasiva real sí lo gasta.
     tras_evasiva = apply(estado, accion, Symptoms(), intento_real=True)
     assert tras_evasiva.repreguntas["dolor"] == 1
+
+
+# --- tope de la fase de CONFIRMACIÓN ------------------------------------------
+# Bug medido en una llamada real: el paciente dijo "no, nada más" cuatro veces y
+# el agente siguió alternando "¿Hay algo más...?" / "¿Quedamos así...?" porque
+# la fase solo salía con el regex de despedida o con 5 turnos sin progreso — y
+# cualquier dato nuevo reseteaba ese contador.
+
+
+def test_confirmar_gasta_un_turno_del_tope():
+    estado = CallState(phase=Phase.CONFIRMACION, slot_actual=None)
+    accion = next_action(estado, Symptoms())
+    assert accion.kind == "confirmar"
+    nuevo = apply(estado, accion, Symptoms(), progreso=False)
+    assert nuevo.turnos_confirmacion == 1
+
+
+def test_la_confirmacion_cierra_al_alcanzar_el_tope():
+    estado = CallState(phase=Phase.CONFIRMACION, slot_actual=None)
+    for esperado in range(1, script.MAX_TURNOS_CONFIRMACION + 1):
+        accion = next_action(estado, Symptoms())
+        assert accion.kind == "confirmar", f"turno {esperado} debía confirmar"
+        estado = apply(estado, accion, Symptoms(), progreso=False)
+        assert estado.turnos_confirmacion == esperado
+    assert next_action(estado, Symptoms()).kind == "cerrar"
+
+
+def test_el_tope_aplica_aunque_el_paciente_aporte_datos():
+    """`progreso=True` resetea `sin_progreso`, pero NO el tope de confirmación:
+    esa era exactamente la vía por la que el bucle no terminaba nunca."""
+    estado = CallState(phase=Phase.CONFIRMACION, slot_actual=None,
+                       turnos_confirmacion=script.MAX_TURNOS_CONFIRMACION)
+    assert next_action(estado, Symptoms()).kind == "cerrar"
+
+
+def test_el_tope_tambien_cierra_en_escalamiento():
+    estado = CallState(phase=Phase.ESCALAMIENTO, slot_actual=None,
+                       turnos_confirmacion=script.MAX_TURNOS_CONFIRMACION)
+    assert next_action(estado, CRITICO).kind == "cerrar"
+
+
+# --- el guion de seguridad se entrega UNA vez ----------------------------------
+
+
+def test_guion_entregado_persiste_entre_turnos_y_serializacion():
+    """El flag es lo que impide que `evaluate(final=True)` re-dispare el guion
+    completo: la fase avanza (ESCALAMIENTO → CONFIRMACION) pero el hecho no se
+    olvida, y tiene que sobrevivir el viaje por la base de datos."""
+    estado = CallState(phase=Phase.ESCALAMIENTO)
+    accion = Action(kind="confirmar", phase=Phase.CONFIRMACION)
+    tras_guion = apply(estado, accion, Symptoms(), guion_entregado=True)
+    assert tras_guion.guion_entregado is True
+
+    vuelta = CallState.from_dict(tras_guion.to_dict())
+    assert vuelta.guion_entregado is True
+    assert vuelta.turnos_confirmacion == tras_guion.turnos_confirmacion
+
+    # Y no se pierde en turnos posteriores aunque nadie lo vuelva a pasar.
+    despues = apply(vuelta, accion, Symptoms())
+    assert despues.guion_entregado is True

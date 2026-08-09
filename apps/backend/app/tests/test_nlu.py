@@ -631,3 +631,93 @@ def test_los_escalofrios_sobreviven_a_la_negacion_de_fiebre():
     assert sym.fever is False
     assert "escalofríos" in sym.other
     assert otros_sintomas.senales(sym.other) == ["escalofríos"]
+
+
+# --- negación simple de "¿algo más?" en fase de cierre --------------------------
+# Bug medido: "No, no, está muy bien. Muchas gracias." no casaba con _DESPEDIDA
+# y el agente encadenaba preguntas de cierre en bucle.
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "No",
+        "no, nada",
+        "No, nada más, gracias",
+        "no no, así está bien",
+        "Listo, muchas gracias.",
+        "No, no, está muy bien. Muchas gracias.",
+        "No, nada más así está bien.",
+        "todo bien, gracias",
+        "perfecto, gracias",
+    ],
+)
+def test_la_negacion_simple_niega_mas_temas(texto):
+    assert intent.niega_mas_temas(texto) is True
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "No me duele",                    # contenido clínico: sigue siendo respuesta
+        "no he tenido fiebre",
+        "gracias",                        # cortesía sola no cierra nada
+        "muchas gracias",
+        "sí",
+        "me duele un poco la pierna",
+        "no puedo dormir",
+        "[silencio]",
+    ],
+)
+def test_la_negacion_no_se_traga_contenido(texto):
+    assert intent.niega_mas_temas(texto) is False
+
+
+# --- preguntas sin signos de interrogación (transcripciones Whisper) ------------
+# Bug medido: el paciente preguntó "cuando podria volver a jugar futbol" tres
+# veces —sin `¿?` porque el STT no los pone— y las tres cayeron en `respuesta`.
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "cuando podria volver a jugar futbol",
+        "en cuantos dias podria volver a jugar futbol",
+        "y cuándo puedo volver al gimnasio",
+        "quisiera saber en cuántos días podría volver a jugar fútbol",
+        "hasta cuando puedo estar sin caminar",
+        "que tan pronto puedo volver a trabajar",
+    ],
+)
+def test_la_pregunta_sin_signos_se_reconoce(texto):
+    assert intent.classify(texto) == "pregunta_clinica"
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "cuando me muevo me duele un poco",
+        "me duele cuando camino",
+        "cuando como me da náuseas",
+    ],
+)
+def test_una_afirmacion_con_cuando_sigue_siendo_respuesta(texto):
+    assert intent.classify(texto) == "respuesta"
+
+
+# --- la despedida cede ante una pregunta clínica --------------------------------
+
+
+def test_la_pregunta_pegada_a_la_despedida_no_se_pierde():
+    texto = "Eso es todo, pero ¿cuándo me quitan los puntos?"
+    assert intent.classify(texto) == "pregunta_clinica"
+    assert intent.contiene_despedida(texto) is True
+
+
+def test_la_despedida_pura_sigue_siendo_despedida():
+    assert intent.classify("Eso es todo, muchas gracias, hasta luego") == "despedida"
+
+
+def test_la_muletilla_de_confirmacion_no_reabre_la_despedida():
+    # "todo claro, ¿no?" es una despedida con muletilla, no una consulta.
+    assert intent.classify("todo claro, ¿no?") == "despedida"

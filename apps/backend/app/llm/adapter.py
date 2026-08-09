@@ -12,9 +12,14 @@ y el LLM ya no decide qué decir:
   extract()         siempre que haya que interpretar al paciente
   reply_grounded()  solo si el paciente hizo una pregunta clínica
 
-La redacción de las preguntas y los acuses empáticos NO pasa por aquí: sale del
-banco de plantillas, porque un 3B genera acuses inservibles ("agudo", "se siente
-mal") y cuesta ~11 tokens que en voz se notan.
+La redacción del turno volvió al LLM con `compose_reply()`, pero con el guion
+como restricción: el sistema decide QUÉ (qué slot preguntar, cuándo escalar,
+cuándo cerrar) y el modelo redacta CÓMO, viendo el historial reciente. La
+decisión original de sacarla —un 3B generaba acuses inservibles ("agudo", "se
+siente mal")— era correcta para `llama3.2:3b`, pero se mantuvo intacta al saltar
+a un 70B en Groq y el resultado era un agente de piezas pegadas que no escucha.
+Las plantillas de `agent/phrasing.py` siguen siendo el respaldo: si el redactor
+falla, expira o su salida no pasa las guardas, el turno sale determinista.
 """
 
 from __future__ import annotations
@@ -50,6 +55,41 @@ class Extraction(BaseModel):
     degraded: bool = False
 
 
+class ComposeContext(BaseModel):
+    """Todo lo que ve el redactor de un turno. Lo arma `agent/composer.py`.
+
+    El LLM no decide nada con esto: `pregunta_guion` y `objetivo` ya vienen
+    resueltos por la máquina de estados. El contexto existe para que la
+    redacción suene a alguien que escuchó la conversación, no a piezas pegadas.
+    """
+
+    # Últimos turnos, del más antiguo al más reciente:
+    # [{"rol": "paciente"|"agente", "texto": "..."}]
+    historial: list[dict[str, str]] = Field(default_factory=list)
+    utterance: str
+    intent: str = "respuesta"
+    # Texto canónico de la siguiente pregunta del guion (de phrasing, con su
+    # rotación). La salida DEBE terminar con ella o una variante fiel.
+    pregunta_guion: str
+    # action.kind: preguntar | repreguntar | seguimiento | ofrecer_salida |
+    # confirmar | cerrar
+    objetivo: str
+    # Evidencia RAG ya recortada y pertinente; None => si el paciente preguntó,
+    # hay que decirle que no está en los documentos.
+    evidencia: str | None = None
+    # Resumen legible del cuadro acumulado ("dolor 4/10, sin fiebre, ...").
+    sintomas: str = ""
+    procedimiento: str | None = None
+    nombre: str | None = None
+    riesgo: str = "NORMAL"
+    # Instrucciones puntuales del sistema para este turno, ya redactadas
+    # ("El paciente además se está despidiendo: ...").
+    notas: list[str] = Field(default_factory=list)
+    # El paciente consultó por un síntoma de alarma en este turno: la validación
+    # endurece las guardas de veredicto aunque el riesgo siga en NORMAL.
+    alarma: bool = False
+
+
 class LLMAdapter(Protocol):
     async def extract(
         self, *, slot: str | None, question: str, utterance: str
@@ -74,6 +114,20 @@ class LLMAdapter(Protocol):
         Si la evidencia no responde, devuelve la frase de abstención. El
         orquestador valida después que no aparezcan cifras ni fármacos ausentes
         de la evidencia.
+        """
+        ...
+
+    async def compose_reply(self, *, ctx: ComposeContext) -> tuple[str, LLMUsage] | None:
+        """Redacta el turno completo que se dirá en voz alta.
+
+        Integra en una sola frase natural: acuse de lo que dijo el paciente,
+        respuesta a su pregunta (desde `ctx.evidencia`, o abstención coherente)
+        y la pregunta del guion con la que debe terminar.
+
+        Nunca lanza: devuelve None ante fallo/timeout/salida vacía, y el
+        orquestador cae a las plantillas de `agent/phrasing.py`. La validación
+        de la salida (cifras, veredictos, inyección) es de `agent/composer.py`,
+        no de aquí.
         """
         ...
 

@@ -97,9 +97,27 @@ _SOCIAL = re.compile(
 # Pregunta clínica de verdad: pide una valoración o una instrucción de cuidado.
 # `me preocup` lleva guarda de negación: "nada que me preocupe" es tranquilidad,
 # no consulta, y sin la guarda marcaba como pregunta media capa limpia del dataset.
+#
+# Las dos alternativas de "cuándo puedo" existen porque Whisper transcribe sin
+# signos de interrogación: "cuando podria volver a jugar futbol" llegaba sin `¿?`
+# ni arranque de la lista cerrada, caía en `respuesta` y el paciente recibía la
+# siguiente pregunta del guion en vez de una respuesta — medido en una llamada
+# real donde lo preguntó tres veces seguidas. Exigen el verbo de posibilidad
+# detrás ("cuando puedo/podré/podría...") a propósito: "cuando me muevo me duele"
+# es una afirmación, y un "cuando" suelto marcaba media capa limpia del dataset.
 _PREGUNTA = re.compile(
     r"[¿?]"
-    r"|^\s*(puedo|debo|tengo que|sera|hasta cuando|cada cuanto|que hago|que pasa si)\b"
+    # "tengo que" lleva lookahead: "tengo que colgar/irme" es una despedida, no
+    # una consulta, y desde que la pregunta tiene precedencia sobre la despedida
+    # (ver `classify`) confundirlas mandaba la despedida al RAG.
+    r"|^\s*(y\s+)?(puedo|debo"
+    r"|tengo que (?!colgar|irme|salir|cortar|dejarl[oa]|terminar|contestar otra)"
+    r"|sera|hasta cuando|cada cuanto|que hago"
+    r"|que pasa si|en\s+cuantos?\s+(dias?|semanas?|meses?|tiempo)"
+    r"|a\s+los\s+cuantos?\s+dias?|que\s+tan\s+pronto|como\s+hago)\b"
+    r"|\b(cuando|hasta\s+cuando|en\s+cuantos?\s+(?:dias?|semanas?|meses?|tiempo)"
+    r"|a\s+los\s+cuantos?\s+dias?|que\s+tan\s+pronto)"
+    r"\s+(me\s+|se\s+)?(puedo|puede|podre|podria|voy\s+a\s+poder|vuelvo|volveria)\b"
     r"|\b(eso|esto|sera)\s+(es|esta)\s+(normal|bien|grave|peligroso)"
     r"|(?<!nada que )(?<!no me )\bme\s+(tengo\s+que\s+)?preocup",
     re.I,
@@ -114,6 +132,58 @@ _RECHAZO = re.compile(
     r"|no\s+me\s+llame\s+mas",
     re.I,
 )
+
+# Negación simple de "¿algo más?": la respuesta natural a una pregunta de cierre.
+# No es una despedida formal —"no, nada" no casa con `_DESPEDIDA` a menos que
+# traiga "más"— pero en fase de CONFIRMACIÓN significa exactamente lo mismo:
+# el paciente no tiene más temas y la llamada puede cerrar. Medido en una llamada
+# real: "No, no, está muy bien. Muchas gracias." recibió otra pregunta de cierre,
+# y la siguiente negación otra más, en bucle.
+#
+# Por tokens y no por regex: las negaciones se repiten y se combinan de formas
+# que un patrón lineal no aguanta ("no no, así está bien, muchas gracias"). El
+# turno cuenta si TODAS sus palabras son de negación/conformidad/cortesía y al
+# menos una es de negación o conformidad — "muchas gracias" a secas no cierra
+# nada, y cualquier palabra fuera de la lista ("no me duele") lo devuelve al
+# flujo normal.
+_TOKENS_CIERRE = frozenset({
+    "no", "nada", "mas", "gracias", "muchas", "listo", "lista", "bueno", "buena",
+    "bien", "esta", "estamos", "asi", "todo", "muy", "ok", "okey", "vale",
+    "perfecto", "de", "acuerdo", "amable", "senor", "senora", "senorita",
+    "doctor", "doctora", "eso", "es", "ya", "quedamos", "claro", "entendido",
+})
+_TOKENS_CONFORMIDAD = frozenset({
+    "no", "nada", "listo", "lista", "bien", "perfecto", "vale", "ok", "okey",
+    "claro", "entendido", "quedamos", "acuerdo",
+})
+
+
+def niega_mas_temas(text: str) -> bool:
+    """¿El turno es una negación simple de "¿algo más?" ("no, nada, gracias")?
+
+    Solo tiene sentido consultarlo en fase de CONFIRMACIÓN/ESCALAMIENTO, donde la
+    última pregunta del agente fue de cierre: ahí un "no" pelado significa "no
+    tengo más temas". En pleno tamizaje un "no" es la respuesta al síntoma y este
+    detector no debe usarse.
+    """
+    palabras = re.findall(r"[a-zñ]+", _norm(text))
+    if not palabras or len(palabras) > 10:
+        return False
+    if not all(p in _TOKENS_CIERRE for p in palabras):
+        return False
+    return bool(_TOKENS_CONFORMIDAD.intersection(palabras))
+
+
+def contiene_despedida(text: str) -> bool:
+    """¿El turno trae una fórmula de despedida, aunque traiga más cosas?
+
+    A diferencia de `classify` —que ante despedida + pregunta clínica prioriza la
+    pregunta—, esto reporta el hecho: el orquestador lo usa para responder la
+    pregunta Y confirmar el cierre en el mismo turno, en vez de perder una de las
+    dos cosas.
+    """
+    return bool(_DESPEDIDA.search(_norm(text)))
+
 
 # Despedirse o dar por terminada la conversación. Es lo que el agente espera en
 # fase de CONFIRMACIÓN para colgar: la llamada no acaba cuando el sistema termina
@@ -246,7 +316,12 @@ def classify(text: str) -> Intent:
     # turno no diga nada más; si trae contenido clínico ya no casa y sigue.
     if _SALUDO.match(t):
         return "saludo"
-    if _DESPEDIDA.search(t):
+    # La despedida cede ante una pregunta clínica en el mismo turno: "eso es
+    # todo, pero ¿cuándo me quitan los puntos?" es una pregunta que hay que
+    # responder, no una despedida que la entierra. Antes ganaba `despedida` por
+    # orden de evaluación y la pregunta se perdía sin respuesta. El orquestador
+    # puede saber que además se despidió con `contiene_despedida`.
+    if _DESPEDIDA.search(t) and not _pregunta_clinica_en(raw, t):
         return "despedida"
     if _ADMIN.search(t):
         return "pregunta_administrativa"
@@ -262,14 +337,34 @@ def classify(text: str) -> Intent:
             return "meta"
         if _SOCIAL.search(f):
             return "social"
-        if _PREGUNTA.search(frag):
+        # Sobre el fragmento normalizado: "¿Cuándo podré...?" lleva tilde y los
+        # patrones del regex van sin ella.
+        if _PREGUNTA.search(f):
             return "pregunta_clinica"
 
-    if not fragmentos and _PREGUNTA.search(raw):
+    if not fragmentos and _PREGUNTA.search(t):
         return "pregunta_clinica"
     if _META.search(t):
         return "meta"
     return "respuesta"
+
+
+def _pregunta_clinica_en(raw: str, t: str) -> bool:
+    """¿El turno trae una pregunta clínica de verdad (no muletilla, no meta/social)?
+
+    Réplica del análisis de fragmentos de `classify`, para decidir la precedencia
+    despedida/pregunta sin duplicar la clasificación completa.
+    """
+    fragmentos = _FRAGMENTO.findall(raw)
+    for frag in fragmentos:
+        f = _norm(frag)
+        if _MULETILLA.match(f.strip("¿? ")):
+            continue
+        if _META.search(f) or _SOCIAL.search(f):
+            continue
+        if _PREGUNTA.search(f):
+            return True
+    return bool(not fragmentos and _PREGUNTA.search(t))
 
 
 def is_injection(text: str) -> bool:

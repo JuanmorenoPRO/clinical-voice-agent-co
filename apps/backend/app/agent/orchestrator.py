@@ -3,21 +3,26 @@
 Estaba en `voice/conversation.py`, que era un mal sitio: no tiene nada que ver con
 la voz, es el servicio que comparten el endpoint de texto y el pipeline de audio.
 
-Cinco etapas explícitas, de las cuales **solo dos tocan el LLM**:
+Seis etapas explícitas:
 
     A. determinista   léxico colombiano → intención → inyección          (<5 ms)
     B. LLM            extracción del slot, solo si el léxico no lo resolvió
     C. determinista   fusión por severidad → engine.evaluate()           (<1 ms)
-    D. determinista   script.next_action() → qué se dice a continuación
-    E. LLM            respuesta anclada al RAG, solo si preguntó algo clínico
+    D. determinista   script.next_action() → QUÉ se hace a continuación
+    E. determinista   RAG + pertinencia, solo si preguntó algo clínico
+    F. LLM            compose_reply: CÓMO se dice, viendo el historial —
+                      con `composer.valida` como aduana y las plantillas de
+                      `phrasing.py` como fallback (`_texto_fallback`)
 
 **Excepción de seguridad:** si el léxico detecta una bandera de emergencia, se
-saltan B, D y E por completo. Se emite el guion determinista y se alerta. La ruta
-crítica es la más corta del sistema, y no pasa por el modelo: ni uno caído ni uno
-manipulado pueden suprimir un escalamiento.
+salta todo lo demás. Se emite el guion determinista y se alerta. La ruta crítica
+es la más corta del sistema, y no pasa por el modelo: ni uno caído ni uno
+manipulado pueden suprimir un escalamiento. Los guiones CRÍTICOS, la escalera de
+silencios, la anti-inyección y los cierres finales tampoco pasan por el redactor.
 
-El LLM nunca controla el flujo. Su salida es *dato* —un slot de un enum cerrado—,
-nunca instrucciones.
+El LLM nunca controla el flujo: decide fraseo, no acciones. La extracción es
+*dato* (un enum cerrado) y la redacción termina obligatoriamente en la pregunta
+que el guion ya eligió.
 """
 from __future__ import annotations
 
@@ -29,9 +34,10 @@ import time
 
 from sqlalchemy.orm import Session
 
+from ..config import get_settings
 from ..decision import engine
-from ..llm.adapter import Extraction
-from ..llm.factory import get_llm
+from ..llm.adapter import Extraction, LLMUsage
+from ..llm.factory import get_compose_llm, get_llm
 from ..llm.ollama_adapter import ABSTENCION, es_abstencion
 from ..models import Alert, Conversation, Patient, Turn
 from ..nlu import intent as intent_nlu, lexicon, otros_sintomas
@@ -40,7 +46,10 @@ from ..nlu.merge import merge_symptoms
 from ..rag import retrieve as rag
 from ..rag.embeddings import build_query
 from ..schemas import RagResult, Symptoms, TurnResponse
-from . import phrasing, script
+from . import composer, phrasing, script
+# Reexportadas desde composer: la aduana del redactor y la validación del
+# fallback comparten las mismas guardas, y los tests las importan de aquí.
+from .composer import _TRANQUILIZADOR, _VEREDICTO_NORMALIDAD  # noqa: F401
 from .script import Action, CallState, Phase
 
 log = logging.getLogger(__name__)
@@ -309,7 +318,15 @@ async def process_turn_async(
     # una emergencia real, retener al paciente en la línea compite con la llamada
     # que de verdad importa, así que ahí sí se cuelga rápido.
     emergencia = decision.escalation_action == "emergencia_123"
-    quiere_colgar = extraccion.intent == "despedida"
+    # En fase de cierre, "no, nada más, gracias" significa exactamente lo mismo
+    # que una despedida formal: la última pregunta fue "¿algo más?", y esa es su
+    # respuesta natural. Sin esto, solo el regex de despedida sacaba de
+    # CONFIRMACION y el agente encadenaba preguntas de cierre en bucle con un
+    # paciente que ya había dicho que no.
+    quiere_colgar = extraccion.intent == "despedida" or (
+        estado.phase in (Phase.CONFIRMACION, Phase.ESCALAMIENTO)
+        and intent_nlu.niega_mas_temas(text)
+    )
 
     action = script.next_action(estado, acumulado, escalar=critico, repetido=repetido,
                                 emergencia=emergencia, quiere_colgar=quiere_colgar,
@@ -323,14 +340,19 @@ async def process_turn_async(
     # texto hablado se había generado antes y decía "que siga bien" mientras el
     # sistema escalaba a enfermería por detrás. `final=True` solo puede igualar o
     # subir el nivel: `merge_symptoms` es monótono.
-    # `phase is not ESCALAMIENTO` evita el bucle: tras entregar el guion, el turno
-    # siguiente vuelve a pedir "cerrar" y `final=True` volvería a dar CRÍTICO.
+    # `not estado.guion_entregado` evita el bucle: tras entregar el guion,
+    # `final=True` volvería a dar CRÍTICO en cada intento de cierre y el paciente
+    # oiría el guion de seguridad completo dos y tres veces. Antes el guard
+    # miraba `phase is not ESCALAMIENTO`, y fallaba porque tras entregar el guion
+    # la fase avanza a CONFIRMACION en el turno siguiente — medido en una llamada
+    # real: el guion salió entero otra vez después del "vamos a colgar aquí". El
+    # flag persiste en `CallState`, la fase no.
     # `not silencio`: el cierre por silencio no habla con nadie. Entregarle el
     # guion de seguridad a una línea muda es tiempo de TTS regalado, y la política
     # de incertidumbre se aplica igual —con su alerta— dentro de
     # `close_conversation`, que corre unas líneas más abajo.
     if (action.kind == "cerrar" and not critico and not silencio
-            and estado.phase is not Phase.ESCALAMIENTO):
+            and not estado.guion_entregado):
         decision = engine.evaluate(acumulado, final=True)
         critico = decision.risk_level == "CRÍTICO"
         if critico:
@@ -356,12 +378,15 @@ async def process_turn_async(
         # Primer turno crítico: se entrega el guion de seguridad completo.
         # Ruta crítica: no pasa por el modelo ni por el RAG.
         final = decision.safety_script or phrasing.cierre(nombre, escalado=True)
-    elif action.kind == "cerrar" and (critico or estado.phase is Phase.ESCALAMIENTO):
-        # `phase is ESCALAMIENTO` cubre el escalamiento que nace de la política de
+    elif action.kind == "cerrar" and (critico or estado.guion_entregado
+                                      or estado.phase is Phase.ESCALAMIENTO):
+        # `guion_entregado` cubre el escalamiento que nace de la política de
         # incertidumbre al cerrar: ese `no_se_pudo_evaluar` no vive en `acumulado`
         # —se sintetiza con `final=True`—, así que `critico` vuelve a ser False al
         # turno siguiente y la llamada se despedía con un "que siga bien" después
-        # de haber escalado a enfermería.
+        # de haber escalado a enfermería. El flag no se pierde al avanzar de fase,
+        # que era el agujero de mirar solo `phase is ESCALAMIENTO` (se conserva
+        # como respaldo para conversaciones guardadas antes del flag).
         # El cuadro crítico sigue en `acumulado` para siempre —no se puede
         # "des-escalar" dentro de la llamada—, así que sin este segundo caso
         # `critico` seguiría siendo True en cada turno y el guion completo se
@@ -374,164 +399,113 @@ async def process_turn_async(
     elif extraccion.intent == "rechazo":
         final = phrasing.RECHAZO
         action = Action(kind="cerrar", phase=Phase.TERMINADA)
-    elif extraccion.intent == "despedida":
-        # El paciente da la llamada por terminada. `next_action` ya lo convirtió
-        # en `cerrar` vía `quiere_colgar`; aquí solo se elige la despedida, que es
-        # cálida y no la fórmula seca del rechazo.
-        final = phrasing.cierre(nombre, escalado=decision.risk_level != "NORMAL")
     elif extraccion.intent == "ininteligible":
         final = phrasing.NO_ENTENDI
-    elif extraccion.intent == "pregunta_administrativa":
-        # Se responde el límite y se retoma. Sin esta rama caía en el `else` y la
-        # pregunta se quedaba sin contestar: el paciente pedía el horario de
-        # visitas y recibía la siguiente pregunta del guion, sin más.
-        semilla = conv.id + str(len(prior))
-        siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
-                              nombre=nombre, preocupante=False, con_acuse=False,
-                              con_prefijo=True)
-        final = f"{phrasing.ADMINISTRATIVA} {phrasing.volviendo(semilla, recientes)} {siguiente}"
-    elif extraccion.intent == "saludo":
-        # El paciente saluda: se le devuelve el saludo y se le hace la pregunta
-        # pendiente en su forma ABIERTA, no la reformulación cerrada. Un saludo no
-        # es una respuesta esquivada — ver `intento_real` en script.apply.
-        semilla = conv.id + str(len(prior))
-        slot_pendiente = action.slot or estado.slot_actual
-        pregunta = (phrasing.pregunta(slot_pendiente, semilla, recientes)
-                    if slot_pendiente else phrasing.PREGUNTA_ABIERTA)
-        final = f"{phrasing.saludo_de_vuelta(semilla, recientes)} {pregunta}"
-    elif extraccion.intent == "meta":
-        siguiente = _texto_de(action, semilla=conv.id + str(len(prior)),
-                              recientes=recientes, nombre=nombre, preocupante=False)
-        final = f"{phrasing.META_REPETIR} {siguiente}"
-    elif extraccion.intent == "social":
-        siguiente = _texto_de(action, semilla=conv.id + str(len(prior)),
-                              recientes=recientes, nombre=nombre, preocupante=False)
-        final = f"{phrasing.SOCIAL} {siguiente}"
-    elif extraccion.intent == "pregunta_clinica" and discrepa:
-        # El paciente pregunta por su recuperación, pero dice haberse operado de
-        # algo que no es lo que hay en su ficha. El corpus está indexado POR
-        # procedimiento (`rag/retrieve.py::_allowed_document_ids`), así que
-        # recuperar aquí solo puede devolver documentos de la otra cirugía —y eso
-        # es una afirmación falsa CON fuente, lo peor que puede producir este
-        # sistema. Ocurrió tal cual: una pregunta sobre la cesárea se contestó
-        # citando cuatro PDFs de apendicectomía.
-        #
-        # Ruta determinista: ni RAG, ni modelo, ni citas. Misma forma que la rama
-        # de abajo y por la misma razón de fondo — el corpus no puede responder
-        # esto, y decirlo es más útil que improvisar.
-        log.warning("RAG omitido: el paciente refiere %r y la ficha dice %r",
-                    proc_vigente, procedimiento)
-        semilla = conv.id + str(len(prior))
-        siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
-                              nombre=nombre, preocupante=False, con_acuse=False,
-                              con_prefijo=True)
-        final = (phrasing.abstencion_procedimiento(proc_vigente, procedimiento)
-                 + " " + phrasing.transicion_abstencion(semilla, recientes)
-                 + " " + siguiente)
-    elif extraccion.intent == "pregunta_clinica" and otros_sintomas.senales(nuevos_otros):
-        # El paciente contó un síntoma de alarma y preguntó por él en el mismo
-        # turno. Eso NO va al RAG: no está preguntando qué dice el hospital sobre
-        # un tema, está pidiendo que le valoren su caso, y el corpus no puede
-        # responderlo. Enviarlo igual fue lo que produjo la respuesta más dañina
-        # medida hasta ahora: el RAG trajo radiología de apendicitis para una
-        # pregunta sobre visión borrosa. Ruta determinista, sin modelo.
-        semilla = conv.id + str(len(prior))
-        siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
-                              nombre=nombre, preocupante=False, con_acuse=False,
-                              con_prefijo=True)
-        final = (phrasing.sintoma_consultado(
-            otros_sintomas.senales(nuevos_otros), semilla, recientes)
-            + " " + phrasing.volviendo(semilla, recientes) + " " + siguiente)
-    elif extraccion.intent == "pregunta_clinica":
-        # --- E: la única respuesta generada, y va anclada a evidencia ---------
-        evidence = rag.retrieve(
-            session,
-            build_query(text, procedure=procedimiento, day_postop=acumulado.day_postop),
-            procedure=procedimiento,
-        )
-        # Antes de redactar, se comprueba que lo recuperado responda de verdad la
-        # pregunta. La similitud vectorial no lo dice (ver rag/retrieve.py), y sin
-        # este paso el agente contestaba preguntas sobre protocolos inventados
-        # citando documentos sin relación: una afirmación falsa CON fuente.
-        pertinente = evidence.has_evidence and await llm.pregunta_es_del_dominio(
-            question=text, evidence=evidence.answer)
-        if evidence.has_evidence and not pertinente:
-            log.info("evidencia recuperada pero no pertinente para: %r", text[:60])
-            evidence.has_evidence = False
-
-        respuesta, uso = await llm.reply_grounded(
-            question=text,
-            evidence=evidence.answer if pertinente else "",
-            patient_context=f"Paciente de {procedimiento or 'cirugía'}.",
-        )
-        if uso.tokens_out:
-            llm_calls += 1
-        tokens_in += uso.tokens_in
-        tokens_out += uso.tokens_out
-        respuesta = _validar_grounding(respuesta, evidence, riesgo=decision.risk_level)
-        # Si se acabó abstiniendo, no se citan fuentes: decir "no tengo información"
-        # y adjuntar una cita es incoherente, y en la traza parecería que el agente
-        # ignoró evidencia que sí tenía.
-        siguiente = _texto_de(action, semilla=conv.id + str(len(prior)),
-                              recientes=recientes, nombre=nombre, preocupante=False)
-        if es_abstencion(respuesta):
-            evidence = None
-            # Sin este puente, la pregunta clínica sin resolver se pegaba justo
-            # antes de la siguiente pregunta del guion y sonaba a que el agente
-            # ignoraba lo que acababa de decir en vez de retomar el seguimiento.
-            transicion = phrasing.transicion_abstencion(
-                conv.id + str(len(prior)), recientes)
-            final = f"{respuesta} {transicion} {siguiente}"
-        else:
-            final = f"{respuesta} {siguiente}"
+    elif action.kind == "cerrar" and extraccion.intent != "pregunta_clinica":
+        # El paciente se despidió, o el guion se agotó/atascó: cierre verbatim
+        # —pre-sintetizable y con las instrucciones de cuándo llamar—. La
+        # excepción es que el turno de cierre traiga una pregunta clínica:
+        # responderla ANTES de despedirse es escuchar, y eso baja a la ruta del
+        # redactor con la despedida como texto obligatorio.
+        final = phrasing.cierre(nombre, escalado=decision.risk_level != "NORMAL")
     else:
-        preocupante = decision.risk_level != "NORMAL"
+        # --- ruta del redactor: el guion decide, el LLM escribe --------------
+        # Todo lo conversacional pasa por aquí (respuestas del tamizaje,
+        # preguntas clínicas y administrativas, saludos, confirmación de
+        # cierre). El LLM ve el historial y redacta el turno completo; si
+        # falla, expira o su salida no pasa la aduana de `composer.valida`,
+        # el turno sale por las plantillas de siempre (`_texto_fallback`).
         semilla = conv.id + str(len(prior))
-        prefijo = phrasing.TERCERO + " " if extraccion.intent == "tercero" else ""
-        # Lo que el paciente trajo por su cuenta se reconoce por su nombre ANTES
-        # de retomar el guion, y con el reconocimiento delante el acuse genérico
-        # sobra (`con_acuse`). Uno solo por turno, no tres apilados: en voz,
-        # encadenar "lo anoto como que no me supo decir" + "me apunto lo de la
-        # visión borrosa" + la pregunta es un párrafo que nadie escucha entero.
-        # Manda lo que el paciente trajo, que es lo que demuestra que se le oyó.
-        #
-        # El procedimiento va PRIMERO cuando lo acaba de contar: es el dato con
-        # más consecuencias de los tres (decide qué puede citar el RAG y si hay
-        # que revisarle la ficha), y era el que se caía al vacío — "me operaron
-        # de cesárea" recibía la repregunta cerrada de la fiebre, sin más.
-        if proc_nuevo:
-            if not procedimiento:
-                # Llamada sin paciente asociado: no hay ficha contra la que
-                # contrastar, así que no se puede decir ni que coincide ni que no.
-                reconocimiento = phrasing.procedimiento_anotado(
-                    proc_dicho, semilla, recientes)
-            elif discrepa:
-                reconocimiento = phrasing.procedimiento_discrepa(
-                    proc_dicho, procedimiento, semilla, recientes)
-            else:
-                reconocimiento = phrasing.procedimiento_confirmado(
-                    proc_dicho, semilla, recientes)
-            prefijo += reconocimiento + " " + phrasing.volviendo(semilla, recientes) + " "
-        elif nuevos_otros:
-            prefijo += (
-                phrasing.acuse_otro(nuevos_otros, semilla, recientes)
-                + " " + phrasing.volviendo(semilla, recientes) + " "
+        alarma = (otros_sintomas.senales(nuevos_otros)
+                  if extraccion.intent == "pregunta_clinica" else [])
+        pertinente = False
+        if extraccion.intent == "pregunta_clinica" and not discrepa and not alarma:
+            # --- E: recuperación de evidencia, EN CUALQUIER FASE -------------
+            # Incluida CONFIRMACION: "¿cuándo puedo volver a jugar fútbol?"
+            # preguntado durante el cierre merece respuesta, no otra pregunta
+            # de despedida. Antes de redactar se comprueba que lo recuperado
+            # responda de verdad la pregunta: la similitud vectorial no lo dice
+            # (ver rag/retrieve.py), y sin este paso se contestaban protocolos
+            # inventados citando documentos sin relación.
+            evidence = rag.retrieve(
+                session,
+                build_query(text, procedure=procedimiento,
+                            day_postop=acumulado.day_postop),
+                procedure=procedimiento,
             )
+            pertinente = evidence.has_evidence and await llm.pregunta_es_del_dominio(
+                question=text, evidence=evidence.answer)
+            if evidence.has_evidence and not pertinente:
+                log.info("evidencia recuperada pero no pertinente para: %r", text[:60])
+                evidence.has_evidence = False
+        elif extraccion.intent == "pregunta_clinica" and discrepa:
+            # El corpus está indexado POR procedimiento: recuperar con la ficha
+            # discrepante solo puede citar documentos de la otra cirugía — una
+            # afirmación falsa CON fuente. Ni RAG ni citas; el redactor (o el
+            # fallback) se abstiene con la nota correspondiente.
+            log.warning("RAG omitido: el paciente refiere %r y la ficha dice %r",
+                        proc_vigente, procedimiento)
+
+        # La pregunta canónica del guion, con la misma rotación que usaría el
+        # fallback: es la restricción que el redactor no puede cambiar.
+        pregunta_guion = _texto_de(action, semilla=semilla, recientes=recientes,
+                                   nombre=nombre,
+                                   preocupante=decision.risk_level != "NORMAL",
+                                   con_acuse=False, con_prefijo=True)
+        anterior = estado.slot_actual
+        ctx = composer.build_context(
+            prior=prior, text=text, intent=extraccion.intent,
+            objetivo=action.kind, pregunta_guion=pregunta_guion,
+            acumulado=acumulado, riesgo=decision.risk_level,
+            evidencia=(evidence.answer if evidence is not None
+                       and evidence.has_evidence else None),
+            procedimiento=procedimiento, nombre=nombre,
+            discrepa=discrepa, proc_vigente=proc_vigente,
+            alarma_consultada=alarma,
+            slot_perdido=bool(
+                action.kind == "preguntar" and anterior
+                and anterior != action.slot
+                and getattr(acumulado, script.SLOT_FIELD[anterior]) is None),
+        )
+        # El redactor es el MISMO adaptador del turno salvo que se configure
+        # otro (COMPOSE_PROVIDER): así los tests que sustituyen `get_llm` nunca
+        # tocan red, y en producción no se crea un cliente extra.
+        redactor = get_compose_llm() if get_settings().compose_provider else llm
+        compuesto = None
+        compose_fn = getattr(redactor, "compose_reply", None)
+        if compose_fn is not None:
+            try:
+                compuesto = await compose_fn(ctx=ctx)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("compose_reply lanzó (%s: %s): caen las plantillas",
+                            type(exc).__name__, exc)
+                compuesto = None
+        if compuesto is not None and composer.valida(compuesto[0], ctx):
+            final, uso = compuesto
+            if uso.tokens_out:
+                llm_calls += 1
+            tokens_in += uso.tokens_in
+            tokens_out += uso.tokens_out
+            # Si el redactor terminó absteniéndose, no se citan fuentes: "no
+            # tengo información" con cuatro citas debajo es incoherente.
+            if evidence is not None and (not evidence.has_evidence
+                                         or es_abstencion(final)):
+                evidence = None
         else:
-            # Si el guion acaba de dar por perdido el slot anterior, se dice.
-            # Callarlo y saltar a la siguiente pregunta se lee como que no escuchó.
-            anterior = estado.slot_actual
-            if (action.kind == "preguntar" and anterior and anterior != action.slot
-                    and getattr(acumulado, script.SLOT_FIELD[anterior]) is None):
-                prefijo += phrasing.slot_perdido(semilla, recientes) + " "
-        final = prefijo + _texto_de(action, semilla=semilla,
-                                    recientes=recientes, nombre=nombre,
-                                    preocupante=preocupante,
-                                    con_acuse=not nuevos_otros and not proc_nuevo
-                                    and progreso,
-                                    slot_respondido=estado.slot_actual,
-                                    acumulado=acumulado, del_turno=del_turno,
-                                    con_prefijo=bool(prefijo))
+            final, evidence, usos = await _texto_fallback(
+                llm=llm, conv=conv, prior=prior, text=text,
+                extraccion=extraccion, action=action, estado=estado,
+                acumulado=acumulado, del_turno=del_turno, decision=decision,
+                nombre=nombre, procedimiento=procedimiento,
+                recientes=recientes, discrepa=discrepa,
+                proc_vigente=proc_vigente, proc_nuevo=proc_nuevo,
+                proc_dicho=proc_dicho, nuevos_otros=nuevos_otros,
+                progreso=progreso, evidence=evidence, pertinente=pertinente)
+            for uso in usos:
+                if uso.tokens_out:
+                    llm_calls += 1
+                tokens_in += uso.tokens_in
+                tokens_out += uso.tokens_out
 
     # Saludar, pedir que se repita la pregunta o decir algo social no es intentar
     # contestarla: esos turnos no gastan reintentos del slot. Contar de qué lo
@@ -544,6 +518,10 @@ async def process_turn_async(
                       and not proc_nuevo),
         silencio=silencio,
         procedimiento_dicho=proc_dicho,
+        # El guion de seguridad se entregó en ESTE turno: queda registrado en el
+        # estado para que ningún turno posterior lo repita (ver el guard de
+        # `evaluate(final=True)` más arriba).
+        guion_entregado=critico and action.kind == "escalar",
     )
 
     # --- alerta, deduplicada por reglas nuevas -------------------------------
@@ -630,41 +608,154 @@ async def process_turn_async(
     )
 
 
-# Fórmulas con las que un modelo complaciente quita hierro a un síntoma. Ante un
-# cuadro que ya tiene señales de alarma, decir esto es la conducta que la rúbrica
-# penaliza por su nombre: "tranquilizar al paciente ante un síntoma de alarma".
-_TRANQUILIZADOR = re.compile(
-    r"no\s+(es|parece|deber[ií]a\s+ser|necesariamente\s+indica)\s+(nada\s+)?"
-    r"(grave|serio|preocupante|de\s+cuidado)"
-    r"|no\s+(se\s+)?preocupe|no\s+hay\s+(de\s+qu[eé]\s+preocuparse|motivo)"
-    r"|es\s+(completamente\s+)?normal|es\s+algo\s+normal|tranquil\w+"
-    r"|no\s+pasa\s+nada|nada\s+de\s+qu[eé]\s+preocuparse",
-    re.I,
-)
+# `_TRANQUILIZADOR` y `_VEREDICTO_NORMALIDAD` viven ahora en `composer.py`
+# (importadas arriba): el redactor y este fallback comparten las mismas guardas.
 
 _MATIZ_SIN_TRANQUILIZAR = (
     " De todos modos, como me contó otras cosas, prefiero que enfermería le eche "
     "un ojo."
 )
 
-# Dictaminar sobre la normalidad de un síntoma, EN CUALQUIERA DE LOS DOS SENTIDOS.
-# `_TRANQUILIZADOR` solo cubría el lado complaciente y solo con riesgo != NORMAL;
-# medido en una llamada real, ante "estoy viendo borroso, ¿es normal?" el 3B
-# abrió con "No, no es normal" —un veredicto clínico, sin evidencia que lo
-# sostenga y con el riesgo aún en NORMAL, así que ninguna guarda lo tocaba—.
-# Quién decide la gravedad es el motor de decisión, y el prompt ya se lo dice al
-# modelo; esto es la versión que no depende de que obedezca.
-_VEREDICTO_NORMALIDAD = re.compile(
-    # Cualquier forma de "es normal", con o sin negación delante. La variante sin
-    # negación faltaba y se colaba tal cual: "Es normal sentirse así después de
-    # una operación" es tranquilizar, que es justo la conducta que la rúbrica
-    # penaliza (`rubrica-evaluacion.md:236-241`), y además el agente no valora
-    # gravedad — de eso se encarga el motor de decisión.
-    r"\bes\s+(algo\s+|completamente\s+|totalmente\s+|del\s+todo\s+)?normal\b"
-    r"|(eso|esto)\s+(no\s+)?es\s+normal"
-    r"|es\s+(algo\s+)?(preocupante|de\s+cuidado|grave)",
-    re.I,
-)
+
+async def _texto_fallback(
+    *, llm, conv: Conversation, prior: list[Turn], text: str,
+    extraccion: Extraction, action: Action, estado: CallState,
+    acumulado: Symptoms, del_turno: Symptoms, decision, nombre: str | None,
+    procedimiento: str | None, recientes: list[str], discrepa: bool,
+    proc_vigente: str | None, proc_nuevo: bool, proc_dicho: str | None,
+    nuevos_otros: list[str], progreso: bool,
+    evidence: RagResult | None, pertinente: bool,
+) -> tuple[str, RagResult | None, list[LLMUsage]]:
+    """Las plantillas deterministas de siempre: la degradación elegante.
+
+    Es la cadena que antes vivía inline en `process_turn_async` y era TODO el
+    fraseo del agente. Ahora es el respaldo de la ruta del redactor: corre
+    cuando el LLM de composición falla, expira, devuelve algo que no pasa
+    `composer.valida`, o cuando el adaptador no redacta (mock, ollama 3B).
+    Mismo comportamiento que siempre, cero llamadas de composición.
+
+    `evidence`/`pertinente` llegan ya resueltos por la ruta del redactor para
+    no recuperar dos veces; aquí solo se redacta desde ellos (`reply_grounded`).
+    """
+    semilla = conv.id + str(len(prior))
+    usos: list[LLMUsage] = []
+
+    if extraccion.intent == "pregunta_administrativa":
+        # Se responde el límite y se retoma. Sin esta rama caía en el `else` y la
+        # pregunta se quedaba sin contestar: el paciente pedía el horario de
+        # visitas y recibía la siguiente pregunta del guion, sin más.
+        siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
+                              nombre=nombre, preocupante=False, con_acuse=False,
+                              con_prefijo=True)
+        final = f"{phrasing.ADMINISTRATIVA} {phrasing.volviendo(semilla, recientes)} {siguiente}"
+    elif extraccion.intent == "saludo":
+        # El paciente saluda: se le devuelve el saludo y se le hace la pregunta
+        # pendiente en su forma ABIERTA, no la reformulación cerrada. Un saludo no
+        # es una respuesta esquivada — ver `intento_real` en script.apply.
+        slot_pendiente = action.slot or estado.slot_actual
+        pregunta = (phrasing.pregunta(slot_pendiente, semilla, recientes)
+                    if slot_pendiente else phrasing.PREGUNTA_ABIERTA)
+        final = f"{phrasing.saludo_de_vuelta(semilla, recientes)} {pregunta}"
+    elif extraccion.intent == "meta":
+        siguiente = _texto_de(action, semilla=semilla,
+                              recientes=recientes, nombre=nombre, preocupante=False)
+        final = f"{phrasing.META_REPETIR} {siguiente}"
+    elif extraccion.intent == "social":
+        siguiente = _texto_de(action, semilla=semilla,
+                              recientes=recientes, nombre=nombre, preocupante=False)
+        final = f"{phrasing.SOCIAL} {siguiente}"
+    elif extraccion.intent == "pregunta_clinica" and discrepa:
+        # El corpus no puede responder sobre una cirugía que discrepa de la
+        # ficha (ver la ruta del redactor): abstención determinista, sin citas.
+        siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
+                              nombre=nombre, preocupante=False, con_acuse=False,
+                              con_prefijo=True)
+        final = (phrasing.abstencion_procedimiento(proc_vigente, procedimiento)
+                 + " " + phrasing.transicion_abstencion(semilla, recientes)
+                 + " " + siguiente)
+    elif extraccion.intent == "pregunta_clinica" and otros_sintomas.senales(nuevos_otros):
+        # El paciente contó un síntoma de alarma y preguntó por él en el mismo
+        # turno. Eso NO va al RAG: está pidiendo que le valoren su caso, y el
+        # corpus no puede responderlo. Ruta determinista, sin modelo.
+        siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
+                              nombre=nombre, preocupante=False, con_acuse=False,
+                              con_prefijo=True)
+        final = (phrasing.sintoma_consultado(
+            otros_sintomas.senales(nuevos_otros), semilla, recientes)
+            + " " + phrasing.volviendo(semilla, recientes) + " " + siguiente)
+    elif extraccion.intent == "pregunta_clinica":
+        # La respuesta anclada a la evidencia que ya recuperó la ruta del
+        # redactor. Dos frases de `reply_grounded` + la siguiente pregunta.
+        respuesta, uso = await llm.reply_grounded(
+            question=text,
+            evidence=(evidence.answer
+                      if evidence is not None and evidence.has_evidence else ""),
+            patient_context=f"Paciente de {procedimiento or 'cirugía'}.",
+        )
+        usos.append(uso)
+        respuesta = _validar_grounding(respuesta, evidence, riesgo=decision.risk_level)
+        # Si se acabó absteniendo, no se citan fuentes: decir "no tengo información"
+        # y adjuntar una cita es incoherente, y en la traza parecería que el agente
+        # ignoró evidencia que sí tenía.
+        siguiente = _texto_de(action, semilla=semilla,
+                              recientes=recientes, nombre=nombre, preocupante=False)
+        if es_abstencion(respuesta):
+            evidence = None
+            # Sin este puente, la pregunta clínica sin resolver se pegaba justo
+            # antes de la siguiente pregunta del guion y sonaba a que el agente
+            # ignoraba lo que acababa de decir en vez de retomar el seguimiento.
+            transicion = phrasing.transicion_abstencion(semilla, recientes)
+            final = f"{respuesta} {transicion} {siguiente}"
+        else:
+            final = f"{respuesta} {siguiente}"
+    else:
+        preocupante = decision.risk_level != "NORMAL"
+        prefijo = phrasing.TERCERO + " " if extraccion.intent == "tercero" else ""
+        # Lo que el paciente trajo por su cuenta se reconoce por su nombre ANTES
+        # de retomar el guion, y con el reconocimiento delante el acuse genérico
+        # sobra (`con_acuse`). Uno solo por turno, no tres apilados: en voz,
+        # encadenar "lo anoto como que no me supo decir" + "me apunto lo de la
+        # visión borrosa" + la pregunta es un párrafo que nadie escucha entero.
+        # Manda lo que el paciente trajo, que es lo que demuestra que se le oyó.
+        #
+        # El procedimiento va PRIMERO cuando lo acaba de contar: es el dato con
+        # más consecuencias de los tres (decide qué puede citar el RAG y si hay
+        # que revisarle la ficha), y era el que se caía al vacío — "me operaron
+        # de cesárea" recibía la repregunta cerrada de la fiebre, sin más.
+        if proc_nuevo:
+            if not procedimiento:
+                # Llamada sin paciente asociado: no hay ficha contra la que
+                # contrastar, así que no se puede decir ni que coincide ni que no.
+                reconocimiento = phrasing.procedimiento_anotado(
+                    proc_dicho, semilla, recientes)
+            elif discrepa:
+                reconocimiento = phrasing.procedimiento_discrepa(
+                    proc_dicho, procedimiento, semilla, recientes)
+            else:
+                reconocimiento = phrasing.procedimiento_confirmado(
+                    proc_dicho, semilla, recientes)
+            prefijo += reconocimiento + " " + phrasing.volviendo(semilla, recientes) + " "
+        elif nuevos_otros:
+            prefijo += (
+                phrasing.acuse_otro(nuevos_otros, semilla, recientes)
+                + " " + phrasing.volviendo(semilla, recientes) + " "
+            )
+        else:
+            # Si el guion acaba de dar por perdido el slot anterior, se dice.
+            # Callarlo y saltar a la siguiente pregunta se lee como que no escuchó.
+            anterior = estado.slot_actual
+            if (action.kind == "preguntar" and anterior and anterior != action.slot
+                    and getattr(acumulado, script.SLOT_FIELD[anterior]) is None):
+                prefijo += phrasing.slot_perdido(semilla, recientes) + " "
+        final = prefijo + _texto_de(action, semilla=semilla,
+                                    recientes=recientes, nombre=nombre,
+                                    preocupante=preocupante,
+                                    con_acuse=not nuevos_otros and not proc_nuevo
+                                    and progreso,
+                                    slot_respondido=estado.slot_actual,
+                                    acumulado=acumulado, del_turno=del_turno,
+                                    con_prefijo=bool(prefijo))
+    return final, evidence, usos
 
 # El prompt prohíbe que la respuesta haga preguntas —el guion añade la suya
 # después—, y el 3B lo ignora igual ("¿Se duele el abdomen?" colado en medio de
@@ -701,10 +792,14 @@ def _validar_grounding(
     # dos preguntas seguidas en voz hacen que el paciente conteste solo una.
     respuesta = _sin_preguntas(respuesta)
 
-    # Un veredicto de normalidad no es una respuesta anclada: es una valoración
-    # clínica, y el agente no valora. Se recorta la frase que lo contiene en vez
-    # de tirar toda la respuesta, porque el resto suele estar bien anclado.
-    if _VEREDICTO_NORMALIDAD.search(respuesta):
+    # Un veredicto de normalidad con el riesgo ya elevado no es una respuesta
+    # anclada: es una valoración clínica, y el agente no valora. Se recorta la
+    # frase que lo contiene en vez de tirar toda la respuesta, porque el resto
+    # suele estar bien anclado. Solo con riesgo elevado: con el cuadro en NORMAL,
+    # un "es normal sentir la pierna débil" que viene de la evidencia es la
+    # respuesta correcta, y recortarlo dejaba frases incoherentes a medias
+    # ("...lo que sugiere que" pegado a la siguiente pregunta del guion).
+    if riesgo != "NORMAL" and _VEREDICTO_NORMALIDAD.search(respuesta):
         log.warning("veredicto de gravedad en la respuesta, se recorta: %r", respuesta[:80])
         respuesta = " ".join(
             f for f in re.split(r"(?<=[.!?])\s+", respuesta)

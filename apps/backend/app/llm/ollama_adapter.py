@@ -228,17 +228,42 @@ def sin_tartamudeo(texto: str) -> str:
 def sin_frase_cortada(texto: str) -> str:
     """Descarta la última frase si el límite de tokens la dejó a medias.
 
-    `num_predict=80` corta la generación donde toque, y en voz eso se oye como
-    que la llamada se cayó ("...si descubres alguna herida nueva en"). Más vale
-    una frase completa que dos con la segunda partida. Si no queda ninguna frase
-    cerrada, se devuelve el texto tal cual: recortar hasta dejarlo vacío sería
-    peor que un corte feo.
+    El límite de generación corta donde toque, y en voz eso se oye como que la
+    llamada se cayó ("...si descubres alguna herida nueva en"). Más vale una
+    frase completa que dos con la segunda partida.
+
+    Nunca se devuelve texto sin cerrar. La versión anterior sí lo hacía cuando no
+    había ningún `.!?` en todo el texto, y ese era justamente el caso del
+    truncamiento por tokens: la respuesta salía al paciente partida a media frase
+    ("...lo que sugiere que"). Ahora, sin ninguna frase cerrada: si hay una coma
+    pasada la mitad se corta ahí —una cláusula completa—; si el texto termina en
+    palabra funcional ("...a que") no hay nada que rescatar y se devuelve vacío,
+    para que el llamador se abstenga o caiga a plantillas; en el resto solo
+    faltaba el punto.
     """
     limpio = texto.rstrip()
     if not limpio or limpio[-1] in ".!?":
         return limpio
     corte = max(limpio.rfind("."), limpio.rfind("!"), limpio.rfind("?"))
-    return limpio[: corte + 1] if corte > 0 else limpio
+    if corte > 0:
+        return limpio[: corte + 1]
+    coma = limpio.rfind(",")
+    if coma > len(limpio) // 2:
+        return limpio[:coma] + "."
+    if _TERMINA_EN_FUNCIONAL.search(limpio):
+        return ""
+    return limpio + "."
+
+
+# Palabras que no cierran una frase en español: si el texto truncado termina en
+# una de estas, lo que sigue era imprescindible y no se puede "cerrar" con un
+# punto ("Debe esperar a que." no es una frase).
+_TERMINA_EN_FUNCIONAL = re.compile(
+    r"\b(que|de|del|a|al|en|la|el|los|las|un|una|unos|unas|y|o|con|sin|para"
+    r"|por|si|cuando|como|se|su|sus|le|lo|les|mas|muy|no|es|son|esta|estan"
+    r"|hasta|desde|entre|sobre|tras|ni|pero|porque|aunque|donde|quien|cual)$",
+    re.I,
+)
 
 
 def sin_muletillas(texto: str) -> str:
@@ -601,6 +626,17 @@ class OllamaAdapter:
                 type(exc).__name__,
             )
             return False
+
+    async def compose_reply(self, *, ctx) -> tuple[str, LLMUsage] | None:
+        """El 3B local NO redacta: devuelve None y el turno sale por plantillas.
+
+        No es un stub pendiente, es la decisión medida que motivó las plantillas
+        (ver `agent/phrasing.py`): ante "me duele un berraco", `llama3.2:3b`
+        generó como acuse la palabra "agudo". La redacción libre con historial
+        es para el 70B de Groq; aquí las plantillas ganan en las tres
+        dimensiones (calidad, latencia, pre-síntesis de audio).
+        """
+        return None
 
     async def summarize(self, *, system_prompt: str, user_prompt: str) -> str:
         resp = await self._client.chat(
