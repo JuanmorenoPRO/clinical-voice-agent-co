@@ -66,6 +66,16 @@ _BANDERAS: list[tuple[str, re.Pattern[str]]] = [
             r"no\s+puedo\s+respirar|me\s+falta\s+(el\s+)?(aire|respiracion)"
             r"|me\s+ahogo|ahogad\w+|dificultad\s+para\s+respirar|no\s+me\s+entra\s+(el\s+)?aire"
             r"|siento\s+que\s+me\s+asfixio"
+            # La forma MÁS común en el habla real, y la que faltaba: medido, "está
+            # bien, pero me cuesta respirar" no encendía la bandera y el turno se
+            # resolvía con `wound=normal` y la siguiente pregunta del guion. Un
+            # falso negativo de emergencia es la falla catastrófica de este
+            # sistema, así que aquí se cubre el verbo completo ("cuesta/dificulta/
+            # ahoga") y no solo la negación absoluta ("no puedo").
+            r"|me\s+(cuesta|dificulta|duele)\s+(mucho\s+)?respirar"
+            r"|me\s+cuesta\s+(coger|tomar|agarrar)\s+(el\s+)?aire"
+            r"|respiro\s+con\s+dificultad|me\s+quedo\s+sin\s+aire|sin\s+aliento"
+            r"|me\s+agito\b|me\s+fatigo\b|me\s+sofoco\s+al\s+(caminar|moverme)"
         ),
     ),
     (
@@ -192,10 +202,22 @@ _FIEBRE_SI = re.compile(
     # y sin `fever=True` la regla de fiebre referida no puede dispararse.
     r"|acalorad\w+|sofocad\w+|con\s+bochorno"
 )
+# Va ANTES que `_FIEBRE_SI` en `extract`, así que todo lo que se cubra aquí queda
+# a salvo del `\bfiebre` sin anclar de arriba. Esa es la razón de ampliarlo por
+# aquí y no de estrechar el patrón afirmativo: la asimetría del módulo dice que un
+# falso negativo de fiebre es la falla catastrófica y un falso positivo solo es
+# ruido, así que se toca el lado seguro.
+# Medido: "No fiebre, pero sí estoy temblando" daba `fever=True` —el paciente la
+# NIEGA— y el agente le contestaba "Con calentura, entonces." (`phrasing._REFLEJO`).
+# Ninguna de las formas escuetas de negar estaba cubierta: todas exigían un verbo.
 _FIEBRE_NO = re.compile(
     r"no\s+(he\s+tenido|tengo|ha\s+tenido)\s+(fiebre|calentura|temperatura)"
     r"|sin\s+fiebre|nada\s+de\s+fiebre|de\s+eso\s+(nada|nada\s+que\s+ver)"
     r"|fiebre\s+no\s+(he\s+tenido|ha\s+habido)|ninguna\s+fiebre"
+    # Negación escueta, que es como de verdad contesta el paciente a una pregunta
+    # cerrada: "no fiebre", "fiebre no", "no, calentura no", "que va, fiebre no".
+    r"|\bno,?\s+(fiebre|calentura)\b|\b(fiebre|calentura),?\s+no\b"
+    r"|\bnegativo\s+(a\s+)?(fiebre|calentura)\b"
 )
 
 # "Sí me la tomé" contesta al ACTO de medir, no al HALLAZGO. Medido con
@@ -410,6 +432,52 @@ def habla_de_fiebre(t: str) -> bool:
     return bool(_MENCION_TERMICA.search(t))
 
 
+# Fragmento interrogativo, mismo criterio que `intent._FRAGMENTO` (se duplica en
+# vez de importarse para que este módulo —el núcleo determinista— no dependa del
+# clasificador de intención, que sí depende conceptualmente de él).
+_FRAGMENTO_PREGUNTA = re.compile(r"¿[^?]{1,80}\?|[^.!?¿]{3,80}\?")
+
+# Marca de que el paciente habla de SÍ MISMO. Es lo único que separa una pregunta
+# que reporta un síntoma de una que solo pide información, y la distinción no es
+# teórica: sin ella, recortar los fragmentos interrogativos se comía
+# "¿es normal que me esté saliendo pus de la herida?" —un `secrecion_purulenta`
+# que dispara CRÍTICO por sí solo— y eso es la falla catastrófica de este sistema.
+_PRIMERA_PERSONA = re.compile(
+    r"\b(me|mi|mis|yo|tengo|siento|estoy|ando|he|mio|mia|conmigo|noto|veo|llevo)\b"
+)
+
+
+def parte_declarativa(text: str) -> str:
+    """El turno sin sus preguntas IMPERSONALES, ya normalizado.
+
+    Preguntar por un síntoma no es tenerlo. Medido: "¿Qué temperatura se considera
+    fiebre?" daba `fever=True` porque `_FIEBRE_SI` abre con `\\bfiebre` sin anclar,
+    y de ahí pasaba al motor de decisión como si el paciente hubiera referido
+    calentura. Lo mismo con "¿eso es normal?", que afirmaba el slot en curso como
+    `normal` sin que el paciente hubiera dicho nada de él.
+
+    Solo se recortan los fragmentos SIN marca de primera persona, y la asimetría
+    es deliberada, del mismo signo que el resto del módulo: una pregunta que habla
+    del propio cuerpo está reportando ("¿es normal que me esté saliendo pus?"),
+    y perder eso sería un falso negativo, que es lo que aquí no se puede permitir.
+    Una pregunta impersonal no reporta nada, y quedarse con ella solo produce
+    ruido en el triaje.
+
+    La guarda equivalente para la ruta del LLM vive en
+    `ollama_adapter._to_symptoms` (`_ES_PREGUNTA`), y no cubría este caso: allí se
+    descarta el valor si el turno es una pregunta Y no menciona el slot, y una
+    pregunta SOBRE la fiebre menciona la fiebre.
+
+    No se aplica a `_BANDERAS` ni a `temperature_c`: ahí manda la lectura
+    conservadora, y "¿es grave no poder respirar?" tiene que escalar igual.
+    """
+    def _quitar(m: re.Match[str]) -> str:
+        frag = normalize(m.group(0))
+        return m.group(0) if _PRIMERA_PERSONA.search(frag) else " "
+
+    return normalize(_FRAGMENTO_PREGUNTA.sub(_quitar, text))
+
+
 def extract(text: str, slot: str | None = None) -> Symptoms:
     """Lo que se puede leer del texto sin modelo.
 
@@ -420,6 +488,9 @@ def extract(text: str, slot: str | None = None) -> Symptoms:
     """
     sym = Symptoms()
     t = normalize(text)
+    # Los hallazgos que el paciente AFIRMA se leen solo de la parte declarativa;
+    # las banderas y la temperatura siguen leyéndose del turno entero.
+    d = parte_declarativa(text)
 
     # Fuera de catálogo: se busca SIEMPRE, como las banderas, porque justamente
     # es lo que el guion no pregunta y el paciente sí cuenta.
@@ -438,10 +509,10 @@ def extract(text: str, slot: str | None = None) -> Symptoms:
         sym.temperature_c = float(f"{entero}.{dec}" if dec else entero)
         sym.sources["temperature_c"] = "lexicon"
 
-    if _FIEBRE_NO.search(t):
+    if _FIEBRE_NO.search(d):
         sym.fever = False
         sym.sources["fever"] = "lexicon"
-    elif _FIEBRE_SI.search(t):
+    elif _FIEBRE_SI.search(d):
         sym.fever = True
         sym.sources["fever"] = "lexicon"
 
@@ -476,12 +547,12 @@ def extract(text: str, slot: str | None = None) -> Symptoms:
     if slot in _CATEGORICOS:
         campo, patrones = _CATEGORICOS[slot]
         for valor, patron in patrones:
-            if patron.search(t):
+            if patron.search(d):
                 setattr(sym, campo, valor)
                 sym.sources[campo] = "lexicon"
                 break
         else:
-            if _NORMAL_GENERICO.search(t):
+            if _NORMAL_GENERICO.search(d):
                 setattr(sym, campo, "normal")
                 sym.sources[campo] = "lexicon"
 
@@ -495,7 +566,7 @@ def extract(text: str, slot: str | None = None) -> Symptoms:
         if otro == slot or getattr(sym, campo) is not None:
             continue
         for valor, patron in patrones:
-            if patron.search(t):
+            if patron.search(d):
                 setattr(sym, campo, valor)
                 sym.sources[campo] = "lexicon"
                 break

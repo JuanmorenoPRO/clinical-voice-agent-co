@@ -1,0 +1,17 @@
+{
+  "name": "El paciente dice que lo operaron de otra cosa",
+  "risk": "green",
+  "category": "edge_cases",
+  "messages": [
+    "un 4, ahí va",
+    "me operaron de cesárea",
+    "no, fiebre no",
+    "¿qué cuidados debo tener con la herida?",
+    "listo, gracias, chao"
+  ],
+  "expected": {
+    "risk": "green",
+    "should_escalate": false,
+    "notes": "El cuadro clínico es verde y debe seguir siéndolo: una ficha que no cuadra es un problema de registro, no un deterioro del paciente. Lo que sí tiene que pasar: el agente nombra la cesárea, dice qué cirugía tiene registrada, no gasta una repregunta por ello, levanta la alerta procedimiento_no_coincide, y NO cita ningún documento de apendicectomía al responder la pregunta de la herida."
+  }
+}

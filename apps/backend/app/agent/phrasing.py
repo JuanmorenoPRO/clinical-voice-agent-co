@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import hashlib
 
-from ..nlu import otros_sintomas
+from ..nlu import otros_sintomas, procedimiento
 
 # Las seis preguntas canónicas. Varias formulaciones por slot, tomadas del
 # fraseo real del dataset, para que dos llamadas seguidas no suenen idénticas.
@@ -195,6 +195,69 @@ def volviendo(semilla: str, usadas: list[str] | None = None) -> str:
     return _rotar(VOLVIENDO, semilla, usadas or [])
 
 
+# --- lo que el paciente cuenta sobre su propia cirugía -------------------------
+# El procedimiento entraba solo por la ficha y nunca por la conversación. Medido
+# en una llamada real: a la pregunta de fiebre el paciente contestó "me operaron
+# de cesárea" y recibió "Sin termómetro: ¿lo ha sentido como fiebre, sí o no?".
+# Nombrarlo es la diferencia entre escuchar y rellenar un formulario, igual que
+# con ACUSE_OTRO.
+
+PROCEDIMIENTO_CONFIRMADO: tuple[str, ...] = (
+    "De su {}, así lo tengo aquí.",
+    "Sí, de su {}, eso es lo que tengo registrado.",
+    "Correcto, su {}.",
+)
+
+# Discrepancia con la ficha. Se dice lo que el paciente dijo Y lo que hay
+# registrado —callar cualquiera de los dos sería raro— y se le explica qué se
+# hace con eso. NO se le corrige ni se le lleva la contraria: quién tiene razón
+# no se resuelve por teléfono, lo verifica enfermería (ver nlu/procedimiento.py).
+PROCEDIMIENTO_DISCREPA: tuple[str, ...] = (
+    "De {dicho}, entonces — yo tengo registrada una {ficha}. "
+    "Lo dejo anotado para que enfermería lo verifique.",
+    "Anoto que me dice {dicho}; en mi registro aparece una {ficha}. "
+    "Se lo paso a enfermería para que lo confirmen.",
+)
+
+
+# Sin ficha contra la que contrastar (llamada sin paciente asociado). No se puede
+# decir "así lo tengo aquí" de algo que no se tiene: se anota y ya.
+PROCEDIMIENTO_ANOTADO: tuple[str, ...] = (
+    "De {}, lo dejo anotado.",
+    "Anoto que fue de {}.",
+)
+
+
+def procedimiento_confirmado(nombre: str, semilla: str,
+                             usadas: list[str] | None = None) -> str:
+    return _rotar(PROCEDIMIENTO_CONFIRMADO, semilla, usadas or []).format(nombre.lower())
+
+
+def procedimiento_anotado(nombre: str, semilla: str,
+                          usadas: list[str] | None = None) -> str:
+    return _rotar(PROCEDIMIENTO_ANOTADO, semilla, usadas or []).format(nombre.lower())
+
+
+def procedimiento_discrepa(dicho: str, ficha: str, semilla: str,
+                           usadas: list[str] | None = None) -> str:
+    return _rotar(PROCEDIMIENTO_DISCREPA, semilla, usadas or []).format(
+        dicho=dicho.lower(), ficha=ficha.lower())
+
+
+def abstencion_procedimiento(dicho: str, ficha: str | None) -> str:
+    """El paciente pregunta por una cirugía que no es la suya según la ficha.
+
+    Es una abstención, no una respuesta: el corpus está indexado por
+    procedimiento (`rag/retrieve.py::_allowed_document_ids`) y contestar con los
+    documentos de otra cirugía es una afirmación falsa CON fuente, que es lo peor
+    que puede producir este sistema. Ocurrió: una pregunta sobre la cesárea se
+    respondió citando cuatro PDFs de apendicectomía.
+    """
+    tengo = f"lo que tengo aquí es su {ficha.lower()}" if ficha else "no tengo su cirugía registrada"
+    return (f"Sobre {dicho.lower()} no le puedo responder desde aquí, porque {tengo}. "
+            "Prefiero que se lo confirme enfermería antes que decirle algo que no me consta.")
+
+
 def acuse_otro(etiquetas: list[str], semilla: str, usadas: list[str] | None = None) -> str:
     """Reconoce por su nombre lo que el paciente contó fuera del guion."""
     if not etiquetas:
@@ -239,6 +302,28 @@ ACUSES: tuple[str, ...] = (
     "Listo, gracias.", "Bien, tomo nota.", "Entendido.", "Perfecto.",
     "Vale, anotado.", "De acuerdo.", "Le entiendo.", "Ya veo.",
 )
+
+# El paciente habló y no se le pudo sacar el dato. Es DISTINTO de ACUSES y la
+# diferencia es de honestidad, no de estilo: "vale, anotado" afirma que se anotó
+# algo, y aquí no se anotó nada (esa es la doctrina del docstring de
+# `orchestrator._texto_de`). Estas reconocen haber OÍDO, que es lo único cierto.
+#
+# Sin ellas, un turno que no resuelve el slot sale como la repregunta pelada —
+# "Sin termómetro: ¿lo ha sentido como fiebre, sí o no?"— pegada a lo que sea que
+# haya dicho el paciente, y desde fuera eso se lee como no escuchar. Es el caso
+# que motivó todo este cambio.
+# Sin vocativos con género ("sí señor"): la mitad del padrón son mujeres y el
+# sistema no guarda el género. Todas valen para cualquier paciente.
+# Disjunto de ACUSES a propósito: significan cosas distintas y hay que poder
+# distinguirlos en la traza y en los tests. "Ya veo." vive en ACUSES.
+ACUSE_ESCUCHADO: tuple[str, ...] = (
+    "Le escucho.", "Ajá.", "Claro.", "Le sigo.", "Ya.", "Sí, dígame.",
+)
+
+
+def acuse_escuchado(semilla: str, usadas: list[str] | None = None) -> str:
+    return _rotar(ACUSE_ESCUCHADO, semilla, usadas or [])
+
 
 # Cuando el paciente reporta algo que no está bien. Reconoce sin dramatizar ni
 # tranquilizar: tranquilizar ante un síntoma de alarma es una de las conductas
@@ -475,6 +560,12 @@ def textos_cacheables() -> list[str]:
     fijos.extend(VOLVIENDO)
     fijos.extend(SALUDO_DE_VUELTA)
     fijos.extend(CONFIRMAR_CIERRE)
+    fijos.extend(ACUSE_ESCUCHADO)
+    # Las de procedimiento llevan el nombre de la cirugía dentro, así que se
+    # expanden por las etiquetas conocidas — son nueve y cerradas
+    # (`nlu/procedimiento`), igual que se hace abajo con ACUSE_OTRO.
+    for plantilla in PROCEDIMIENTO_CONFIRMADO:
+        fijos.extend(plantilla.format(p.lower()) for p in procedimiento.etiquetas())
     for opciones in SEGUIMIENTOS.values():
         fijos.extend(opciones)
     # Los reflejos del dolor llevan {n}: se enumeran los once valores para que

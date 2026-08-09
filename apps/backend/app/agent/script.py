@@ -115,6 +115,13 @@ class CallState:
     # distintos —uno ofrece que lo llame una enfermera, el otro cuelga y alerta—,
     # así que no pueden compartir contador.
     sin_respuesta: int = 0
+    # De qué dijo el paciente que lo operaron (`nlu/procedimiento.py`), si lo
+    # dijo. No sustituye a `Patient.surgery` —la ficha manda— pero sí decide dos
+    # cosas: si el RAG puede responder una pregunta sobre ese procedimiento, y si
+    # ya se le reconoció en voz alta. Sin esta memoria, repetirlo ocho veces se
+    # acusaría ocho veces, que es el mismo error que `_aporto_dato` ya evita para
+    # los síntomas fuera de catálogo.
+    procedimiento_dicho: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -123,6 +130,7 @@ class CallState:
             "sin_responder": self.sin_responder, "turnos": self.turnos,
             "seguido": self.seguido, "ultimo_hash": self.ultimo_hash,
             "sin_progreso": self.sin_progreso, "sin_respuesta": self.sin_respuesta,
+            "procedimiento_dicho": self.procedimiento_dicho,
         }
 
     @classmethod
@@ -139,6 +147,7 @@ class CallState:
             ultimo_hash=d.get("ultimo_hash"),
             sin_progreso=int(d.get("sin_progreso") or 0),
             sin_respuesta=int(d.get("sin_respuesta") or 0),
+            procedimiento_dicho=d.get("procedimiento_dicho"),
         )
 
 
@@ -302,7 +311,8 @@ def next_action(state: CallState, symptoms: Symptoms, *,
 
 def apply(state: CallState, action: Action, symptoms: Symptoms, *,
           hash_turno: str | None = None, progreso: bool = True,
-          intento_real: bool = True, silencio: bool = False) -> CallState:
+          intento_real: bool = True, silencio: bool = False,
+          procedimiento_dicho: str | None = None) -> CallState:
     """Avanza el estado tras ejecutar `action`. Devuelve un estado nuevo.
 
     `hash_turno` y `progreso` los calcula el orquestador, que es quien ve el texto
@@ -325,6 +335,10 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
         # Cualquier cosa que diga el paciente devuelve el contador a cero: la
         # escalera de silencio mide silencios SEGUIDOS, no acumulados.
         sin_respuesta=state.sin_respuesta + 1 if silencio else 0,
+        # Lo que el paciente contó de su cirugía se recuerda para toda la
+        # llamada: la primera vez se le reconoce, las siguientes ya no, y el
+        # guard del RAG lo necesita en los turnos posteriores al que lo dijo.
+        procedimiento_dicho=procedimiento_dicho or state.procedimiento_dicho,
     )
 
     if action.kind == "sondear":

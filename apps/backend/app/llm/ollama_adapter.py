@@ -101,10 +101,27 @@ _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 # transición de abstención, así que una respuesta buena quedaba sin cita —justo
 # lo que la rúbrica califica— y encima sonaba incoherente.
 # Ahora el "no sé" tiene que cerrar cláusula o ir seguido de un interrogativo.
+# La media abstención es el caso peligroso y el que faltaba. Medido en una
+# llamada real, ante una pregunta sobre la cesárea de un paciente con
+# apendicectomía en la ficha, el 3B respondió: "se menciona en el documento que
+# si nota algún cambio en la incisión debe llamar a la oficina. Sin embargo, no
+# hay información específica sobre los síntomas postoperatorios relacionados con
+# la cesárea." Ninguno de los patrones de arriba casa con eso, así que el
+# orquestador la tomó por una respuesta buena y le adjuntó las cuatro citas de
+# apendicectomía: una afirmación fuera de tema CON fuente, que es exactamente lo
+# que estas guardas existen para impedir.
 _ES_ABSTENCION = re.compile(
     r"no\s+tengo\s+(esa\s+)?informaci[oó]n"
     r"|no\s+aparece\s+en\s+(los\s+)?documentos"
     r"|no\s+figura\s+en\s+(la\s+)?(evidencia|documentos)"
+    r"|no\s+(hay|tengo|encuentro)\s+informaci[oó]n"
+    # Solo las formas que hablan del DOCUMENTO. Se dejan fuera "no se indica" y
+    # "no se recomienda": son instrucciones clínicas legítimas y bien ancladas
+    # ("no se indica aplicar cremas en la herida"), y tomarlas por abstención les
+    # arrancaría la cita — el mismo fallo silencioso que ya costó el patrón de
+    # "no sé" descrito arriba.
+    r"|no\s+se\s+menciona\b|no\s+(lo\s+)?especifica\b"
+    r"|no\s+dice\s+nada\s+(sobre|de|al\s+respecto)"
     r"|\bno\s+lo\s+s[eé]\b"
     r"|\bno\s+s[eé]\s*[.,;!?]"
     r"|\bno\s+s[eé]\s+(si|qu[eé]|cu[aá]ndo|c[oó]mo|d[oó]nde|cu[aá]l|nada|decirle)\b",
@@ -722,8 +739,19 @@ def _to_symptoms(data: dict, slot: str, utterance: str) -> Symptoms:
 
     # El paciente preguntó en vez de contestar: lo que el modelo "extraiga" de ahí
     # sale de la pregunta del agente, no del paciente.
+    #
+    # La comprobación de "¿habló del slot?" se hace sobre la PARTE DECLARATIVA, no
+    # sobre el turno entero. Medido: ante "¿Qué temperatura se considera fiebre?"
+    # el 3B devolvía `si`, y como la frase contiene la palabra "fiebre",
+    # `_menciona_el_slot` daba True sobre el turno completo y la guarda no
+    # llegaba a dispararse — una pregunta SOBRE la fiebre menciona la fiebre.
+    # `parte_declarativa` recorta las preguntas impersonales y conserva las que
+    # reportan en primera persona, así que "¿es normal que me esté saliendo pus?"
+    # sigue pasando (ver `nlu/lexicon.py`).
     norm = lexicon.normalize(utterance)
-    if _ES_PREGUNTA.search(norm) and not _menciona_el_slot(slot, utterance):
+    if _ES_PREGUNTA.search(norm) and not _menciona_el_slot(
+        slot, lexicon.parte_declarativa(utterance)
+    ):
         log.warning("valor del LLM descartado: el turno es una pregunta, no una "
                     "respuesta sobre %s (%r)", slot, utterance[:80])
         return sym

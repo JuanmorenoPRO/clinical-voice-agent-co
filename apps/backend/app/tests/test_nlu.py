@@ -28,6 +28,15 @@ from app.schemas import Symptoms
         ("Es que no puedo respirar bien", "breathing_difficulty"),
         ("Me falta el aire desde anoche", "breathing_difficulty"),
         ("Me siento ahogada", "breathing_difficulty"),
+        # Regresión: la forma MÁS común del habla real no estaba cubierta. El
+        # patrón solo tenía la negación absoluta ("no puedo respirar"), así que
+        # "está bien, pero me cuesta respirar" se resolvía como `wound=normal` y
+        # la llamada seguía con la siguiente pregunta del guion. Un falso
+        # negativo de emergencia es la falla catastrófica de este sistema.
+        ("Está bien, pero me cuesta respirar", "breathing_difficulty"),
+        ("Me cuesta coger aire cuando camino", "breathing_difficulty"),
+        ("Me quedo sin aire al subir las escaleras", "breathing_difficulty"),
+        ("Me agito con nada", "breathing_difficulty"),
         ("Tengo un dolor en el pecho horrible", "chest_pain"),
         ("Me desmayé esta mañana", "loss_of_consciousness"),
         ("Perdí el conocimiento un ratico", "loss_of_consciousness"),
@@ -556,3 +565,69 @@ def test_despedirse_no_es_rechazar(texto, esperado):
 )
 def test_la_febricula_referida_en_colombiano_se_recoge(texto):
     assert lexicon.extract(texto, slot="fiebre").fever is True
+
+
+# --- preguntar por un síntoma no es tenerlo -----------------------------------
+# `_FIEBRE_SI` abría con `\bfiebre` sin anclar, así que CUALQUIER turno con esa
+# palabra afirmaba el síntoma. Medido: el paciente decía "no fiebre" y el agente
+# le contestaba "Con calentura, entonces." (`phrasing._REFLEJO`), además de meter
+# un falso positivo en el triaje.
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "No fiebre, pero sí estoy temblando",
+        "fiebre no, nada de eso",
+        "No, calentura no",
+    ],
+)
+def test_la_negacion_escueta_de_fiebre_se_entiende(texto):
+    assert lexicon.extract(texto, slot="fiebre").fever is False
+
+
+@pytest.mark.parametrize(
+    "texto,slot",
+    [
+        ("¿Qué temperatura se considera fiebre?", "fiebre"),
+        ("¿Cuándo se quita la fiebre normalmente?", "fiebre"),
+        # Y el mismo fallo en los categóricos: "¿eso es normal?" resolvía el slot
+        # en curso como `normal` sin que el paciente hubiera dicho nada de él.
+        ("¿eso es normal?", "herida"),
+    ],
+)
+def test_una_pregunta_impersonal_no_afirma_el_sintoma(texto, slot):
+    sym = lexicon.extract(texto, slot=slot)
+    assert sym.fever is None
+    assert sym.wound is None
+
+
+@pytest.mark.parametrize(
+    "texto,slot,campo,valor",
+    [
+        # La asimetría que salva la guarda anterior de convertirse en un falso
+        # negativo: una pregunta que habla del propio cuerpo SÍ está reportando,
+        # y `secrecion_purulenta` dispara CRÍTICO por sí solo.
+        ("¿es normal que me esté saliendo pus de la herida?", "herida",
+         "wound", "secrecion_purulenta"),
+        ("me está saliendo pus, ¿es normal?", "herida",
+         "wound", "secrecion_purulenta"),
+        ("no me puedo ni parar, ¿eso es normal?", "movilidad",
+         "mobility", "incapacitante_nueva"),
+        ("tengo fiebre, ¿es normal?", "fiebre", "fever", True),
+    ],
+)
+def test_una_pregunta_que_reporta_si_afirma_el_sintoma(texto, slot, campo, valor):
+    assert getattr(lexicon.extract(texto, slot=slot), campo) == valor
+
+
+def test_los_escalofrios_sobreviven_a_la_negacion_de_fiebre():
+    """Sin esto la señal se perdía entera al arreglar la negación escueta.
+
+    "escalofrio" solo vivía dentro de `_FIEBRE_SI`; ahora que "no fiebre" gana,
+    el temblor tiene que quedar recogido por otra vía o desaparece del reporte.
+    """
+    sym = lexicon.extract("No fiebre, pero sí estoy temblando", slot="fiebre")
+    assert sym.fever is False
+    assert "escalofríos" in sym.other
+    assert otros_sintomas.senales(sym.other) == ["escalofríos"]

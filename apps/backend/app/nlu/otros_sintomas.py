@@ -68,6 +68,18 @@ _TABLA: list[tuple[str, str, str, re.Pattern[str]]] = [
     ("respiratorio", "tos o flema", SENAL, re.compile(
         r"\btos\b|tosiendo|toso\b|flema|expectora\w*|carraspera\s+con\s+flema"
     )),
+    # Escalofríos y temblor SIN fiebre confirmada. Hasta ahora "escalofrio" solo
+    # vivía dentro de `lexicon._FIEBRE_SI`, así que al arreglar la negación
+    # escueta ("no fiebre, pero sí estoy temblando" ya no afirma `fever`) la
+    # señal se habría perdido entera. Va aquí porque es exactamente lo que este
+    # módulo existe para recoger: algo con peso clínico que ningún slot pregunta.
+    # No duplica la fiebre — si el paciente la refiere, `fever=True` manda y esto
+    # es información adicional para enfermería, no un segundo disparo del mismo
+    # hallazgo (`yellow_signals()` cuenta etiquetas distintas).
+    ("escalofrios", "escalofríos", SENAL, re.compile(
+        r"escalofrio\w*|tiritan\w+|temblan\w+\s+de\s+frio|destemplad\w+"
+        r"|estoy\s+temblando|no\s+paro\s+de\s+temblar|me\s+da\s+tembladera"
+    )),
     ("abdomen", "distensión o estreñimiento", SENAL, re.compile(
         r"(barriga|estomago|abdomen|vientre)\s+.{0,12}(hinchad|inflamad|duro|distendid)"
         r"|hinchad\w+\s+(la\s+)?(barriga|estomago)|distension"

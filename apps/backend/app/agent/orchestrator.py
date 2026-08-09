@@ -35,6 +35,7 @@ from ..llm.factory import get_llm
 from ..llm.ollama_adapter import ABSTENCION, es_abstencion
 from ..models import Alert, Conversation, Patient, Turn
 from ..nlu import intent as intent_nlu, lexicon, otros_sintomas
+from ..nlu import procedimiento as procedimiento_nlu
 from ..nlu.merge import merge_symptoms
 from ..rag import retrieve as rag
 from ..rag.embeddings import build_query
@@ -51,6 +52,14 @@ _VENTANA_ESTILO = 5
 # otro lado. No está en `decision/rules.py` a propósito: allí solo viven reglas
 # que miran síntomas, y esto es un hecho de la llamada, no del paciente.
 _REGLA_SIN_RESPUESTA = "paciente_no_responde"
+
+# El paciente dice que lo operaron de otra cosa distinta a la de su ficha. Igual
+# que la anterior, no es una regla de `decision/rules.py`: no es un hallazgo
+# clínico, es un problema de integridad del registro. Y por eso —a diferencia de
+# `_REGLA_SIN_RESPUESTA`— NO eleva el `risk_level` del turno: teñiría de amarillo
+# llamadas clínicamente verdes. Levanta su alerta y ya, que es lo que hace falta
+# para que alguien vaya a mirar la ficha.
+_REGLA_PROCEDIMIENTO = "procedimiento_no_coincide"
 
 
 def _get_or_create_conversation(
@@ -105,7 +114,8 @@ _CAMPOS_CLINICOS = (
 )
 
 
-def _aporto_dato(del_turno: Symptoms, nuevos_otros: list[str]) -> bool:
+def _aporto_dato(del_turno: Symptoms, nuevos_otros: list[str],
+                 procedimiento_nuevo: bool = False) -> bool:
     """¿Este turno dejó algo NUEVO anotado?
 
     Dos usos: hace honesto al acuse de recibo —"vale, anotado" solo se puede decir
@@ -115,8 +125,12 @@ def _aporto_dato(del_turno: Symptoms, nuevos_otros: list[str]) -> bool:
     acumulado. Es la diferencia importante: repetir "veo borroso" por octava vez
     no es información nueva, y contarlo como progreso es lo que impedía que el
     detector de atasco llegara a dispararse nunca.
+
+    `procedimiento_nuevo` sigue la misma regla: contar de qué lo operaron SÍ es
+    aportar información —y de la que más consecuencias tiene, porque decide qué
+    documentos puede citar el RAG—, pero solo la primera vez que lo dice.
     """
-    return bool(nuevos_otros) or any(
+    return bool(nuevos_otros) or procedimiento_nuevo or any(
         getattr(del_turno, c) is not None for c in _CAMPOS_CLINICOS
     )
 
@@ -125,13 +139,19 @@ def _texto_de(action: Action, *, semilla: str, recientes: list[str],
               nombre: str | None, preocupante: bool, con_acuse: bool = True,
               slot_respondido: str | None = None,
               acumulado: Symptoms | None = None,
-              del_turno: Symptoms | None = None) -> str:
+              del_turno: Symptoms | None = None,
+              con_prefijo: bool = False) -> str:
     """Traduce la acción del guion a lo que se dice. Todo determinista.
 
     `con_acuse=False` suprime el acuse de recibo. Se usa cuando el turno ya se
     reconoció por otra vía —o cuando no hay nada que acusar—: decir "vale,
     anotado" después de un turno del que no se extrajo nada afirma algo falso, y
     en la llamada que motivó este cambio el agente lo dijo cuatro veces seguidas.
+
+    `con_prefijo=True` avisa de que quien llama ya puso delante un
+    reconocimiento propio (el acuse de un síntoma fuera de catálogo, el
+    procedimiento que contó el paciente, la respuesta a una pregunta clínica).
+    Sin ese aviso, la repregunta añadiría el suyo y saldrían dos apilados.
     """
     if action.kind == "ofrecer_salida":
         return phrasing.ofrecer_salida(semilla, recientes)
@@ -165,6 +185,19 @@ def _texto_de(action: Action, *, semilla: str, recientes: list[str],
         return phrasing.PREGUNTA_ABIERTA
 
     if not con_acuse:
+        # Una repregunta sin acuse salía pelada: el paciente decía algo, no se le
+        # pudo sacar el dato, y recibía la reformulación cerrada sin una palabra
+        # sobre lo que acababa de contar. Desde fuera eso es no escuchar, y es el
+        # caso que motivó este cambio ("me operaron de cesárea" → "Sin
+        # termómetro: ¿lo ha sentido como fiebre, sí o no?").
+        #
+        # `ACUSE_ESCUCHADO` reconoce haber OÍDO sin afirmar haber anotado nada,
+        # que es lo único cierto aquí: los ACUSES normales ("vale, anotado")
+        # serían falsos. No se pone cuando ya hay un prefijo delante
+        # (`con_prefijo`) — el reconocimiento ya lo dio el prefijo, y encadenar
+        # dos en voz es el párrafo que nadie escucha entero.
+        if action.kind == "repreguntar" and not con_prefijo:
+            return f"{phrasing.acuse_escuchado(semilla, recientes)} {pregunta}"
         return pregunta
     # Si se puede decir QUÉ se entendió, se dice. El acuse genérico ("vale,
     # anotado") es el respaldo para cuando el dato no tiene reflejo — por ejemplo
@@ -242,6 +275,20 @@ async def process_turn_async(
     # progreso — repetirle "me apunto lo de la visión borrosa" en cada turno es
     # tan robótico como no decírselo nunca.
     nuevos_otros = [o for o in del_turno.other if o not in acumulado.other]
+
+    # De qué dice el paciente que lo operaron. Determinista y fuera de `Symptoms`
+    # a propósito: no es un síntoma —no lo valora `decision/rules.py`— sino un
+    # hecho sobre la llamada, como el silencio. La ficha sigue mandando; esto
+    # decide si se le reconoce en voz alta y si el RAG puede responder sobre ese
+    # procedimiento. Ver `nlu/procedimiento.py`.
+    proc_dicho = procedimiento_nlu.detectar(lexicon.normalize(text))
+    proc_nuevo = proc_dicho is not None and proc_dicho != estado.procedimiento_dicho
+    # Vale el del turno o el que ya se dijo antes: el guard del RAG tiene que
+    # seguir en pie en los turnos siguientes al que lo contó.
+    proc_vigente = proc_dicho or estado.procedimiento_dicho
+    discrepa = (proc_vigente is not None
+                and not procedimiento_nlu.coincide(proc_vigente, procedimiento))
+
     acumulado = merge_symptoms(acumulado, del_turno)
     if paciente and paciente.extra.get("dia_postop"):
         acumulado.day_postop = paciente.extra["dia_postop"]
@@ -256,7 +303,7 @@ async def process_turn_async(
     # seguir recorriendo slots.
     hash_turno = hashlib.sha256(lexicon.normalize(text).encode()).hexdigest()[:16]
     repetido = hash_turno == estado.ultimo_hash
-    progreso = _aporto_dato(del_turno, nuevos_otros)
+    progreso = _aporto_dato(del_turno, nuevos_otros, proc_nuevo)
 
     # `emergencia` distingue las 6 banderas del 123 de la vía de enfermería: ante
     # una emergencia real, retener al paciente en la línea compite con la llamada
@@ -340,7 +387,8 @@ async def process_turn_async(
         # visitas y recibía la siguiente pregunta del guion, sin más.
         semilla = conv.id + str(len(prior))
         siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
-                              nombre=nombre, preocupante=False, con_acuse=False)
+                              nombre=nombre, preocupante=False, con_acuse=False,
+                              con_prefijo=True)
         final = f"{phrasing.ADMINISTRATIVA} {phrasing.volviendo(semilla, recientes)} {siguiente}"
     elif extraccion.intent == "saludo":
         # El paciente saluda: se le devuelve el saludo y se le hace la pregunta
@@ -359,6 +407,27 @@ async def process_turn_async(
         siguiente = _texto_de(action, semilla=conv.id + str(len(prior)),
                               recientes=recientes, nombre=nombre, preocupante=False)
         final = f"{phrasing.SOCIAL} {siguiente}"
+    elif extraccion.intent == "pregunta_clinica" and discrepa:
+        # El paciente pregunta por su recuperación, pero dice haberse operado de
+        # algo que no es lo que hay en su ficha. El corpus está indexado POR
+        # procedimiento (`rag/retrieve.py::_allowed_document_ids`), así que
+        # recuperar aquí solo puede devolver documentos de la otra cirugía —y eso
+        # es una afirmación falsa CON fuente, lo peor que puede producir este
+        # sistema. Ocurrió tal cual: una pregunta sobre la cesárea se contestó
+        # citando cuatro PDFs de apendicectomía.
+        #
+        # Ruta determinista: ni RAG, ni modelo, ni citas. Misma forma que la rama
+        # de abajo y por la misma razón de fondo — el corpus no puede responder
+        # esto, y decirlo es más útil que improvisar.
+        log.warning("RAG omitido: el paciente refiere %r y la ficha dice %r",
+                    proc_vigente, procedimiento)
+        semilla = conv.id + str(len(prior))
+        siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
+                              nombre=nombre, preocupante=False, con_acuse=False,
+                              con_prefijo=True)
+        final = (phrasing.abstencion_procedimiento(proc_vigente, procedimiento)
+                 + " " + phrasing.transicion_abstencion(semilla, recientes)
+                 + " " + siguiente)
     elif extraccion.intent == "pregunta_clinica" and otros_sintomas.senales(nuevos_otros):
         # El paciente contó un síntoma de alarma y preguntó por él en el mismo
         # turno. Eso NO va al RAG: no está preguntando qué dice el hospital sobre
@@ -368,7 +437,8 @@ async def process_turn_async(
         # pregunta sobre visión borrosa. Ruta determinista, sin modelo.
         semilla = conv.id + str(len(prior))
         siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
-                              nombre=nombre, preocupante=False, con_acuse=False)
+                              nombre=nombre, preocupante=False, con_acuse=False,
+                              con_prefijo=True)
         final = (phrasing.sintoma_consultado(
             otros_sintomas.senales(nuevos_otros), semilla, recientes)
             + " " + phrasing.volviendo(semilla, recientes) + " " + siguiente)
@@ -424,7 +494,25 @@ async def process_turn_async(
         # encadenar "lo anoto como que no me supo decir" + "me apunto lo de la
         # visión borrosa" + la pregunta es un párrafo que nadie escucha entero.
         # Manda lo que el paciente trajo, que es lo que demuestra que se le oyó.
-        if nuevos_otros:
+        #
+        # El procedimiento va PRIMERO cuando lo acaba de contar: es el dato con
+        # más consecuencias de los tres (decide qué puede citar el RAG y si hay
+        # que revisarle la ficha), y era el que se caía al vacío — "me operaron
+        # de cesárea" recibía la repregunta cerrada de la fiebre, sin más.
+        if proc_nuevo:
+            if not procedimiento:
+                # Llamada sin paciente asociado: no hay ficha contra la que
+                # contrastar, así que no se puede decir ni que coincide ni que no.
+                reconocimiento = phrasing.procedimiento_anotado(
+                    proc_dicho, semilla, recientes)
+            elif discrepa:
+                reconocimiento = phrasing.procedimiento_discrepa(
+                    proc_dicho, procedimiento, semilla, recientes)
+            else:
+                reconocimiento = phrasing.procedimiento_confirmado(
+                    proc_dicho, semilla, recientes)
+            prefijo += reconocimiento + " " + phrasing.volviendo(semilla, recientes) + " "
+        elif nuevos_otros:
             prefijo += (
                 phrasing.acuse_otro(nuevos_otros, semilla, recientes)
                 + " " + phrasing.volviendo(semilla, recientes) + " "
@@ -439,20 +527,39 @@ async def process_turn_async(
         final = prefijo + _texto_de(action, semilla=semilla,
                                     recientes=recientes, nombre=nombre,
                                     preocupante=preocupante,
-                                    con_acuse=not nuevos_otros and progreso,
+                                    con_acuse=not nuevos_otros and not proc_nuevo
+                                    and progreso,
                                     slot_respondido=estado.slot_actual,
-                                    acumulado=acumulado, del_turno=del_turno)
+                                    acumulado=acumulado, del_turno=del_turno,
+                                    con_prefijo=bool(prefijo))
 
     # Saludar, pedir que se repita la pregunta o decir algo social no es intentar
-    # contestarla: esos turnos no gastan reintentos del slot.
+    # contestarla: esos turnos no gastan reintentos del slot. Contar de qué lo
+    # operaron tampoco: el paciente no esquivó la pregunta, corrigió el registro,
+    # y cobrárselo como un intento fallido le acorta el margen para contestar de
+    # verdad. Misma doctrina que ya documenta `script.apply`.
     nuevo_estado = script.apply(
         estado, action, acumulado, hash_turno=hash_turno, progreso=progreso,
-        intento_real=extraccion.intent not in ("saludo", "meta", "social"),
+        intento_real=(extraccion.intent not in ("saludo", "meta", "social")
+                      and not proc_nuevo),
         silencio=silencio,
+        procedimiento_dicho=proc_dicho,
     )
 
     # --- alerta, deduplicada por reglas nuevas -------------------------------
     alert_id = _crear_alerta_si_procede(session, conv, decision, acumulado, text)
+
+    # El paciente dice que lo operaron de otra cosa. No es un hallazgo clínico
+    # —no lo puede valorar `decision/rules.py`— pero sí algo que alguien tiene
+    # que mirar: si la ficha está mal, TODO lo demás está mal, porque el
+    # procedimiento es la clave con la que se filtra la evidencia y con la que se
+    # interpretan los síntomas. A diferencia del silencio, esto NO toca
+    # `decision.risk_level`: la llamada puede ser clínicamente verde y seguir
+    # necesitando que verifiquen el registro.
+    if discrepa and proc_vigente:
+        alert_id = _crear_alerta_procedimiento(
+            session, conv, acumulado, dicho=proc_vigente, ficha=procedimiento
+        ) or alert_id
 
     # El paciente dejó de contestar y la llamada se acaba aquí. No es un hallazgo
     # clínico —no vive en `Symptoms` ni puede ser una regla de `decision/rules.py`,
@@ -661,6 +768,40 @@ def _crear_alerta_sin_respuesta(
         risk_level="ALTO", triggered_rules=[_REGLA_SIN_RESPUESTA],
         symptoms=symptoms.model_dump(),
         transcript="El paciente deja de contestar: la llamada se cerró sin respuesta.",
+    )
+    session.add(alerta)
+    session.flush()
+    return alerta.id
+
+
+def _crear_alerta_procedimiento(
+    session: Session, conv: Conversation, symptoms: Symptoms, *,
+    dicho: str, ficha: str | None,
+) -> str | None:
+    """El paciente refiere una cirugía distinta a la de su ficha.
+
+    Espejo de `_crear_alerta_sin_respuesta`: alerta por un hecho de la llamada,
+    sin pasar por el motor de decisión, y deduplicada por su propia regla —una
+    ficha solo hace falta verificarla una vez, por muchas veces que el paciente
+    repita de qué lo operaron.
+
+    El nivel es ALTO porque el procedimiento es la clave de todo lo demás: con él
+    se filtra la evidencia que el agente puede citar y con él se interpretan los
+    síntomas. Pero, a diferencia del silencio, no se toca el `risk_level` del
+    turno: esto no es un deterioro del paciente.
+    """
+    ya: set[str] = set()
+    for a in session.query(Alert).filter(Alert.conversation_id == conv.id).all():
+        ya.update(a.triggered_rules or [])
+    if _REGLA_PROCEDIMIENTO in ya:
+        return None
+    alerta = Alert(
+        conversation_id=conv.id, patient_id=conv.patient_id,
+        risk_level="ALTO", triggered_rules=[_REGLA_PROCEDIMIENTO],
+        symptoms=symptoms.model_dump(),
+        transcript=(f"El paciente refiere haberse operado de {dicho}; "
+                    f"en la ficha figura {ficha or 'sin procedimiento'}. "
+                    "Verificar el registro antes de interpretar esta llamada."),
     )
     session.add(alerta)
     session.flush()
