@@ -99,6 +99,14 @@ class Settings(BaseSettings):
     # media frase; es la palanca dominante del presupuesto de latencia.
     vad_stop_secs: float = 0.7
 
+    # Inactividad tras la que se da por hecho que el paciente no está
+    # contestando. Se cuenta desde que el agente TERMINA de hablar, no desde que
+    # empieza. Cinco segundos es un silencio que en una conversación telefónica
+    # ya resulta incómodo, pero deja margen a alguien mayor que tarda en
+    # responder; la escalera que arranca a partir de aquí (tres avisos antes de
+    # colgar) vive en `agent/script.py::MAX_SILENCIOS`.
+    silence_timeout_s: float = 5.0
+
     # --- RAG: umbral de "no tengo evidencia suficiente" (ADR-005) ---
     rag_top_k: int = 4
     # Se sobre-recuperan candidatos y luego se filtran de forma determinista

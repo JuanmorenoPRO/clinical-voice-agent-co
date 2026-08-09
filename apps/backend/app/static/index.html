@@ -137,8 +137,9 @@
   <!-- ─── Alertas ─────────────────────────────────────────────────────── -->
   <section id="alertas">
     <div class="card">
-      <table><thead><tr><th>Nivel</th><th>Reglas</th><th>Lo que dijo</th>
-        <th>Estado</th><th></th></tr></thead><tbody id="aTabla"></tbody></table>
+      <table><thead><tr><th>Fecha y hora</th><th>Paciente</th><th>Nivel</th>
+        <th>Reglas</th><th>Lo que dijo</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="aTabla"></tbody></table>
     </div>
   </section>
 
@@ -279,39 +280,56 @@ $("#dSubir").onclick = async () => {
   } catch (e) { $("#dEstado").textContent = "error: " + e.message; }
 };
 
-// ── alertas ───────────────────────────────────────────────────────────
-async function cargarAlertas() {
-  const as = await api("/console/alerts");
-  $("#aTabla").innerHTML = as.length ? as.map(a => `
-    <tr>
-      <td><span class="pill ${a.risk_level}">${a.risk_level}</span></td>
-      <td class="mono" style="font-size:12px">${esc((a.triggered_rules || []).join(", "))}</td>
-      <td class="dim">${esc((a.transcript || "").slice(0, 90))}</td>
-      <td>${esc(a.status)}</td>
-      <td>${a.status === "pending"
-        ? `<button class="b g" onclick="atender('${esc(a.id)}')">Atender</button>` : ""}</td>
-    </tr>`).join("")
-    : `<tr><td colspan="5" class="vacio">Sin alertas</td></tr>`;
-}
-async function atender(id) {
-  await api(`/console/alerts/${id}/attend`, { method: "POST" });
-  cargarAlertas();
-}
-setInterval(() => { if ($("#alertas").classList.contains("on")) cargarAlertas(); }, 5000);
+// ── render compartido de una llamada ──────────────────────────────────
+// Lo usan las dos superficies: la pestaña Trazas y el panel desplegable de
+// Alertas. Es la misma pregunta en los dos sitios —"¿qué pasó en esta
+// llamada?"— y tenerla dos veces era garantía de que una de ellas se quedara
+// atrás.
+const fechaHora = iso => iso
+  ? new Date(iso).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })
+  : "—";
 
-// ── trazas ────────────────────────────────────────────────────────────
-async function cargarTrazas() {
-  const cs = await api("/console/conversations");
-  $("#tSel").innerHTML = cs.map(c =>
-    `<option value="${esc(c.id)}">${esc(c.id.slice(0, 8))} · ${esc(c.status)}</option>`).join("");
-  if (cs.length) verTraza(cs[0].id);
-}
-$("#tSel").onchange = e => verTraza(e.target.value);
-async function verTraza(id) {
-  const d = await api("/console/conversations/" + id);
-  $("#tDetalle").innerHTML = d.turns.map((t, i) => `
+function renderResumen(s) {
+  if (!s) return `<div class="card dim">Llamada aún abierta: el resumen se genera al cerrarla.</div>`;
+  const dur = s.duration_seconds != null
+    ? `${Math.floor(s.duration_seconds / 60)}m ${s.duration_seconds % 60}s` : "—";
+  const decisiones = (s.decisions || []).map(d => `
+    <tr>
+      <td>${d.turn}</td>
+      <td class="dim">${esc(fechaHora(d.at))}</td>
+      <td><span class="pill ${d.risk_level}">${esc(d.risk_level)}</span></td>
+      <td class="mono" style="font-size:12px">${esc((d.triggered_rules || []).join(", ") || "—")}</td>
+      <td class="dim mono" style="font-size:12px">${esc(d.intent || "")}${
+        d.critical_override ? " · guion determinista" : ""}</td>
+    </tr>`).join("");
+  return `
     <div class="card">
-      <div class="dim" style="font-size:12px">turno ${i + 1} · ${t.latency_ms} ms
+      <div class="fila" style="justify-content:space-between">
+        <strong>${esc(s.patient || "Paciente sin identificar")}</strong>
+        <span class="pill ${s.risk_level}">${esc(s.risk_level)}</span>
+      </div>
+      <p class="dim" style="margin:8px 0 0">
+        ${esc(s.surgery || "cirugía no registrada")} ·
+        ${esc(fechaHora(s.started_at))} → ${esc(fechaHora(s.ended_at))} ·
+        ${dur} · ${s.n_turns} turnos
+      </p>
+      <p style="margin:10px 0 0"><strong>Acción:</strong> ${esc(s.escalation_action || "—")}</p>
+      <p style="margin:6px 0 0">${esc(s.recommendation || "")}</p>
+      ${(s.triggered_rules || []).length ? `<p class="mono dim" style="font-size:12px">
+        reglas: ${esc(s.triggered_rules.join(", "))}</p>` : ""}
+      ${(s.unanswered_slots || []).length ? `<p class="mono dim" style="font-size:12px">
+        sin responder: ${esc(s.unanswered_slots.join(", "))}</p>` : ""}
+      ${decisiones ? `<table style="margin-top:12px"><thead><tr><th>#</th><th>Hora</th>
+        <th>Riesgo</th><th>Reglas</th><th>Intención</th></tr></thead>
+        <tbody>${decisiones}</tbody></table>` : ""}
+    </div>`;
+}
+
+function renderLlamada(d) {
+  const turnos = d.turns.map((t, i) => `
+    <div class="card">
+      <div class="dim" style="font-size:12px">turno ${i + 1} · ${esc(fechaHora(t.created_at))}
+        · ${t.latency_ms} ms
         · <span class="pill ${t.risk_level}">${t.risk_level}</span>
         ${t.critical_override ? "· guion determinista" : ""}</div>
       <p><strong>Paciente:</strong> ${esc(t.patient_utterance)}</p>
@@ -321,6 +339,98 @@ async function verTraza(id) {
       ${(t.retrieved_chunks || []).map(c =>
         `<div class="fuente">${esc(c.document)} · p.${c.page} · ${c.score}</div>`).join("")}
     </div>`).join("") || `<div class="card vacio">Sin turnos</div>`;
+  return renderResumen(d.summary) + turnos;
+}
+
+// ── alertas ───────────────────────────────────────────────────────────
+// Qué alerta está desplegada y el detalle de su llamada. Hace falta recordarlo
+// porque el polling de abajo repinta la tabla entera cada 5 s: sin esto, el
+// panel se cerraría solo en la cara del revisor.
+let alertaAbierta = null;      // { id, conversationId, data }
+
+async function cargarAlertas() {
+  const as = await api("/console/alerts");
+  // Una llamada aún abierta gana turnos mientras el panel está desplegado: se
+  // vuelve a pedir en cada repintado. Una ya cerrada no cambia nunca más, así
+  // que se sirve de lo ya descargado.
+  if (alertaAbierta && alertaAbierta.data && alertaAbierta.data.status !== "closed") {
+    alertaAbierta.data = await api("/console/conversations/" + alertaAbierta.conversationId);
+  }
+  $("#aTabla").innerHTML = as.length ? as.map(a => {
+    const abierta = alertaAbierta && alertaAbierta.id === a.id;
+    const detalle = abierta
+      ? `<tr><td colspan="7" style="background:var(--bg)">${
+          alertaAbierta.data
+            ? renderLlamada(alertaAbierta.data)
+            : `<div class="vacio">cargando…</div>`}</td></tr>`
+      : "";
+    return `
+    <tr>
+      <td class="dim">${esc(fechaHora(a.created_at))}</td>
+      <td>${esc(a.patient || "—")}</td>
+      <td><span class="pill ${a.risk_level}">${a.risk_level}</span></td>
+      <td class="mono" style="font-size:12px">${esc((a.triggered_rules || []).join(", "))}</td>
+      <td class="dim">${esc((a.transcript || "").slice(0, 90))}</td>
+      <td>${esc(a.status)}</td>
+      <td class="fila">
+        <button class="b g" onclick="verLlamada('${esc(a.id)}','${esc(a.conversation_id)}')">
+          ${abierta ? "Ocultar" : "Ver llamada"}</button>
+        ${a.status === "pending"
+          ? `<button class="b g" onclick="atender('${esc(a.id)}')">Atender</button>` : ""}
+        <button class="b g" onclick="borrarAlerta('${esc(a.id)}')"
+          ${a.status === "attended" ? "" : "disabled"}
+          title="${a.status === "attended"
+            ? "Quitar la alerta de la lista"
+            : "Primero hay que marcarla como atendida"}">Borrar</button>
+      </td>
+    </tr>${detalle}`;
+  }).join("")
+    : `<tr><td colspan="7" class="vacio">Sin alertas</td></tr>`;
+}
+
+async function verLlamada(alertId, conversationId) {
+  if (alertaAbierta && alertaAbierta.id === alertId) {
+    alertaAbierta = null;
+    return cargarAlertas();
+  }
+  alertaAbierta = { id: alertId, conversationId, data: null };
+  await cargarAlertas();                       // pinta el "cargando…"
+  let d;
+  try {
+    d = await api("/console/conversations/" + conversationId);
+  } catch (e) {
+    d = { status: "closed", turns: [], summary: null };
+  }
+  if (alertaAbierta && alertaAbierta.id === alertId) alertaAbierta.data = d;
+  cargarAlertas();
+}
+
+async function atender(id) {
+  await api(`/console/alerts/${id}/attend`, { method: "POST" });
+  cargarAlertas();
+}
+async function borrarAlerta(id) {
+  try {
+    await api(`/console/alerts/${id}`, { method: "DELETE" });
+  } catch (e) { return alert("No se pudo borrar: " + e.message); }
+  if (alertaAbierta && alertaAbierta.id === id) alertaAbierta = null;
+  cargarAlertas();
+}
+setInterval(() => { if ($("#alertas").classList.contains("on")) cargarAlertas(); }, 5000);
+
+// ── trazas ────────────────────────────────────────────────────────────
+async function cargarTrazas() {
+  const cs = await api("/console/conversations");
+  $("#tSel").innerHTML = cs.map(c =>
+    `<option value="${esc(c.id)}">${esc(fechaHora(c.started_at))} · ` +
+    `${esc(c.patient || "sin paciente")} · ${c.n_turns} turnos · ${esc(c.status)}</option>`
+  ).join("");
+  if (cs.length) verTraza(cs[0].id);
+  else $("#tDetalle").innerHTML = `<div class="card vacio">Sin llamadas todavía</div>`;
+}
+$("#tSel").onchange = e => verTraza(e.target.value);
+async function verTraza(id) {
+  $("#tDetalle").innerHTML = renderLlamada(await api("/console/conversations/" + id));
 }
 
 // ── llamada de voz (WebRTC) ───────────────────────────────────────────

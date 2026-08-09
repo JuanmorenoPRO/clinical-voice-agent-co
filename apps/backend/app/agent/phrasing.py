@@ -118,6 +118,39 @@ def ofrecer_salida(semilla: str, usadas: list[str] | None = None) -> str:
     return _rotar(OFRECER_SALIDA, semilla, usadas or [])
 
 
+# El paciente no dice nada. No es lo mismo que no entenderle —ahí vale "¿me lo
+# repite?"—: aquí lo primero que hay que averiguar es si sigue al teléfono, y por
+# eso se pregunta por él antes de volver al guion.
+SONDEO_PRESENCIA: tuple[str, ...] = (
+    "¿Sigue ahí? No le escuché nada.",
+    "¿Aló? No le oigo, no sé si se cortó la llamada.",
+    "¿Me escucha bien? No me llegó su respuesta.",
+)
+
+# Segundo silencio seguido. Se avisa de lo que va a pasar ANTES de que pase: una
+# llamada de seguimiento que se corta sin previo aviso se vive como un cuelgue.
+AVISO_ULTIMO_INTENTO: tuple[str, ...] = (
+    "Sigo sin escucharlo. Si no me contesta, voy a tener que terminar la llamada.",
+    "Todavía no le oigo nada. Si no me responde ahora, doy la llamada por terminada.",
+)
+
+# Tercer silencio: se cumple el aviso. No se despide con un "que siga bien" —eso
+# afirmaría que el paciente está bien, y precisamente no se sabe—, y se dice en
+# voz alta que alguien va a volver a intentarlo, que es lo que de verdad ocurre:
+# el cierre levanta una alerta ALTA (ver agent/orchestrator.py).
+CIERRE_SIN_RESPUESTA = (
+    "No logro escucharlo, así que voy a terminar la llamada por ahora. "
+    "Aviso a enfermería para que lo contacten. Si me está oyendo y se siente mal, "
+    "llame al 123."
+)
+
+
+def sondeo(intento: int, semilla: str, usadas: list[str] | None = None) -> str:
+    """Qué se dice en el silencio número `intento` (1 = sondeo, 2 = aviso)."""
+    banco = SONDEO_PRESENCIA if intento <= 1 else AVISO_ULTIMO_INTENTO
+    return _rotar(banco, semilla, usadas or [])
+
+
 # Lo que el paciente cuenta fuera del guion (nlu/otros_sintomas.py). Sin esto, en
 # una llamada real dijo ocho veces "veo borroso" y el agente no lo mencionó nunca:
 # nombrarlo es la diferencia entre escuchar y rellenar un formulario. No valora
@@ -427,7 +460,8 @@ def cierre(nombre: str | None, escalado: bool) -> str:
 # un turno normal cuesta 0 ms.
 def textos_cacheables() -> list[str]:
     fijos = [APERTURA, PREGUNTA_ABIERTA, META_REPETIR, META_PROGRESO, SOCIAL,
-             FUERA_DE_MISION, RECHAZO, NO_ENTENDI, TERCERO, ADMINISTRATIVA]
+             FUERA_DE_MISION, RECHAZO, NO_ENTENDI, TERCERO, ADMINISTRATIVA,
+             CIERRE_SIN_RESPUESTA]
     for banco in (PREGUNTAS, REPREGUNTAS):
         for opciones in banco.values():
             fijos.extend(opciones)
@@ -436,6 +470,8 @@ def textos_cacheables() -> list[str]:
     fijos.extend(TRANSICION_ABSTENCION)
     fijos.extend(SLOT_PERDIDO)
     fijos.extend(OFRECER_SALIDA)
+    fijos.extend(SONDEO_PRESENCIA)
+    fijos.extend(AVISO_ULTIMO_INTENTO)
     fijos.extend(VOLVIENDO)
     fijos.extend(SALUDO_DE_VUELTA)
     fijos.extend(CONFIRMAR_CIERRE)

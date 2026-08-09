@@ -134,7 +134,9 @@ class Alert(Base):
     triggered_rules: Mapped[list] = mapped_column(JSON, default=list)
     symptoms: Mapped[dict] = mapped_column(JSON, default=dict)
     transcript: Mapped[str] = mapped_column(Text, default="")
-    status: Mapped[str] = mapped_column(String, default="pending")  # pending|attended
+    # pending|attended|deleted. `deleted` es un borrado lógico: la fila se queda
+    # (la deduplicación de alertas la sigue viendo, ver routers/console.py).
+    status: Mapped[str] = mapped_column(String, default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

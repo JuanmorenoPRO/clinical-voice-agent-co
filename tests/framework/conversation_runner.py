@@ -95,7 +95,15 @@ class InProcessRunner:
             # incertidumbre (`engine.evaluate(final=True)`). Sin cerrar aquí, una
             # llamada que no se pudo evaluar se medía como NORMAL y el arnés
             # reportaba un falso negativo que el sistema real no comete.
-            if conversation_id and not termino:
+            #
+            # Y también cuando el AGENTE cuelga (`call_ended`): ahí el orquestador
+            # ya cerró la conversación por su cuenta, pero el arnés no llegaba a
+            # leer el resultado y perdía el mismo escalamiento. Se ve en el
+            # escenario del paciente que deja de contestar: los turnos se quedan
+            # en ALTO y el CRÍTICO de `no_se_pudo_evaluar` era invisible.
+            # `close_conversation` es idempotente —solo regenera el resumen—, así
+            # que llamarlo en los dos casos es seguro.
+            if conversation_id:
                 from app.summary.service import close_conversation
 
                 risk_al_cierre = close_conversation(

@@ -178,3 +178,47 @@ def test_el_procesador_marca_el_fin_del_habla():
     p = ClinicalProcessor()
     assert p._t_fin_habla is None  # noqa: SLF001
     assert hasattr(p, "process_frame")
+
+
+def test_el_reloj_de_inactividad_se_arma_al_callarse_el_agente_y_se_cancela_al_hablar():
+    """El VAD detecta cuándo el paciente DEJA de hablar; de quien no empieza nunca
+    no dice nada. Ese hueco es el que cubre este reloj: sin él, un paciente que
+    suelta el teléfono deja la llamada abierta para siempre.
+
+    Se cuenta desde que el agente se calla (`BotStoppedSpeakingFrame`, que llega
+    UPSTREAM desde `transport.output()`), no desde que empieza: contar mientras
+    todavía suena la pregunta produciría un "¿sigue ahí?" antes de que el paciente
+    haya tenido ocasión de contestar.
+    """
+    import asyncio
+
+    from app.voice.pipeline import ClinicalProcessor
+
+    async def escenario():
+        p = ClinicalProcessor(silence_timeout_s=30)   # largo: aquí no debe vencer
+        assert p._watchdog is None                    # noqa: SLF001
+
+        p._armar_vigilancia()                         # noqa: SLF001
+        assert p._watchdog is not None                # noqa: SLF001
+
+        p._cancelar_vigilancia()                      # noqa: SLF001
+        assert p._watchdog is None                    # noqa: SLF001
+
+        # Una llamada ya terminada no vuelve a armar el reloj: sin esto, el
+        # `EndFrame` del cierre competiría con un turno de silencio contra un
+        # pipeline que se está desmontando.
+        p._terminado = True                           # noqa: SLF001
+        p._armar_vigilancia()                         # noqa: SLF001
+        assert p._watchdog is None                    # noqa: SLF001
+
+    asyncio.run(escenario())
+
+
+def test_el_marcador_de_silencio_es_el_mismo_que_entiende_el_orquestador():
+    """Si estos dos se separan, el reloj sigue venciendo pero el orquestador
+    trata el marcador como una respuesta cualquiera y la escalera nunca arranca.
+    """
+    from app.nlu import intent
+    from app.voice.pipeline import ClinicalProcessor
+
+    assert intent.classify(ClinicalProcessor.SILENCIO) == "silencio"

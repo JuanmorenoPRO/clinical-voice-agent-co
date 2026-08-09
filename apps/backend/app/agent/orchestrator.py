@@ -30,10 +30,11 @@ import time
 from sqlalchemy.orm import Session
 
 from ..decision import engine
+from ..llm.adapter import Extraction
 from ..llm.factory import get_llm
 from ..llm.ollama_adapter import ABSTENCION, es_abstencion
 from ..models import Alert, Conversation, Patient, Turn
-from ..nlu import lexicon, otros_sintomas
+from ..nlu import intent as intent_nlu, lexicon, otros_sintomas
 from ..nlu.merge import merge_symptoms
 from ..rag import retrieve as rag
 from ..rag.embeddings import build_query
@@ -45,6 +46,11 @@ log = logging.getLogger(__name__)
 
 # Ventana para la rotación anti-repetición del banco de frases.
 _VENTANA_ESTILO = 5
+
+# Nombre de la regla con la que se marca la llamada que se quedó sin nadie al
+# otro lado. No está en `decision/rules.py` a propósito: allí solo viven reglas
+# que miran síntomas, y esto es un hecho de la llamada, no del paciente.
+_REGLA_SIN_RESPUESTA = "paciente_no_responde"
 
 
 def _get_or_create_conversation(
@@ -215,7 +221,16 @@ async def process_turn_async(
     # --- A + B: entender lo que dijo el paciente ------------------------------
     slot = estado.slot_actual if estado.phase is Phase.TAMIZAJE else None
     pregunta_previa = prior[-1].final_response if prior else phrasing.APERTURA
-    extraccion = await llm.extract(slot=slot, question=pregunta_previa, utterance=text)
+
+    # El paciente no dijo NADA. Se cortocircuita el LLM igual que en la ruta de
+    # emergencia y por la misma razón de fondo: no hay nada que extraer del
+    # silencio, y gastar ~2,5 s de modelo en él solo alarga la espera de alguien
+    # que ya no está contestando.
+    silencio = intent_nlu.classify(text) == "silencio"
+    if silencio:
+        extraccion = Extraction(symptoms=Symptoms(), intent="silencio")
+    else:
+        extraccion = await llm.extract(slot=slot, question=pregunta_previa, utterance=text)
     if extraccion.usage.tokens_out:
         llm_calls += 1
     tokens_in += extraccion.usage.tokens_in
@@ -250,7 +265,8 @@ async def process_turn_async(
     quiere_colgar = extraccion.intent == "despedida"
 
     action = script.next_action(estado, acumulado, escalar=critico, repetido=repetido,
-                                emergencia=emergencia, quiere_colgar=quiere_colgar)
+                                emergencia=emergencia, quiere_colgar=quiere_colgar,
+                                silencio=silencio)
     recientes = _aperturas_recientes(prior)
     evidence: RagResult | None = None
 
@@ -262,7 +278,11 @@ async def process_turn_async(
     # subir el nivel: `merge_symptoms` es monótono.
     # `phase is not ESCALAMIENTO` evita el bucle: tras entregar el guion, el turno
     # siguiente vuelve a pedir "cerrar" y `final=True` volvería a dar CRÍTICO.
-    if (action.kind == "cerrar" and not critico
+    # `not silencio`: el cierre por silencio no habla con nadie. Entregarle el
+    # guion de seguridad a una línea muda es tiempo de TTS regalado, y la política
+    # de incertidumbre se aplica igual —con su alerta— dentro de
+    # `close_conversation`, que corre unas líneas más abajo.
+    if (action.kind == "cerrar" and not critico and not silencio
             and estado.phase is not Phase.ESCALAMIENTO):
         decision = engine.evaluate(acumulado, final=True)
         critico = decision.risk_level == "CRÍTICO"
@@ -270,7 +290,22 @@ async def process_turn_async(
             # El guion de seguridad manda sobre la despedida neutra.
             action = Action(kind="escalar", phase=Phase.ESCALAMIENTO)
 
-    if critico and action.kind == "escalar":
+    if silencio:
+        # Escalera de presencia: sondear → avisar → colgar. La lleva `script.py`;
+        # aquí solo se le pone voz. Determinista, sin modelo: no hay nada que
+        # interpretar en un silencio.
+        semilla = conv.id + str(len(prior))
+        if action.kind == "cerrar":
+            final = phrasing.CIERRE_SIN_RESPUESTA
+        else:
+            # Se repite la pregunta pendiente entera detrás del sondeo. Quien no
+            # contestó puede no haberla oído nunca, así que darla por hecha
+            # dejaría el slot muerto sin haberlo intentado de verdad.
+            pendiente = action.slot or estado.slot_actual
+            pregunta = (phrasing.pregunta(pendiente, semilla, recientes)
+                        if pendiente else phrasing.PREGUNTA_ABIERTA)
+            final = f"{phrasing.sondeo(action.intento, semilla, recientes)} {pregunta}"
+    elif critico and action.kind == "escalar":
         # Primer turno crítico: se entrega el guion de seguridad completo.
         # Ruta crítica: no pasa por el modelo ni por el RAG.
         final = decision.safety_script or phrasing.cierre(nombre, escalado=True)
@@ -413,10 +448,24 @@ async def process_turn_async(
     nuevo_estado = script.apply(
         estado, action, acumulado, hash_turno=hash_turno, progreso=progreso,
         intento_real=extraccion.intent not in ("saludo", "meta", "social"),
+        silencio=silencio,
     )
 
     # --- alerta, deduplicada por reglas nuevas -------------------------------
     alert_id = _crear_alerta_si_procede(session, conv, decision, acumulado, text)
+
+    # El paciente dejó de contestar y la llamada se acaba aquí. No es un hallazgo
+    # clínico —no vive en `Symptoms` ni puede ser una regla de `decision/rules.py`,
+    # que solo miran síntomas—, pero sí es exactamente lo que alguien tiene que
+    # saber: hubo una llamada de seguimiento que se quedó sin nadie al otro lado.
+    if silencio and action.kind == "cerrar":
+        # Se mete en la traza del turno para que el resumen y la consola lo
+        # cuenten como lo que fue, y no como una llamada que terminó normal.
+        decision = decision.model_copy(update={
+            "triggered_rules": [*decision.triggered_rules, _REGLA_SIN_RESPUESTA],
+            "risk_level": decision.risk_level if decision.risk_level != "NORMAL" else "ALTO",
+        })
+        alert_id = _crear_alerta_sin_respuesta(session, conv, acumulado) or alert_id
 
     # La llamada termina aquí: o es el segundo turno tras un escalamiento crítico
     # (el primero entregó el guion; este solo confirma y cierra), o el guion se
@@ -582,6 +631,36 @@ def _crear_alerta_si_procede(
         conversation_id=conv.id, patient_id=conv.patient_id,
         risk_level=decision.risk_level, triggered_rules=decision.triggered_rules,
         symptoms=symptoms.model_dump(), transcript=text,
+    )
+    session.add(alerta)
+    session.flush()
+    return alerta.id
+
+
+def _crear_alerta_sin_respuesta(
+    session: Session, conv: Conversation, symptoms: Symptoms
+) -> str | None:
+    """El paciente dejó de contestar: alerta ALTA, pase lo que pase con el cuadro.
+
+    Espejo de `_crear_alerta_si_procede` pero sin pasar por el motor de decisión:
+    aquí no se está valorando un síntoma, se está reportando que una llamada de
+    seguimiento se quedó muda. Puede ocurrir con un cuadro NORMAL —el paciente
+    contestó dos preguntas bien y luego soltó el teléfono— y aun así alguien tiene
+    que volver a intentarlo.
+
+    Se deduplica por su propia regla: una llamada solo puede quedarse sin
+    respuesta una vez, y el guardarraíl protege de un reintento del pipeline.
+    """
+    ya: set[str] = set()
+    for a in session.query(Alert).filter(Alert.conversation_id == conv.id).all():
+        ya.update(a.triggered_rules or [])
+    if _REGLA_SIN_RESPUESTA in ya:
+        return None
+    alerta = Alert(
+        conversation_id=conv.id, patient_id=conv.patient_id,
+        risk_level="ALTO", triggered_rules=[_REGLA_SIN_RESPUESTA],
+        symptoms=symptoms.model_dump(),
+        transcript="El paciente deja de contestar: la llamada se cerró sin respuesta.",
     )
     session.add(alerta)
     session.flush()

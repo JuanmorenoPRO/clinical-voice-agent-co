@@ -5,12 +5,18 @@ Las alertas se consultan por polling desde el frontend (sin WebSocket, ADR §3.6
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..db import get_session
 from ..models import Alert, Conversation, Patient, Summary, Turn
 
 router = APIRouter(prefix="/console", tags=["console"])
+
+
+def _pacientes_por_id(session: Session) -> dict[str, Patient]:
+    """Índice de pacientes para resolver nombres sin un SELECT por fila."""
+    return {p.id: p for p in session.query(Patient).all()}
 
 
 @router.get("/patients")
@@ -21,11 +27,23 @@ def patients(session: Session = Depends(get_session)) -> list[dict]:
 
 @router.get("/alerts")
 def alerts(session: Session = Depends(get_session)) -> list[dict]:
-    rows = session.query(Alert).order_by(Alert.created_at.desc()).all()
+    # Las borradas no se listan pero siguen en la tabla: ver `delete_alert`.
+    rows = (
+        session.query(Alert)
+        .filter(Alert.status != "deleted")
+        .order_by(Alert.created_at.desc())
+        .all()
+    )
+    pacientes = _pacientes_por_id(session)
     return [
         {
             "id": a.id,
             "conversation_id": a.conversation_id,
+            # De quién es la alerta. `patient_id` ya estaba en el modelo pero no
+            # salía por la API, así que la consola listaba alertas sin dueño.
+            "patient_id": a.patient_id,
+            "patient": pacientes[a.patient_id].name if a.patient_id in pacientes else None,
+            "surgery": pacientes[a.patient_id].surgery if a.patient_id in pacientes else None,
             "risk_level": a.risk_level,
             "triggered_rules": a.triggered_rules,
             "symptoms": a.symptoms,
@@ -47,13 +65,47 @@ def attend_alert(alert_id: str, session: Session = Depends(get_session)) -> dict
     return {"id": alert_id, "status": alert.status}
 
 
+@router.delete("/alerts/{alert_id}")
+def delete_alert(alert_id: str, session: Session = Depends(get_session)) -> dict:
+    """Borrado LÓGICO, y solo de lo ya atendido.
+
+    La fila no se elimina: pasa a `status="deleted"` y deja de listarse. En un
+    sistema clínico, qué se alertó y quién lo cerró es justo lo que no puede
+    desaparecer, y además la deduplicación de alertas
+    (`agent/orchestrator.py::_crear_alerta_si_procede` y su espejo en
+    `summary/service.py`) consulta TODAS las alertas de la conversación: una
+    alerta borrada de verdad haría que la misma regla volviera a dispararse.
+
+    El 409 es la contraparte de la UI, donde el botón está deshabilitado hasta
+    atender: borrar sin haber atendido es perder una alerta pendiente de vista.
+    """
+    alert = session.get(Alert, alert_id)
+    if alert is None:
+        raise HTTPException(404, "Alerta no encontrada")
+    if alert.status != "attended":
+        raise HTTPException(409, "Solo se puede borrar una alerta ya atendida")
+    alert.status = "deleted"
+    session.commit()
+    return {"id": alert_id, "status": alert.status}
+
+
 @router.get("/conversations")
 def conversations(session: Session = Depends(get_session)) -> list[dict]:
     rows = session.query(Conversation).order_by(Conversation.started_at.desc()).all()
+    pacientes = _pacientes_por_id(session)
+    conteos = dict(
+        session.query(Turn.conversation_id, func.count(Turn.id))
+        .group_by(Turn.conversation_id)
+        .all()
+    )
     return [
         {
             "id": c.id,
             "patient_id": c.patient_id,
+            # Sin el nombre y la fecha, el desplegable de Trazas es una lista de
+            # UUID truncados: inservible en cuanto hay más de una llamada.
+            "patient": pacientes[c.patient_id].name if c.patient_id in pacientes else None,
+            "n_turns": conteos.get(c.id, 0),
             "status": c.status,
             "started_at": c.started_at.isoformat(),
             "ended_at": c.ended_at.isoformat() if c.ended_at else None,
@@ -76,14 +128,21 @@ def conversation_detail(conversation_id: str, session: Session = Depends(get_ses
     summary = (
         session.query(Summary).filter(Summary.conversation_id == conversation_id).first()
     )
+    patient = session.get(Patient, conv.patient_id) if conv.patient_id else None
     return {
         "id": conv.id,
         "status": conv.status,
+        "patient_id": conv.patient_id,
+        "patient": patient.name if patient else None,
+        "surgery": patient.surgery if patient else None,
+        "started_at": conv.started_at.isoformat(),
+        "ended_at": conv.ended_at.isoformat() if conv.ended_at else None,
         # Traza completa por turno (RF-05): pregunta -> chunks -> confianza ->
         # reglas -> respuesta -> override crítico.
         "turns": [
             {
                 "id": t.id,
+                "created_at": t.created_at.isoformat(),
                 "patient_utterance": t.patient_utterance,
                 "extracted_symptoms": t.extracted_symptoms,
                 "retrieved_chunks": t.retrieved_chunks,
@@ -93,6 +152,7 @@ def conversation_detail(conversation_id: str, session: Session = Depends(get_ses
                 "critical_override": t.critical_override,
                 "final_response": t.final_response,
                 "latency_ms": t.latency_ms,
+                "intent": t.intent,
             }
             for t in turns
         ],

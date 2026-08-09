@@ -265,10 +265,20 @@ def test_un_slot_ausente_no_borra_lo_que_ya_se_sabia():
         ("...", "ininteligible"),
         ("[inaudible]", "ininteligible"),
         ("", "ininteligible"),
+        # No decir nada es distinto de que no se te entienda: a uno se le
+        # responde "¿me lo repite?", al otro "¿sigue ahí?". El marcador es el que
+        # usa la capa 2 del dataset y el que inyecta el reloj del pipeline de voz.
+        ("[silencio]", "silencio"),
+        ("[SILENCIO]", "silencio"),
     ],
 )
 def test_intencion(texto, esperado):
     assert intent.classify(texto) == esperado
+
+
+def test_hablar_de_silencio_no_es_estar_en_silencio():
+    """El marcador es el turno ENTERO. Una frase que lo menciona es una respuesta."""
+    assert intent.classify("Es que aquí hay mucho silencio") == "respuesta"
 
 
 @pytest.mark.parametrize(

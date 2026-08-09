@@ -1,0 +1,15 @@
+{
+  "name": "Paciente deja de contestar",
+  "risk": "red",
+  "category": "edge_cases",
+  "messages": [
+    "Hola, buenas.",
+    "[silencio]",
+    "[silencio]",
+    "[silencio]"
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true
+  }
+}

@@ -68,6 +68,18 @@ SIN_PROGRESO_OFRECER_SALIDA = 3
 # llamada que no se pudo evaluar, y hasta ahora no se alcanzaba nunca.
 SIN_PROGRESO_CERRAR = 5
 
+# Silencios SEGUIDOS antes de colgar. Tres es la escalera mínima que no cuelga a
+# nadie por error: el primero comprueba si sigue en línea (la llamada se pudo
+# cortar, o el paciente se levantó), el segundo avisa de que se va a terminar, y
+# el tercero cumple el aviso. Colgar al segundo no da margen a alguien mayor que
+# tarda en volver al teléfono; esperar a un cuarto alarga una llamada que ya no
+# tiene a nadie al otro lado.
+#
+# Cuenta SEGUIDOS a propósito: cualquier cosa que diga el paciente lo devuelve a
+# cero (ver `apply`). Un silencio suelto en mitad de una llamada normal —de los
+# que abundan en la capa 2 del dataset— no puede acercar la llamada a colgarse.
+MAX_SILENCIOS = 3
+
 
 @dataclass
 class CallState:
@@ -98,6 +110,11 @@ class CallState:
     # veces y el guion siguió recorriendo slots como si nada.
     ultimo_hash: str | None = None
     sin_progreso: int = 0
+    # Silencios SEGUIDOS del paciente. Distinto de `sin_progreso`: ahí el paciente
+    # habla y no aporta nada; aquí no se le oye. Los desenlaces también son
+    # distintos —uno ofrece que lo llame una enfermera, el otro cuelga y alerta—,
+    # así que no pueden compartir contador.
+    sin_respuesta: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -105,7 +122,7 @@ class CallState:
             "repreguntas": self.repreguntas, "resueltos": self.resueltos,
             "sin_responder": self.sin_responder, "turnos": self.turnos,
             "seguido": self.seguido, "ultimo_hash": self.ultimo_hash,
-            "sin_progreso": self.sin_progreso,
+            "sin_progreso": self.sin_progreso, "sin_respuesta": self.sin_respuesta,
         }
 
     @classmethod
@@ -121,6 +138,7 @@ class CallState:
             seguido=list(d.get("seguido") or []),
             ultimo_hash=d.get("ultimo_hash"),
             sin_progreso=int(d.get("sin_progreso") or 0),
+            sin_respuesta=int(d.get("sin_respuesta") or 0),
         )
 
 
@@ -128,7 +146,9 @@ class CallState:
 class Action:
     """Qué toca hacer en este turno. Es dato, no texto: el fraseo va aparte."""
 
-    kind: str          # preguntar | repreguntar | seguimiento | cerrar | escalar
+    # preguntar | repreguntar | seguimiento | ofrecer_salida | sondear |
+    # confirmar | cerrar | escalar
+    kind: str
     slot: str | None = None
     phase: Phase = Phase.TAMIZAJE
     intento: int = 0
@@ -168,7 +188,8 @@ def seguimiento_pendiente(state: CallState, symptoms: Symptoms) -> str | None:
 
 def next_action(state: CallState, symptoms: Symptoms, *,
                 escalar: bool = False, repetido: bool = False,
-                emergencia: bool = False, quiere_colgar: bool = False) -> Action:
+                emergencia: bool = False, quiere_colgar: bool = False,
+                silencio: bool = False) -> Action:
     """Decide el siguiente movimiento. Función pura: se testea sin LLM ni red.
 
     `escalar` lo impone el motor de decisión desde fuera; cuando llega, corta el
@@ -189,6 +210,16 @@ def next_action(state: CallState, symptoms: Symptoms, *,
     """
     if state.phase is Phase.TERMINADA:
         return Action(kind="cerrar", phase=Phase.TERMINADA)
+
+    # Nadie contesta. Va antes que todo lo demás porque ninguna otra rama tiene
+    # sentido sin un interlocutor: repreguntar, escalar o despedirse presuponen
+    # que alguien está oyendo. Se conserva `slot_actual` y la fase para poder
+    # retomar la llamada donde estaba si el paciente vuelve.
+    if silencio:
+        if state.sin_respuesta + 1 >= MAX_SILENCIOS:
+            return Action(kind="cerrar", phase=Phase.TERMINADA)
+        return Action(kind="sondear", slot=state.slot_actual, phase=state.phase,
+                      intento=state.sin_respuesta + 1)
 
     # El paciente da la llamada por terminada, esté donde esté el guion. Va antes
     # que todo lo demás: seguir preguntando a quien acaba de decir "chao" es lo
@@ -271,7 +302,7 @@ def next_action(state: CallState, symptoms: Symptoms, *,
 
 def apply(state: CallState, action: Action, symptoms: Symptoms, *,
           hash_turno: str | None = None, progreso: bool = True,
-          intento_real: bool = True) -> CallState:
+          intento_real: bool = True, silencio: bool = False) -> CallState:
     """Avanza el estado tras ejecutar `action`. Devuelve un estado nuevo.
 
     `hash_turno` y `progreso` los calcula el orquestador, que es quien ve el texto
@@ -291,7 +322,16 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
         seguido=list(state.seguido),
         ultimo_hash=hash_turno if hash_turno is not None else state.ultimo_hash,
         sin_progreso=0 if progreso else state.sin_progreso + 1,
+        # Cualquier cosa que diga el paciente devuelve el contador a cero: la
+        # escalera de silencio mide silencios SEGUIDOS, no acumulados.
+        sin_respuesta=state.sin_respuesta + 1 if silencio else 0,
     )
+
+    if action.kind == "sondear":
+        # Comprobar si el paciente sigue en línea no avanza el guion ni gasta
+        # `MAX_REPREGUNTAS`: nadie esquivó la pregunta, simplemente no llegó a
+        # oírla. El slot sigue abierto y se vuelve a preguntar entero.
+        return nuevo
 
     if action.kind == "seguimiento" and action.slot:
         if action.slot not in nuevo.seguido:

@@ -43,6 +43,8 @@ from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import (
+    BotStoppedSpeakingFrame,
+    CancelFrame,
     EndFrame,
     Frame,
     TranscriptionFrame,
@@ -87,11 +89,61 @@ class ClinicalProcessor(FrameProcessor):
     hasta que empieza a sonar el audio del agente.
     """
 
-    def __init__(self, patient_id: str | None = None) -> None:
+    # Marcador con el que un silencio entra al orquestador como un turno más. Es
+    # el mismo que usa la capa 2 del dataset (`tests/dataset/dialogs.jsonl`), así
+    # que la escalera de "¿sigue ahí?" se prueba en texto sin tocar el audio.
+    SILENCIO = "[silencio]"
+
+    def __init__(self, patient_id: str | None = None,
+                 silence_timeout_s: float | None = None) -> None:
         super().__init__()
         self._conversation_id: str | None = None
         self._patient_id = patient_id
         self._t_fin_habla: float | None = None
+        self._silence_timeout = (
+            silence_timeout_s if silence_timeout_s is not None
+            else get_settings().silence_timeout_s
+        )
+        self._watchdog: asyncio.Task | None = None
+        self._terminado = False
+
+    # --- vigilancia de inactividad -------------------------------------------
+    # El VAD detecta cuándo el paciente DEJA de hablar, pero no tiene nada que
+    # decir sobre alguien que no ha empezado nunca: sin este reloj, un paciente
+    # que suelta el teléfono deja la llamada abierta para siempre y nadie se
+    # entera. Es la única pieza que no puede vivir en `agent/script.py`, porque la
+    # decisión la dispara el paso del tiempo y no un turno del paciente.
+
+    def _armar_vigilancia(self) -> None:
+        """Arranca la cuenta atrás. Se llama cuando el agente termina de hablar."""
+        self._cancelar_vigilancia()
+        if self._terminado:
+            return
+        self._watchdog = asyncio.create_task(self._vigilar())
+
+    def _cancelar_vigilancia(self) -> None:
+        if self._watchdog is not None:
+            self._watchdog.cancel()
+            self._watchdog = None
+
+    async def _vigilar(self) -> None:
+        try:
+            await asyncio.sleep(self._silence_timeout)
+        except asyncio.CancelledError:
+            return
+        logger.info(f"[voz] {self._silence_timeout:.0f} s sin respuesta del paciente")
+        result = await asyncio.to_thread(self._run_turn, self.SILENCIO)
+        logger.info(f"[voz] agente: {result.response}")
+        await self.push_frame(TTSSpeakFrame(result.response))
+        if result.call_ended:
+            # Se agotó la escalera de `agent/script.py::MAX_SILENCIOS`: ya se
+            # avisó de que la llamada iba a terminar y aquí se cumple. `EndFrame`
+            # es de control, así que cuelga después de que suene la despedida.
+            self._terminado = True
+            logger.info("[voz] llamada cerrada: el paciente dejó de contestar")
+            await self.push_frame(EndFrame(reason="sin_respuesta"))
+        # Si no terminó, el reloj se rearma solo cuando acabe este TTS
+        # (`BotStoppedSpeakingFrame`, más abajo).
 
     def _run_turn(self, text: str) -> TurnResponse:
         session = SessionLocal()
@@ -110,8 +162,20 @@ class ClinicalProcessor(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
 
+        if isinstance(frame, BotStoppedSpeakingFrame):
+            # El agente acaba de callarse: a partir de AQUÍ empieza a contar el
+            # silencio. Contar desde antes haría vencer el reloj mientras todavía
+            # suena la pregunta, y el paciente recibiría un "¿sigue ahí?" sin
+            # haber tenido ocasión de contestar. Llega en dirección UPSTREAM
+            # desde `transport.output()`.
+            self._armar_vigilancia()
+        elif isinstance(frame, (EndFrame, CancelFrame)):
+            self._terminado = True
+            self._cancelar_vigilancia()
+
         if isinstance(frame, UserStartedSpeakingFrame):
             self._t_fin_habla = None
+            self._cancelar_vigilancia()   # hay alguien al teléfono
             logger.info("[voz] VAD: el paciente empezó a hablar")
         elif isinstance(frame, UserStoppedSpeakingFrame):
             self._t_fin_habla = time.perf_counter()
@@ -227,12 +291,14 @@ async def run_bot(webrtc_connection, patient_id: str | None = None) -> None:
 
     tts = _build_tts(s)
 
+    clinico = ClinicalProcessor(patient_id=patient_id)
+
     pipeline = Pipeline(
         [
             transport.input(),
             vad,
             stt,
-            ClinicalProcessor(patient_id=patient_id),
+            clinico,
             tts,
             transport.output(),
         ]
@@ -255,6 +321,10 @@ async def run_bot(webrtc_connection, patient_id: str | None = None) -> None:
     @transport.event_handler("on_client_disconnected")
     async def _on_disconnected(_transport, _client):  # pragma: no cover
         logger.info("[voz] cliente desconectado")
+        # Antes que el worker: si el reloj de inactividad vence mientras se cierra
+        # todo, intentaría procesar un turno contra un pipeline que ya no existe.
+        clinico._terminado = True          # noqa: SLF001 — mismo módulo
+        clinico._cancelar_vigilancia()     # noqa: SLF001
         await worker.cancel()
 
     runner = WorkerRunner(handle_sigint=False)

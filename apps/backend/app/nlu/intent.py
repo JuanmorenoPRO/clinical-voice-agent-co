@@ -18,7 +18,7 @@ from typing import Literal
 Intent = Literal[
     "respuesta", "pregunta_clinica", "pregunta_administrativa",
     "fuera_de_mision", "rechazo", "tercero", "ininteligible",
-    "meta", "social", "saludo", "despedida",
+    "meta", "social", "saludo", "despedida", "silencio",
 ]
 
 
@@ -153,6 +153,13 @@ _TERCERO = re.compile(
     re.I,
 )
 
+# El paciente no dice NADA. Es distinto de `ininteligible` —donde algo llegó pero
+# no se entendió— y por eso tiene intención propia: no se responde "¿me lo
+# repite?" a quien no ha hablado, se comprueba si sigue en línea. El marcador
+# `[silencio]` es el que ya usa `tests/dataset/dialogs.jsonl` (capa 2) y el que el
+# pipeline de voz inyecta cuando vence el temporizador de inactividad.
+_SILENCIO = re.compile(r"^\W*\[?\s*silencio\s*\]?\W*$", re.I)
+
 # Silencios y audio degradado, tal como aparecen en la capa 2 del dataset.
 _ININTELIGIBLE = re.compile(r"^\W*$|\[inaudible\]|^\.{2,}$|^(eh+|mm+|este\.{2,})\W*$", re.I)
 
@@ -219,6 +226,11 @@ def classify(text: str) -> Intent:
     clasificarse como ataque, no como pregunta clínica.
     """
     raw = text.strip()
+    # Va antes que `_ININTELIGIBLE`: "[silencio]" no casa con él (solo cubre
+    # vacíos y "[inaudible]"), así que hasta ahora se colaba como `respuesta` y
+    # llegaba al LLM, que no tenía nada que extraer de la palabra "silencio".
+    if _SILENCIO.match(raw):
+        return "silencio"
     if not raw or _ININTELIGIBLE.match(raw) or _es_ruido_transcripcion(raw):
         return "ininteligible"
 
