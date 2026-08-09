@@ -125,13 +125,45 @@ class Settings(BaseSettings):
     vad_confidence: float = 0.7
     vad_min_volume: float = 0.3
 
-    # Inactividad tras la que se da por hecho que el paciente no está
-    # contestando. Se cuenta desde que el agente TERMINA de hablar, no desde que
-    # empieza, y solo corre cuando no habla ninguno de los dos (ver
-    # `voice/pipeline.py`). Ocho segundos y no cinco: cinco vencía mientras un
-    # paciente mayor todavía estaba pensando la respuesta a una pregunta larga.
-    # Con la escalera de `agent/script.py::MAX_SILENCIOS` son 24 s antes de colgar.
-    silence_timeout_s: float = 8.0
+    # --- Escalera de silencios (voice/silence.py) ---
+    # Cada tramo se cuenta desde que el agente TERMINA de hablar, y el reloj solo
+    # corre cuando no habla ninguno de los dos (ver `voice/pipeline.py`).
+    #
+    # La escalera completa con los defaults: 6 s de espera muda → frase suave
+    # ("tómese su tiempo", local, sin tocar el guion) → 6 s más → "¿sigue ahí?"
+    # con la pregunta repetida → 8 s entre sondeos → cierre al agotar
+    # `silence_max_attempts`. Un silencio nunca se anota como respuesta: el slot
+    # queda en None (UNKNOWN), jamás en False.
+    #
+    # Espera inicial + suave y no un timeout único: ocho segundos de vacío y
+    # repetir la pregunta vencía mientras un paciente mayor todavía estaba
+    # pensando; la frase suave le da permiso de pensar sin exigirle nada y sin
+    # acercar la llamada al cuelgue.
+    silence_initial_s: float = 6.0
+    # Tras la frase suave, cuánto se espera antes del primer "[silencio]" (el
+    # sondeo "¿sigue ahí?"). 0 desactiva la frase suave: el primer vencimiento
+    # va directo al sondeo, que es el comportamiento anterior.
+    silence_gentle_s: float = 6.0
+    # Entre sondeos/avisos sucesivos (el rol del antiguo `silence_timeout_s`).
+    silence_repeat_s: float = 8.0
+    # Sondeos sin respuesta antes de colgar (sondeo → aviso → cierre). Es el
+    # `MAX_SILENCIOS` de `agent/script.py`, ahora configurable.
+    silence_max_attempts: int = 3
+
+    # --- Barge-in: el paciente interrumpe al agente y el TTS se calla ---
+    # Modo por defecto: confirmado por transcripción. El agente se interrumpe
+    # cuando llega una transcripción del paciente que pasa el filtro anti-eco
+    # (`voice/pipeline.py::es_eco`). No es instantáneo (~1 s tras el fin del
+    # habla) pero es inmune al eco del propio TTS captado por el micrófono.
+    barge_in_enabled: bool = True
+    # Modo instantáneo: la interrupción la dispara el VAD (~0.2 s de voz). Solo
+    # con cancelación de eco fiable (AEC del navegador): sin ella, el agente oye
+    # su propio eco y se corta a sí mismo a media frase. Opt-in a propósito.
+    barge_in_vad: bool = False
+    # Mientras el agente habla, el filtro de eco se endurece: fragmentos de eco
+    # de 2-3 palabras que con el umbral normal (4) pasarían de largo cortarían
+    # al agente. "sí sí tuve fiebre" sigue pasando (bajo solapamiento).
+    barge_in_min_palabras_eco: int = 2
 
     # --- RAG: umbral de "no tengo evidencia suficiente" (ADR-005) ---
     rag_top_k: int = 4

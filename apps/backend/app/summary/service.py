@@ -136,9 +136,14 @@ def build_summary(session: Session, conversation_id: str) -> dict:
         # aware asumiendo UTC, que es lo único que este código escribe.
         duration_s = int((_as_utc(conv.ended_at) - _as_utc(conv.started_at)).total_seconds())
 
-    # Slots que el paciente nunca contestó, tal como los dejó el guion. Vive en
-    # el `agent_state` del último turno (ver agent/script.py::CallState).
+    # Slots que el paciente nunca contestó: los que el guion dio por perdidos
+    # (`CallState.sin_responder`, en el `agent_state` del último turno) MÁS los
+    # marcados UNKNOWN en la traza (`Symptoms.unanswered`, que cubre el cierre
+    # por silencio o por desconexión con el guion a medias — antes invisibles).
+    # `acumulado.unanswered` ya viene filtrado por la fusión: un slot contestado
+    # tarde deja de ser UNKNOWN.
     sin_responder = CallState.from_dict(turns[-1].agent_state).sin_responder if turns else []
+    sin_responder = sorted(set(sin_responder) | set(acumulado.unanswered))
 
     data = {
         "conversation_id": conversation_id,

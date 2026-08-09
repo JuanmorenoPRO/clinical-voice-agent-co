@@ -220,7 +220,8 @@ def seguimiento_pendiente(state: CallState, symptoms: Symptoms) -> str | None:
 def next_action(state: CallState, symptoms: Symptoms, *,
                 escalar: bool = False, repetido: bool = False,
                 emergencia: bool = False, quiere_colgar: bool = False,
-                silencio: bool = False) -> Action:
+                silencio: bool = False,
+                max_silencios: int = MAX_SILENCIOS) -> Action:
     """Decide el siguiente movimiento. Función pura: se testea sin LLM ni red.
 
     `escalar` lo impone el motor de decisión desde fuera; cuando llega, corta el
@@ -247,7 +248,9 @@ def next_action(state: CallState, symptoms: Symptoms, *,
     # que alguien está oyendo. Se conserva `slot_actual` y la fase para poder
     # retomar la llamada donde estaba si el paciente vuelve.
     if silencio:
-        if state.sin_respuesta + 1 >= MAX_SILENCIOS:
+        # `max_silencios` lo pasa el orquestador desde SILENCE_MAX_ATTEMPTS;
+        # el default conserva la escalera de tres de siempre.
+        if state.sin_respuesta + 1 >= max_silencios:
             return Action(kind="cerrar", phase=Phase.TERMINADA)
         return Action(kind="sondear", slot=state.slot_actual, phase=state.phase,
                       intento=state.sin_respuesta + 1)

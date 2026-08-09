@@ -118,6 +118,25 @@ def ofrecer_salida(semilla: str, usadas: list[str] | None = None) -> str:
     return _rotar(OFRECER_SALIDA, semilla, usadas or [])
 
 
+# Primer escalón del silencio: el paciente calla pero aún es pronto para
+# preguntarle si sigue ahí. NO repite la pregunta, NO pregunta nada (sin "?"),
+# NO exige: da permiso para pensar. Por eso vive en la capa de voz
+# (`voice/silence.py`) y no pasa por el guion — no es una comprobación de
+# presencia y no acerca la llamada al cuelgue. Frases cortas a propósito: por
+# debajo del umbral del filtro de eco, su rebote por el micrófono no puede
+# descartar por error una respuesta real del paciente.
+SILENCIO_SUAVE: tuple[str, ...] = (
+    "Puede tomarse un momento, no hay afán.",
+    "No hay problema, tómese su tiempo.",
+    "Cuando esté listo, me cuenta.",
+    "Tranquilo, aquí lo espero.",
+)
+
+
+def silencio_suave(semilla: str, usadas: list[str] | None = None) -> str:
+    return _rotar(SILENCIO_SUAVE, semilla, usadas or [])
+
+
 # El paciente no dice nada. No es lo mismo que no entenderle —ahí vale "¿me lo
 # repite?"—: aquí lo primero que hay que averiguar es si sigue al teléfono, y por
 # eso se pregunta por él antes de volver al guion.
@@ -555,6 +574,7 @@ def textos_cacheables() -> list[str]:
     fijos.extend(TRANSICION_ABSTENCION)
     fijos.extend(SLOT_PERDIDO)
     fijos.extend(OFRECER_SALIDA)
+    fijos.extend(SILENCIO_SUAVE)
     fijos.extend(SONDEO_PRESENCIA)
     fijos.extend(AVISO_ULTIMO_INTENTO)
     fijos.extend(VOLVIENDO)

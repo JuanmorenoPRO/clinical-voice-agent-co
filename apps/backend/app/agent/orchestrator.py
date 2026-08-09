@@ -70,6 +70,13 @@ _REGLA_SIN_RESPUESTA = "paciente_no_responde"
 # para que alguien vaya a mirar la ficha.
 _REGLA_PROCEDIMIENTO = "procedimiento_no_coincide"
 
+# El CANAL se cayó con la llamada abierta (WebRTC cerrado, red muerta).
+# Deliberadamente DISTINTA de `paciente_no_responde`: aquella significa "estaba
+# en línea y enmudeció" (enfermería valora al paciente); esta significa "la
+# llamada se cortó" (primero se re-marca). Fusionarlas haría que la consola
+# tratara un fallo de red como un paciente que no contesta.
+_REGLA_CONEXION_PERDIDA = "conexion_perdida"
+
 
 def _get_or_create_conversation(
     session: Session, conversation_id: str | None, patient_id: str | None
@@ -330,7 +337,8 @@ async def process_turn_async(
 
     action = script.next_action(estado, acumulado, escalar=critico, repetido=repetido,
                                 emergencia=emergencia, quiere_colgar=quiere_colgar,
-                                silencio=silencio)
+                                silencio=silencio,
+                                max_silencios=get_settings().silence_max_attempts)
     recientes = _aperturas_recientes(prior)
     evidence: RagResult | None = None
 
@@ -524,6 +532,29 @@ async def process_turn_async(
         guion_entregado=critico and action.kind == "escalar",
     )
 
+    # UNKNOWN explícito: el slot que quedó sin respuesta se anota en el turno en
+    # que se abandonó, no solo en el `CallState`. `value=None` ya significa "no
+    # se sabe" (diseño ternario de `Symptoms`); esto le pone el `status` encima
+    # para que el resumen y la consola lo vean como lo que es — un dato que NO
+    # se obtuvo — y no como un campo que simplemente falta. El motivo se lee de
+    # la traza (`paciente_no_responde` / `conexion_perdida` en las reglas ⇒ sin
+    # respuesta; su ausencia ⇒ repreguntas agotadas). Un silencio jamás escribe
+    # False: solo puede añadir a esta lista.
+    del_turno.unanswered = [
+        s for s in nuevo_estado.sin_responder if s not in estado.sin_responder
+    ]
+    if silencio and action.kind == "cerrar":
+        # La llamada se corta con el guion a medias: todo lo que quedaba por
+        # resolver queda marcado UNKNOWN, incluido el slot que se estaba
+        # preguntando cuando el paciente enmudeció.
+        del_turno.unanswered = sorted(
+            set(del_turno.unanswered) | set(script.slots_pendientes(estado, acumulado))
+        )
+    if del_turno.unanswered:
+        # El acumulado que va en la respuesta (y en las alertas de abajo) lo
+        # refleja ya; la fusión filtra sola los que consigan valor más adelante.
+        acumulado = merge_symptoms(acumulado, Symptoms(unanswered=del_turno.unanswered))
+
     # --- alerta, deduplicada por reglas nuevas -------------------------------
     alert_id = _crear_alerta_si_procede(session, conv, decision, acumulado, text)
 
@@ -605,6 +636,8 @@ async def process_turn_async(
         critical_override=critico,
         alert_id=alert_id,
         call_ended=call_ended,
+        phase=str(nuevo_estado.phase),
+        slot_actual=nuevo_estado.slot_actual,
     )
 
 
@@ -863,6 +896,56 @@ def _crear_alerta_sin_respuesta(
         risk_level="ALTO", triggered_rules=[_REGLA_SIN_RESPUESTA],
         symptoms=symptoms.model_dump(),
         transcript="El paciente deja de contestar: la llamada se cerró sin respuesta.",
+    )
+    session.add(alerta)
+    session.flush()
+    return alerta.id
+
+
+def abandon_conversation(session: Session, conversation_id: str) -> None:
+    """El stream de voz se cayó con la llamada abierta (CONNECTION_LOST).
+
+    Sin esto, colgar de golpe dejaba la conversación `active` para siempre: sin
+    resumen, sin alerta, invisible en el reporte. Idempotente a propósito: el
+    transporte también se desconecta después de un cierre normal (el agente
+    cuelga con `EndFrame`), y en ese caso `close_conversation` ya corrió y aquí
+    no hay nada que reportar.
+
+    Cierra vía `close_conversation`, que aplica `evaluate(final=True)`: una
+    llamada cortada a mitad de tamizaje sale como `no_se_pudo_evaluar` (con su
+    alerta), no como verde.
+    """
+    conv = session.get(Conversation, conversation_id)
+    if conv is None or conv.status == "closed":
+        return
+    _crear_alerta_conexion_perdida(session, conv)
+    from ..summary.service import close_conversation
+
+    close_conversation(session, conversation_id)
+
+
+def _crear_alerta_conexion_perdida(
+    session: Session, conv: Conversation
+) -> str | None:
+    """La llamada se cortó a medias: alerta ALTA con remediación propia.
+
+    Espejo de `_crear_alerta_sin_respuesta` — mismo patrón, regla distinta y
+    texto distinto, porque la acción de enfermería es distinta: aquí primero se
+    re-marca; allá se valora a un paciente que estaba en línea y enmudeció.
+    """
+    ya: set[str] = set()
+    for a in session.query(Alert).filter(Alert.conversation_id == conv.id).all():
+        ya.update(a.triggered_rules or [])
+    if _REGLA_CONEXION_PERDIDA in ya:
+        return None
+    prior = _prior_turns(session, conv.id)
+    acumulado, _ = _acumular(prior)
+    alerta = Alert(
+        conversation_id=conv.id, patient_id=conv.patient_id,
+        risk_level="ALTO", triggered_rules=[_REGLA_CONEXION_PERDIDA],
+        symptoms=acumulado.model_dump(),
+        transcript=("La conexión de la llamada se perdió y la conversación quedó "
+                    "incompleta. Reintentar el contacto con el paciente."),
     )
     session.add(alerta)
     session.flush()

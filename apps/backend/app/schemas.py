@@ -139,3 +139,9 @@ class TurnResponse(BaseModel):
     # lo usa para colgar de verdad después de decir el cierre; el modo texto lo
     # usa para dejar de aceptar turnos nuevos en esta conversación.
     call_ended: bool = False
+    # Dónde quedó el guion tras este turno. Aditivos: el frontend los ignora sin
+    # romperse. Los usa el pipeline de voz para que los eventos de silencio e
+    # interrupción digan en qué punto de la llamada ocurrieron
+    # (`current_script_state` en voice/silence.py).
+    phase: str | None = None
+    slot_actual: str | None = None
