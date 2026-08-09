@@ -4,7 +4,9 @@ Las alertas se consultan por polling desde el frontend (sin WebSocket, ADR §3.6
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -12,6 +14,12 @@ from ..db import get_session
 from ..models import Alert, Conversation, Patient, Summary, Turn
 
 router = APIRouter(prefix="/console", tags=["console"])
+
+# Valores admitidos en los filtros de la consola. Se declaran como `Literal` para
+# que FastAPI los valide y los documente solo: son el mismo vocabulario cerrado
+# que `Alert.status` y `Alert.risk_level` en models.py.
+ESTADO_ALERTA = Literal["pending", "attended", "deleted"]
+NIVEL_ALERTA = Literal["ALTO", "CRÍTICO"]
 
 
 def _pacientes_por_id(session: Session) -> dict[str, Patient]:
@@ -26,16 +34,48 @@ def patients(session: Session = Depends(get_session)) -> list[dict]:
 
 
 @router.get("/alerts")
-def alerts(session: Session = Depends(get_session)) -> list[dict]:
-    # Las borradas no se listan pero siguen en la tabla: ver `delete_alert`.
+def alerts(
+    status: ESTADO_ALERTA | None = Query(
+        None, description="pending|attended|deleted. Sin valor: todo menos las borradas."
+    ),
+    risk_level: NIVEL_ALERTA | None = Query(None, description="ALTO|CRÍTICO"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    session: Session = Depends(get_session),
+) -> dict:
+    """Alertas más recientes primero, filtrables y paginadas.
+
+    `status` y `risk_level` son `Literal`, así que un valor fuera del conjunto lo
+    rechaza FastAPI con 422. Es deliberado: un filtro con una errata que se ignora
+    en silencio devuelve una lista que parece filtrada y no lo está, y en una
+    consola de alertas eso es peor que un error.
+    """
+    q = session.query(Alert)
+    if status is not None:
+        q = q.filter(Alert.status == status)
+    else:
+        # Sin filtro explícito, las borradas no se listan pero siguen en la tabla
+        # (ver `delete_alert`). Pedir `status=deleted` es lo único que las muestra.
+        q = q.filter(Alert.status != "deleted")
+    if risk_level is not None:
+        q = q.filter(Alert.risk_level == risk_level)
+
+    total = q.with_entities(func.count(Alert.id)).scalar() or 0
+
+    # El desempate por `id` no significa nada —es un UUID—: existe para que el
+    # orden sea DETERMINISTA. Varias alertas de la misma llamada se crean dentro
+    # del mismo segundo (`paciente_no_responde` y `no_se_pudo_evaluar` lo hacen),
+    # y con `created_at` como única clave el motor puede devolverlas en distinto
+    # orden entre dos consultas: al paginar, una fila saldría dos veces y otra
+    # ninguna.
     rows = (
-        session.query(Alert)
-        .filter(Alert.status != "deleted")
-        .order_by(Alert.created_at.desc())
+        q.order_by(Alert.created_at.desc(), Alert.id.desc())
+        .limit(limit)
+        .offset(offset)
         .all()
     )
     pacientes = _pacientes_por_id(session)
-    return [
+    items = [
         {
             "id": a.id,
             "conversation_id": a.conversation_id,
@@ -53,6 +93,9 @@ def alerts(session: Session = Depends(get_session)) -> list[dict]:
         }
         for a in rows
     ]
+    # `total` es el conteo YA filtrado, no el global: es lo que sostiene el
+    # "mostrando 50 de 213" de la consola y lo que decide si queda algo por traer.
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.post("/alerts/{alert_id}/attend")

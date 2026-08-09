@@ -137,9 +137,28 @@
   <!-- ─── Alertas ─────────────────────────────────────────────────────── -->
   <section id="alertas">
     <div class="card">
+      <div class="fila" style="margin-bottom:12px">
+        <label class="dim" for="aEstado">Estado</label>
+        <select id="aEstado">
+          <option value="">Todas (sin borradas)</option>
+          <option value="pending">Pendientes</option>
+          <option value="attended">Atendidas</option>
+          <option value="deleted">Borradas</option>
+        </select>
+        <label class="dim" for="aNivel">Nivel</label>
+        <select id="aNivel">
+          <option value="">Todos</option>
+          <option value="CRÍTICO">CRÍTICO</option>
+          <option value="ALTO">ALTO</option>
+        </select>
+        <span id="aConteo" class="dim" style="margin-left:auto"></span>
+      </div>
       <table><thead><tr><th>Fecha y hora</th><th>Paciente</th><th>Nivel</th>
         <th>Reglas</th><th>Lo que dijo</th><th>Estado</th><th></th></tr></thead>
         <tbody id="aTabla"></tbody></table>
+      <div class="fila" style="margin-top:12px; justify-content:center">
+        <button class="b g" id="aMas" style="display:none">Cargar 50 más</button>
+      </div>
     </div>
   </section>
 
@@ -348,8 +367,23 @@ function renderLlamada(d) {
 // panel se cerraría solo en la cara del revisor.
 let alertaAbierta = null;      // { id, conversationId, data }
 
+// Cuántas alertas se están pidiendo. Crece de 50 en 50 con "Cargar más" y el
+// polling pide SIEMPRE este valor, no 50: si pidiera la primera página fija, cada
+// refresco de 5 s encogería la tabla que el revisor acaba de expandir.
+const PAGINA = 50;
+let tope = PAGINA;
+
 async function cargarAlertas() {
-  const as = await api("/console/alerts");
+  const params = new URLSearchParams({ limit: tope, offset: 0 });
+  if ($("#aEstado").value) params.set("status", $("#aEstado").value);
+  if ($("#aNivel").value) params.set("risk_level", $("#aNivel").value);
+  const page = await api("/console/alerts?" + params);
+  const as = page.items;
+
+  $("#aConteo").textContent = page.total
+    ? `mostrando ${as.length} de ${page.total}` : "";
+  $("#aMas").style.display = page.total > as.length ? "" : "none";
+
   // Una llamada aún abierta gana turnos mientras el panel está desplegado: se
   // vuelve a pedir en cada repintado. Una ya cerrada no cambia nunca más, así
   // que se sirve de lo ya descargado.
@@ -377,16 +411,30 @@ async function cargarAlertas() {
           ${abierta ? "Ocultar" : "Ver llamada"}</button>
         ${a.status === "pending"
           ? `<button class="b g" onclick="atender('${esc(a.id)}')">Atender</button>` : ""}
+        ${a.status === "deleted" ? "" : `
         <button class="b g" onclick="borrarAlerta('${esc(a.id)}')"
           ${a.status === "attended" ? "" : "disabled"}
           title="${a.status === "attended"
             ? "Quitar la alerta de la lista"
-            : "Primero hay que marcarla como atendida"}">Borrar</button>
+            : "Primero hay que marcarla como atendida"}">Borrar</button>`}
       </td>
     </tr>${detalle}`;
   }).join("")
-    : `<tr><td colspan="7" class="vacio">Sin alertas</td></tr>`;
+    // Con un filtro puesto, "Sin alertas" a secas se lee como que no hay ninguna
+    // en el sistema. Se distingue de la lista realmente vacía.
+    : `<tr><td colspan="7" class="vacio">${
+        $("#aEstado").value || $("#aNivel").value
+          ? "Ninguna alerta con estos filtros" : "Sin alertas"}</td></tr>`;
 }
+
+// Cambiar de filtro devuelve el listado a la primera página: seguir mostrando
+// 200 filas porque antes se pulsó "Cargar más" con otro filtro no es lo que
+// espera nadie.
+["#aEstado", "#aNivel"].forEach(sel => $(sel).onchange = () => {
+  tope = PAGINA;
+  cargarAlertas();
+});
+$("#aMas").onclick = () => { tope += PAGINA; cargarAlertas(); };
 
 async function verLlamada(alertId, conversationId) {
   if (alertaAbierta && alertaAbierta.id === alertId) {
