@@ -43,6 +43,7 @@ from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import (
+    BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
     CancelFrame,
     EndFrame,
@@ -64,6 +65,7 @@ from pipecat.workers.runner import WorkerRunner
 
 from ..agent.orchestrator import process_turn
 from ..agent.phrasing import APERTURA
+from ..nlu import lexicon
 from ..schemas import TurnResponse
 from ..config import get_settings
 from ..db import SessionLocal
@@ -75,6 +77,40 @@ _PROMPT_STT = (
     "Términos frecuentes: dolor, fiebre, herida quirúrgica, secreción, purulenta, "
     "eritema, movilidad, apetito, sueño, cicatriz, puntos, analgésico."
 )
+
+
+# Solapamiento de palabras a partir del cual una transcripción se considera eco de
+# lo que acaba de decir el agente. Alto a propósito: descartar por error un turno
+# real del paciente es peor que dejar pasar un eco, que como mucho produce una
+# respuesta rara. 0.6 deja fuera las coincidencias de cortesía ("gracias", "sí")
+# y atrapa las repeticiones literales, que es como suena un eco de verdad.
+_UMBRAL_ECO = 0.6
+# Por debajo de esto no se juzga: "sí", "no", "un cuatro" son respuestas legítimas
+# del paciente que pueden solaparse por casualidad con el vocabulario del agente.
+_MIN_PALABRAS_ECO = 4
+
+
+def es_eco(transcripcion: str, ultima_respuesta: str) -> bool:
+    """¿Esto que 'dijo el paciente' es en realidad la voz del agente rebotada?
+
+    Ocurre cuando el paciente está en altavoz o el navegador no cancela el eco: el
+    STT transcribe al propio agente, el orquestador lo toma por un turno y contesta,
+    y la llamada se convierte en el agente hablando solo sin dejar meter baza.
+
+    Se compara por solapamiento de vocabulario y no por igualdad: el STT nunca
+    devuelve la frase literal —se come palabras, parte por la mitad— así que
+    comparar cadenas no detectaría nada. Se normaliza con `lexicon.normalize`, que
+    es la función que este repo ya usa para comparar habla.
+    """
+    if not ultima_respuesta:
+        return False
+    dichas = set(lexicon.normalize(transcripcion).split())
+    if len(dichas) < _MIN_PALABRAS_ECO:
+        return False
+    agente = set(lexicon.normalize(ultima_respuesta).split())
+    if not agente:
+        return False
+    return len(dichas & agente) / len(dichas) >= _UMBRAL_ECO
 
 
 class ClinicalProcessor(FrameProcessor):
@@ -106,6 +142,24 @@ class ClinicalProcessor(FrameProcessor):
         )
         self._watchdog: asyncio.Task | None = None
         self._terminado = False
+        # Estado explícito de quién tiene la palabra. Estaba implícito en si
+        # existía o no la tarea del reloj, y esa ambigüedad ES el bug que este
+        # módulo tuvo: `BotStoppedSpeakingFrame` significa dos cosas —"terminé de
+        # hablar" y "me interrumpieron"— y sin estos flags no se pueden separar.
+        self._agente_hablando = False
+        self._paciente_hablando = False
+        # Hay un turno en vuelo contra el orquestador. Con `LLM_PROVIDER=groq` eso
+        # es una llamada de red, y el reloj no puede vencer mientras se está
+        # generando la respuesta que el paciente todavía no ha oído.
+        self._procesando = False
+        # Cuántas veces el VAD ha detectado voz del paciente en toda la llamada.
+        # Sirve para una sola cosa, pero importante: distinguir "el paciente no
+        # contesta" de "no le estamos oyendo", que desde los logs se ven idénticos
+        # y llevan a arreglar cosas distintas.
+        self._veces_que_oimos_al_paciente = 0
+        # Lo último que dijo el agente, para descartar su propio eco.
+        self._ultima_respuesta = ""
+        self._deadline = 0.0
 
     # --- vigilancia de inactividad -------------------------------------------
     # El VAD detecta cuándo el paciente DEJA de hablar, pero no tiene nada que
@@ -113,12 +167,26 @@ class ClinicalProcessor(FrameProcessor):
     # que suelta el teléfono deja la llamada abierta para siempre y nadie se
     # entera. Es la única pieza que no puede vivir en `agent/script.py`, porque la
     # decisión la dispara el paso del tiempo y no un turno del paciente.
+    #
+    # La regla es UNA y conviene leerla entera: **el reloj corre solo cuando no
+    # habla ninguno de los dos y no hay un turno en vuelo**. La versión anterior
+    # lo armaba con cualquier `BotStoppedSpeakingFrame`, y Pipecat emite ese frame
+    # también al interrumpir al agente (`transports/base_output.py`,
+    # `handle_interruptions`). Resultado medido: el paciente empezaba a hablar
+    # —lo que cancelaba el reloj—, su propia interrupción lo rearmaba acto
+    # seguido, y a los pocos segundos el agente le soltaba "¿Sigue ahí? No le
+    # escuché nada." por encima de su respuesta.
+
+    def _puede_vigilar(self) -> bool:
+        return not (self._terminado or self._agente_hablando
+                    or self._paciente_hablando or self._procesando)
 
     def _armar_vigilancia(self) -> None:
-        """Arranca la cuenta atrás. Se llama cuando el agente termina de hablar."""
+        """(Re)arranca la cuenta atrás si no hay nadie hablando."""
         self._cancelar_vigilancia()
-        if self._terminado:
+        if not self._puede_vigilar():
             return
+        self._deadline = time.monotonic() + self._silence_timeout
         self._watchdog = asyncio.create_task(self._vigilar())
 
     def _cancelar_vigilancia(self) -> None:
@@ -127,13 +195,39 @@ class ClinicalProcessor(FrameProcessor):
             self._watchdog = None
 
     async def _vigilar(self) -> None:
+        # Deadline monótono y re-comprobado al despertar, en vez de un `sleep`
+        # de una sola vez. Es lo que hace estructuralmente imposible el síntoma
+        # reportado —la escalera de silencio entera de corrido, como si el tiempo
+        # ya hubiera pasado—: aunque una tormenta de frames rearme el reloj varias
+        # veces, ninguna despierta antes de tiempo y solo puede salir UN turno de
+        # silencio por vencimiento.
         try:
-            await asyncio.sleep(self._silence_timeout)
+            while (restante := self._deadline - time.monotonic()) > 0:
+                await asyncio.sleep(restante)
         except asyncio.CancelledError:
             return
+        if not self._puede_vigilar():
+            # Algo cambió mientras dormía (el paciente arrancó a hablar, entró un
+            # turno). No es un silencio.
+            return
         logger.info(f"[voz] {self._silence_timeout:.0f} s sin respuesta del paciente")
-        result = await asyncio.to_thread(self._run_turn, self.SILENCIO)
+        if self._veces_que_oimos_al_paciente == 0:
+            # La traza que faltaba. Un paciente callado y un micrófono que no
+            # llega al umbral del VAD producen exactamente la misma escalera de
+            # "¿sigue ahí?" y el mismo cuelgue, y se arreglan en sitios opuestos.
+            logger.error(
+                "[voz] el reloj venció y NUNCA se ha detectado voz del paciente en "
+                "esta llamada. Esto no es un paciente callado: es que su audio no "
+                "está llegando al VAD. Revise el micrófono del navegador y baje "
+                "VAD_MIN_VOLUME en .env (pruebe 0.15)."
+            )
+        self._procesando = True
+        try:
+            result = await asyncio.to_thread(self._run_turn, self.SILENCIO)
+        finally:
+            self._procesando = False
         logger.info(f"[voz] agente: {result.response}")
+        self._ultima_respuesta = result.response
         await self.push_frame(TTSSpeakFrame(result.response))
         if result.call_ended:
             # Se agotó la escalera de `agent/script.py::MAX_SILENCIOS`: ya se
@@ -162,23 +256,39 @@ class ClinicalProcessor(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
 
-        if isinstance(frame, BotStoppedSpeakingFrame):
-            # El agente acaba de callarse: a partir de AQUÍ empieza a contar el
-            # silencio. Contar desde antes haría vencer el reloj mientras todavía
-            # suena la pregunta, y el paciente recibiría un "¿sigue ahí?" sin
-            # haber tenido ocasión de contestar. Llega en dirección UPSTREAM
-            # desde `transport.output()`.
-            self._armar_vigilancia()
+        if isinstance(frame, BotStartedSpeakingFrame):
+            # Mientras suena la pregunta el reloj no corre. Contar desde antes lo
+            # haría vencer con el paciente todavía escuchando.
+            self._agente_hablando = True
+            self._cancelar_vigilancia()
+        elif isinstance(frame, BotStoppedSpeakingFrame):
+            # OJO: este frame llega por DOS motivos distintos y solo uno de ellos
+            # inicia un silencio. El otro es que el paciente acaba de interrumpir
+            # al agente (`handle_interruptions` en el transporte de Pipecat lo
+            # emite), y ahí el reloj no puede arrancar: el paciente está hablando
+            # justo ahora. Ese era el bug. Llega UPSTREAM desde `transport.output()`.
+            self._agente_hablando = False
+            self._armar_vigilancia()      # `_puede_vigilar` filtra el caso malo
         elif isinstance(frame, (EndFrame, CancelFrame)):
             self._terminado = True
             self._cancelar_vigilancia()
 
         if isinstance(frame, UserStartedSpeakingFrame):
             self._t_fin_habla = None
+            self._paciente_hablando = True
+            self._veces_que_oimos_al_paciente += 1
             self._cancelar_vigilancia()   # hay alguien al teléfono
             logger.info("[voz] VAD: el paciente empezó a hablar")
         elif isinstance(frame, UserStoppedSpeakingFrame):
             self._t_fin_habla = time.perf_counter()
+            self._paciente_hablando = False
+            # Y se rearma. Sin esto quedaba un agujero simétrico al del bug: si el
+            # STT no devuelve nada inteligible (ruido, un carraspeo), no hay turno
+            # ni respuesta del agente, así que no llega ningún
+            # `BotStoppedSpeakingFrame` y el reloj se quedaba cancelado para
+            # siempre — la llamada se quedaba muerta y abierta sin que nadie lo
+            # supiera, que es justo lo que este reloj existe para evitar.
+            self._armar_vigilancia()
             logger.info("[voz] VAD: el paciente dejó de hablar")
         elif isinstance(frame, TranscriptionFrame) and not frame.text.strip():
             # Groq transcribió pero no oyó nada inteligible (silencio, ruido).
@@ -187,14 +297,29 @@ class ClinicalProcessor(FrameProcessor):
 
         if isinstance(frame, TranscriptionFrame) and frame.text and frame.text.strip():
             text = frame.text.strip()
+            if es_eco(text, self._ultima_respuesta):
+                # El micrófono está recogiendo la voz del propio agente. Sin esta
+                # guarda el sistema se responde a sí mismo: transcribe su última
+                # frase, la mete como turno del paciente y contesta, en bucle y sin
+                # dejar hablar a nadie. Se descarta y se deja rastro, porque desde
+                # fuera un eco se ve igual que un paciente que repite lo que oye.
+                logger.warning(f"[voz] descartado, es el eco del propio agente: {text!r}")
+                self._armar_vigilancia()
+                return
             logger.info(f"[voz] paciente: {text}")
             # El orquestador toca la base de datos: se corre en un hilo para no
             # bloquear el event loop del pipeline de audio.
-            result = await asyncio.to_thread(self._run_turn, text)
+            self._cancelar_vigilancia()
+            self._procesando = True
+            try:
+                result = await asyncio.to_thread(self._run_turn, text)
+            finally:
+                self._procesando = False
             if self._t_fin_habla is not None:
                 ms = (time.perf_counter() - self._t_fin_habla) * 1000
                 logger.info(f"[voz] latencia fin-de-habla → respuesta: {ms:.0f} ms")
             logger.info(f"[voz] agente: {result.response}")
+            self._ultima_respuesta = result.response
             await self.push_frame(TTSSpeakFrame(result.response))
             if result.call_ended:
                 # Segundo turno tras un escalamiento crítico: el guion ya se dio,
@@ -276,10 +401,20 @@ async def run_bot(webrtc_connection, patient_id: str | None = None) -> None:
                 # responder medio segundo más tarde.
                 stop_secs=s.vad_stop_secs,
                 start_secs=0.2,
-                confidence=0.7,
-                min_volume=0.6,
+                # Configurables desde `.env`: Silero exige confianza Y volumen a la
+                # vez, así que si el micrófono no llega al umbral de volumen no hay
+                # VAD, y sin VAD `GroqSTTService` no transcribe nada — la llamada
+                # entera se interpreta como silencio. Ver `config.py`.
+                confidence=s.vad_confidence,
+                min_volume=s.vad_min_volume,
             )
         )
+    )
+    # Se registran los valores efectivos: cuando una llamada no oye al paciente,
+    # esto es lo primero que hay que poder mirar sin adivinar qué había en `.env`.
+    logger.info(
+        f"[voz] VAD confidence={s.vad_confidence} min_volume={s.vad_min_volume} "
+        f"stop_secs={s.vad_stop_secs} · reloj de inactividad {s.silence_timeout_s}s"
     )
 
     stt = GroqSTTService(
@@ -316,6 +451,11 @@ async def run_bot(webrtc_connection, patient_id: str | None = None) -> None:
     @transport.event_handler("on_client_connected")
     async def _on_connected(_transport, _client):  # pragma: no cover
         logger.info("[voz] cliente conectado — saludando")
+        # El saludo se encola en el worker, así que no pasa por `ClinicalProcessor`
+        # y éste no se enteraría de que lo dijo. Se le anota a mano porque es
+        # justamente la frase más expuesta al eco: es la primera que suena, y si
+        # vuelve por el micrófono el sistema arranca contestándose a sí mismo.
+        clinico._ultima_respuesta = APERTURA   # noqa: SLF001 — mismo módulo
         await worker.queue_frames([TTSSpeakFrame(APERTURA)])
 
     @transport.event_handler("on_client_disconnected")

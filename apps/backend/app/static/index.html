@@ -494,7 +494,20 @@ $("#vIniciar").onclick = async () => {
   }
   $("#vEstado").textContent = "pidiendo micrófono…";
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Constraints explícitas, no `audio: true`. Los navegadores suelen activar
+    // estas tres por defecto, pero pedirlas deja el contrato por escrito y hace
+    // el fallo verificable: sin cancelación de eco, el micrófono recoge la voz
+    // del propio agente, el STT la transcribe y el sistema se responde a sí mismo
+    // en bucle sin dejar hablar al paciente. `autoGainControl` además sube el
+    // nivel de un micrófono flojo, que es lo que decide si se supera el umbral
+    // de volumen del VAD (VAD_MIN_VOLUME en el backend).
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
     pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
     // Un solo canal de audio, bidireccional (sendrecv): manda el micrófono Y
     // recibe la voz del agente sobre el MISMO canal. El backend de Pipecat

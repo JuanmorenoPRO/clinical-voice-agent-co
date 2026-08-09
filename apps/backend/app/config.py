@@ -100,13 +100,29 @@ class Settings(BaseSettings):
     # media frase; es la palanca dominante del presupuesto de latencia.
     vad_stop_secs: float = 0.7
 
+    # Umbrales con los que el VAD decide que ALGUIEN está hablando. Silero exige
+    # los dos a la vez (`vad_analyzer.py`: `confidence >= X and volume >= Y`), así
+    # que el más estricto manda. Estaban fijos en el código y ahora se configuran,
+    # porque son la primera palanca cuando el agente no oye al paciente.
+    #
+    # `vad_min_volume` es sonoridad EBU R128 normalizada a [0,1]. El valor por
+    # defecto de Pipecat es 0.6 y asume un micrófono cercano y bien nivelado; con
+    # el de un portátil, o con el paciente a medio metro, no se alcanza — y
+    # entonces no hay VAD, no hay STT (Groq transcribe por segmentos y DEPENDE del
+    # VAD), y la llamada entera se interpreta como silencio hasta colgar. Se baja
+    # a 0.3, que es el lado seguro: un falso positivo entra como `ininteligible`
+    # (ver `nlu/intent.py::_es_ruido_transcripcion`) y el agente pide que se
+    # repita; un falso negativo le cuelga a un paciente que sí estaba hablando.
+    vad_confidence: float = 0.7
+    vad_min_volume: float = 0.3
+
     # Inactividad tras la que se da por hecho que el paciente no está
     # contestando. Se cuenta desde que el agente TERMINA de hablar, no desde que
-    # empieza. Cinco segundos es un silencio que en una conversación telefónica
-    # ya resulta incómodo, pero deja margen a alguien mayor que tarda en
-    # responder; la escalera que arranca a partir de aquí (tres avisos antes de
-    # colgar) vive en `agent/script.py::MAX_SILENCIOS`.
-    silence_timeout_s: float = 5.0
+    # empieza, y solo corre cuando no habla ninguno de los dos (ver
+    # `voice/pipeline.py`). Ocho segundos y no cinco: cinco vencía mientras un
+    # paciente mayor todavía estaba pensando la respuesta a una pregunta larga.
+    # Con la escalera de `agent/script.py::MAX_SILENCIOS` son 24 s antes de colgar.
+    silence_timeout_s: float = 8.0
 
     # --- RAG: umbral de "no tengo evidencia suficiente" (ADR-005) ---
     rag_top_k: int = 4
