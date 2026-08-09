@@ -269,7 +269,12 @@ async def process_turn_async(
 
     # --- A + B: entender lo que dijo el paciente ------------------------------
     slot = estado.slot_actual if estado.phase is Phase.TAMIZAJE else None
-    pregunta_previa = prior[-1].final_response if prior else phrasing.APERTURA
+    # La pregunta que el GUION hizo, con lo que se dijo de respaldo. Manda la
+    # canónica porque el redactor puede reformular la frase, y de ella depende
+    # cómo se lee un "sí" o un "no" pelados (`nlu/polaridad.py`). Vale para las
+    # dos rutas: es también el contexto que se le da al LLM.
+    pregunta_previa = estado.ultima_pregunta or (
+        prior[-1].final_response if prior else phrasing.APERTURA)
 
     # El paciente no dijo NADA. Se cortocircuita el LLM igual que en la ruta de
     # emergencia y por la misma razón de fondo: no hay nada que extraer del
@@ -335,9 +340,22 @@ async def process_turn_async(
         and intent_nlu.niega_mas_temas(text)
     )
 
+    # El paciente contesta a la oferta de enfermera. Hasta ahora nadie leía esa
+    # respuesta: el guion ofrecía, repetía la oferta al turno siguiente con otra
+    # formulación y cerraba a los cinco turnos pasara lo que pasara. Medido en una
+    # llamada real, dos ofertas seguidas a alguien que estaba contestando todo, y
+    # su "No." ignorado.
+    acepta_salida = declina_salida = False
+    if estado.espera_respuesta_salida and not silencio:
+        polar = lexicon.respuesta_polar(text)
+        acepta_salida = polar is True or intent_nlu.contiene_despedida(text)
+        declina_salida = polar is False
+
     action = script.next_action(estado, acumulado, escalar=critico, repetido=repetido,
-                                emergencia=emergencia, quiere_colgar=quiere_colgar,
-                                silencio=silencio,
+                                emergencia=emergencia,
+                                quiere_colgar=quiere_colgar or acepta_salida,
+                                silencio=silencio, reanudar=declina_salida,
+                                progreso=progreso,
                                 max_silencios=get_settings().silence_max_attempts)
     recientes = _aperturas_recientes(prior)
     evidence: RagResult | None = None
@@ -530,6 +548,15 @@ async def process_turn_async(
         # estado para que ningún turno posterior lo repita (ver el guard de
         # `evaluate(final=True)` más arriba).
         guion_entregado=critico and action.kind == "escalar",
+        # Lo que el guion pidió preguntar, para poder leer la respuesta el turno
+        # que viene. Se recalcula con la MISMA semilla y las mismas aperturas
+        # recientes que usó `_texto_de`, así que sale la variante que de verdad se
+        # dijo; y se guarda la canónica en vez del texto final porque el redactor
+        # puede haberla reformulado.
+        pregunta_emitida=phrasing.pregunta_emitida(
+            action.kind, action.slot, action.intento, action.seguimiento,
+            semilla=conv.id + str(len(prior)), usadas=recientes),
+        reanudar=declina_salida,
     )
 
     # UNKNOWN explícito: el slot que quedó sin respuesta se anota en el turno en

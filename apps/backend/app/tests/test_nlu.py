@@ -432,6 +432,152 @@ def test_medir_la_temperatura_no_es_tener_fiebre(texto, fever, medido):
     assert s.temperature_measured is medido, f"{texto!r} → medido={s.temperature_measured!r}"
 
 
+# --- fiebre: el sí/no pelado a la pregunta cerrada ----------------------------
+# Regresión del bucle reportado: `_FIEBRE_NO` exige que el paciente NOMBRE el
+# síntoma, y a "¿Ha tenido fiebre o calentura?" casi nadie lo nombra. El slot no
+# se resolvía, se quemaban los dos MAX_REPREGUNTAS y el agente preguntó tres veces
+# seguidas por la calentura a quien ya había dicho que no.
+
+_Q_FIEBRE = "¿Ha tenido fiebre o calentura estos días?"
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        # Los dos turnos literales de la llamada que motivó el arreglo.
+        ("No, yo me he sentido bien.", False),
+        ("No, yo me he sentido muy bien.", False),
+        ("No", False),
+        ("Ninguna", False),
+        ("Qué va", False),
+        ("Para nada", False),
+        # El lado afirmativo importa más: sin él una fiebre AFIRMADA se perdía
+        # igual, y ese es el falso negativo que la rúbrica llama catastrófico.
+        ("Sí", True),
+        ("Sí, un poco", True),
+        ("Claro", True),
+    ],
+)
+def test_el_si_o_no_pelado_resuelve_el_slot_de_fiebre(texto, esperado):
+    s = lexicon.extract(texto, slot="fiebre", question=_Q_FIEBRE)
+    assert s.fever is esperado
+
+
+@pytest.mark.parametrize(
+    "texto,porque",
+    [
+        # Empiezan por no/sí pero contestan al TERMÓMETRO, no al hallazgo: el slot
+        # tiene que seguir abierto para que el guion reformule en cerrada.
+        ("no me la he tomado", "habla del termómetro"),
+        ("si la he tomado", "habla del termómetro"),
+        ("no tengo termómetro", "habla del termómetro"),
+        # El turno ya se sabe de qué hablaba, y no era de la fiebre.
+        ("No he dormido nada", "resolvió el sueño"),
+        ("No, un tres", "resolvió el dolor"),
+        ("no, no puedo respirar", "encendió una bandera"),
+    ],
+)
+def test_la_respuesta_polar_no_se_traga_un_turno_que_habla_de_otra_cosa(texto, porque):
+    assert lexicon.extract(texto, slot="fiebre", question=_Q_FIEBRE).fever is None, porque
+
+
+def test_el_si_o_no_pelado_necesita_saber_que_se_pregunto():
+    """Sin la pregunta no hay polaridad: un "no" suelto no niega nada concreto.
+
+    El slot dice DE QUÉ se habla; solo la pregunta dice qué significa la
+    respuesta. Ver `nlu/polaridad.py`.
+    """
+    assert lexicon.extract("No", slot="fiebre").fever is None
+    assert lexicon.extract("No").fever is None
+
+
+# --- el guion tiene que entender lo que sus propias preguntas invitan ---------
+# Segunda llamada reportada. El agente preguntó "¿Camina como antes de la
+# cirugía, o le cuesta más?", el paciente contestó "Me cuesta un poco más." y
+# recibió "No importa, lo anoto como que no me supo decir."; después dijo dos
+# veces "la área está muy roja" —una herida roja, un hallazgo real— y el agente le
+# ofreció una enfermera por no entenderle. Barrido de las seis repreguntas contra
+# las respuestas que ellas mismas invitan: 24 de 30 no se entendían.
+#
+# Este test es la regresión que impide que vuelva a pasar al añadir una variante
+# de fraseo: si se escribe una repregunta cerrada, sus respuestas tienen que estar
+# aquí.
+
+_CAMPO_DE_SLOT = {"dolor": "pain_level", "movilidad": "mobility",
+                  "herida": "wound", "apetito": "appetite", "sueno": "sleep"}
+
+
+@pytest.mark.parametrize(
+    "slot,texto,esperado",
+    [
+        # "¿el dolor está más cerca de tres o más cerca de ocho?" / "¿mucho o poquito?"
+        ("dolor", "tres", 3),
+        ("dolor", "ocho", 8),
+        ("dolor", "mucho", 8),
+        ("dolor", "poquito", 2),
+        ("dolor", "más cerca de ocho", 8),
+        # "¿Puede levantarse de la cama solo...?" / "¿Camina como antes, o le cuesta más?"
+        ("movilidad", "me cuesta más", "limitada_esperada"),
+        ("movilidad", "Me cuesta un poco más.", "limitada_esperada"),
+        ("movilidad", "más despacio", "limitada_esperada"),
+        ("movilidad", "necesito ayuda", "limitada_esperada"),
+        ("movilidad", "necesito que me ayuden", "limitada_esperada"),
+        ("movilidad", "solo", "normal"),
+        ("movilidad", "puedo solo", "normal"),
+        ("movilidad", "como antes", "normal"),
+        # "¿la ha visto roja, hinchada...?" / "¿está seca, o ha manchado el apósito?"
+        ("herida", "Sí, la área está muy roja.", "eritema_leve"),
+        ("herida", "muy roja", "eritema_leve"),
+        ("herida", "está roja", "eritema_leve"),
+        ("herida", "más roja de lo que estaba", "eritema_leve"),
+        ("herida", "hinchada", "eritema_leve"),
+        ("herida", "inflamada", "eritema_leve"),
+        ("herida", "seca", "normal"),
+        ("herida", "ha manchado el apósito", "secrecion_purulenta"),
+        ("herida", "manchó la gasa", "secrecion_purulenta"),
+        # "¿Ha comido hoy algo completo, o solo picoteado?"
+        ("apetito", "picoteado", "levemente_disminuido"),
+        ("apetito", "poquito", "levemente_disminuido"),
+        ("apetito", "algo completo", "normal"),
+        # "¿Cuántas veces se despierta...?" / "¿Durmió bien anoche o mal?"
+        ("sueno", "bien", "normal"),
+        ("sueno", "de corrido", "normal"),
+        ("sueno", "mal", "muy_alterado"),
+        ("sueno", "dos o tres veces", "levemente_alterado"),
+        ("sueno", "como cinco veces", "muy_alterado"),
+    ],
+)
+def test_las_respuestas_que_la_repregunta_invita_resuelven_su_slot(slot, texto, esperado):
+    s = lexicon.extract(texto, slot=slot)
+    assert getattr(s, _CAMPO_DE_SLOT[slot]) == esperado
+
+
+@pytest.mark.parametrize(
+    "slot,texto,campo,porque",
+    [
+        # La contrapartida de reconocer el adjetivo pelado: negarlo no puede
+        # anotarlo. Es lo que cubre `lexicon._afirmado`.
+        ("herida", "no está roja", "wound", "la niega"),
+        ("herida", "la herida no está roja ni hinchada", "wound", "las niega"),
+        ("movilidad", "no me cuesta caminar", "mobility", "lo niega"),
+        # Y las elípticas solo valen para SU pregunta: "hinchada" contestando por
+        # la movilidad es una pierna, no la herida.
+        ("movilidad", "la pierna hinchada", "wound", "no se preguntó por la herida"),
+        ("apetito", "mal", "sleep", "no se preguntó por el sueño"),
+    ],
+)
+def test_la_respuesta_corta_no_inventa_hallazgos(slot, texto, campo, porque):
+    assert getattr(lexicon.extract(texto, slot=slot), campo) is None, porque
+
+
+def test_no_he_dormido_bien_ya_no_se_anota_como_normal():
+    """El patrón casaba "dormido bien" y nadie miraba el "no" de delante."""
+    assert lexicon.extract("no he dormido bien", slot="sueno").sleep == "muy_alterado"
+    # Y la forma atenuada sigue siendo leve, que es más específica.
+    assert lexicon.extract("no he dormido muy bien que digamos",
+                           slot="sueno").sleep == "levemente_alterado"
+
+
 def test_una_cifra_alta_implica_fiebre_y_que_se_midio():
     s = lexicon.extract("me la tomé y estaba en 38.5", slot="fiebre")
     assert s.temperature_c == 38.5

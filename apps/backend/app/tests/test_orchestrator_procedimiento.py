@@ -26,6 +26,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.agent import phrasing
 from app.agent.orchestrator import _REGLA_PROCEDIMIENTO, process_turn
 from app.agent.script import CallState
 from app.db import Base
@@ -43,7 +44,7 @@ class _SoloLexico:
     """
 
     async def extract(self, *, slot, question, utterance):
-        return Extraction(symptoms=lexicon.extract(utterance, slot),
+        return Extraction(symptoms=lexicon.extract(utterance, slot, question=question),
                           intent=intent.classify(utterance))
 
     async def pregunta_es_del_dominio(self, *, question, evidence):
@@ -254,6 +255,121 @@ def test_la_fiebre_negada_no_se_afirma_y_los_escalofrios_se_recogen(paciente):
     assert r.symptoms.fever is False
     assert "escalofríos" in r.symptoms.other
     assert "calentura, entonces" not in r.response.lower()
+
+
+def test_negar_la_fiebre_sin_nombrarla_resuelve_el_slot(paciente):
+    """El bucle reportado: tres veces la misma pregunta a quien ya contestó.
+
+        Agente:   ¿Ha tenido fiebre o calentura estos días?
+        Paciente: No, yo me he sentido bien.
+        Agente:   ¿Se ha sentido caliente o con escalofríos...?   ← repregunta 1
+        Paciente: No, yo me he sentido muy bien.
+        Agente:   Sin termómetro: ¿lo ha sentido como fiebre, sí o no?
+
+    `_FIEBRE_NO` exigía que el paciente NOMBRARA el síntoma, y a una pregunta
+    cerrada casi nadie lo nombra (ver `lexicon._POLAR_NO`).
+    """
+    session, p = paciente
+    primero = process_turn(session, text="un 3", patient_id=p.id)
+    r = process_turn(session, text="No, yo me he sentido bien.",
+                     conversation_id=primero.conversation_id)
+
+    assert r.symptoms.fever is False
+    respuesta = r.response.lower()
+    # No se compara contra la palabra "fiebre": el reflejo la dice, y con razón
+    # ("Sin fiebre, bien."). Lo que no puede reaparecer es la PREGUNTA.
+    assert not any(q.lower() in respuesta
+                   for q in (*phrasing.PREGUNTAS["fiebre"],
+                             *phrasing.REPREGUNTAS["fiebre"])), \
+        f"volvió a preguntar por la fiebre: {r.response!r}"
+    # Y el guion ya va por el siguiente slot, no atascado en el mismo.
+    assert any(t in respuesta for t in ("camin", "mover", "movi", "levant")), \
+        f"no avanzó a movilidad: {r.response!r}"
+
+
+def test_afirmar_la_fiebre_sin_nombrarla_tambien_resuelve_el_slot(paciente):
+    """El mismo hueco por el lado que de verdad duele.
+
+    Un "Sí" pelado tampoco resolvía el slot, así que una fiebre AFIRMADA se
+    perdía tras dos repreguntas — el falso negativo que la rúbrica considera
+    catastrófico. Resuelto el slot, el guion persigue la cifra
+    (`script.seguimiento_pendiente`), que es la que dispara `fiebre_38`.
+    """
+    session, p = paciente
+    primero = process_turn(session, text="un 3", patient_id=p.id)
+    r = process_turn(session, text="Sí", conversation_id=primero.conversation_id)
+
+    assert r.symptoms.fever is True
+    assert "termómetro" in r.response.lower() or "medír" in r.response.lower(), \
+        f"no persiguió la cifra: {r.response!r}"
+
+
+# --- la segunda llamada reportada (conversación 0cf3f8d3) ---------------------
+# El agente le dijo "no me supo decir" a quien acababa de contestar, le ofreció
+# dos veces una enfermera y cerró en CRÍTICO por `no_se_pudo_evaluar`. La llamada
+# corrió con `degraded=1` y `llm_calls=0` —la cuota diaria de Groq agotada—, así
+# que `_SoloLexico` no es aquí un doble de conveniencia: es el modo exacto en que
+# ocurrió.
+
+
+def test_la_respuesta_a_la_repregunta_de_movilidad_se_entiende(paciente):
+    """Turno 5 real: "Me cuesta un poco más." -> "no me supo decir"."""
+    session, p = paciente
+    r = process_turn(session, text="un 5", patient_id=p.id)
+    for texto in ("no he tenido fiebre", "Me cuesta un poco más."):
+        r = process_turn(session, text=texto, conversation_id=r.conversation_id)
+
+    assert r.symptoms.mobility == "limitada_esperada"
+    assert "no me supo decir" not in r.response.lower()
+    assert "enfermera" not in r.response.lower()
+
+
+def test_la_herida_roja_no_se_pierde(paciente):
+    """Turnos 6 y 7 reales: "la área está muy roja", dos veces, y nada.
+
+    Es el fallo grave de la llamada: un hallazgo clínico real —el que después
+    escala— tirado dos veces porque el léxico solo reconocía el diminutivo
+    ("rojita") o "roja en el borde".
+    """
+    session, p = paciente
+    r = process_turn(session, text="un 5", patient_id=p.id)
+    for texto in ("no he tenido fiebre", "camino bien", "Sí, la área está muy roja."):
+        r = process_turn(session, text=texto, conversation_id=r.conversation_id)
+
+    assert r.symptoms.wound == "eritema_leve"
+    assert "enfermera que lo llame" not in r.response.lower()
+
+
+def test_declinar_la_enfermera_retoma_la_llamada(paciente):
+    """Turno 8 real: el paciente dijo "No." y el agente colgó igual.
+
+    Se fuerza el atasco con turnos que de verdad no aportan nada (ruido del STT),
+    que es el único caso en que la oferta debe salir.
+    """
+    session, p = paciente
+    r = process_turn(session, text="un 5", patient_id=p.id)
+    for _ in range(4):
+        r = process_turn(session, text="xhtwkq fewf", conversation_id=r.conversation_id)
+    assert "enfermera" in r.response.lower(), "la oferta debía salir aquí"
+
+    r = process_turn(session, text="No, sigamos", conversation_id=r.conversation_id)
+
+    assert "enfermera" not in r.response.lower(), "insistió con la oferta rechazada"
+    assert r.response.rstrip().endswith("?"), "no retomó el guion"
+    assert _estado(session, r.conversation_id).sin_progreso == 0
+
+
+def test_aceptar_la_enfermera_cierra_y_alerta(paciente):
+    session, p = paciente
+    r = process_turn(session, text="un 5", patient_id=p.id)
+    for _ in range(4):
+        r = process_turn(session, text="xhtwkq fewf", conversation_id=r.conversation_id)
+    assert "enfermera" in r.response.lower()
+
+    r = process_turn(session, text="Sí, por favor", conversation_id=r.conversation_id)
+
+    assert not r.response.rstrip().endswith("?"), "la oferta se aceptó: no se sigue preguntando"
+    assert session.query(Alert).filter(Alert.conversation_id == r.conversation_id).count()
 
 
 def test_la_fiebre_puede_corregirse_hacia_arriba_pero_no_hacia_abajo(paciente):

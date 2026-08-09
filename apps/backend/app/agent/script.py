@@ -140,6 +140,21 @@ class CallState:
     # `engine.evaluate(final=True)` re-dispare el guion completo en cada intento
     # de cierre posterior — el paciente lo oía dos y tres veces.
     guion_entregado: bool = False
+    # La pregunta canónica que se hizo el turno anterior. Es lo que permite leer
+    # un "sí" o un "no" pelados: el slot dice de qué se habla, pero solo la
+    # pregunta dice qué significa la respuesta —el mismo "no" vale `normal` tras
+    # "¿ha tenido alguna dificultad?" y `limitada_esperada` tras "¿ha podido
+    # caminar sin problema?" (ver `nlu/polaridad.py`). Se guarda la canónica y no
+    # lo que se dijo porque el redactor puede reformularla.
+    ultima_pregunta: str | None = None
+    # El turno anterior ofreció que llamara una enfermera y esta llamada está
+    # esperando la respuesta. Sin esto nadie la leía: el guion ofrecía, repetía la
+    # oferta al turno siguiente y cerraba a los cinco pasara lo que pasara —
+    # medido en una llamada real, dos ofertas seguidas y un "No." ignorado.
+    espera_respuesta_salida: bool = False
+    # Y la oferta ya se hizo una vez. Insistir con ella es la misma falta que
+    # MAX_REPREGUNTAS evita en el tamizaje.
+    salida_ofrecida: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -151,6 +166,9 @@ class CallState:
             "procedimiento_dicho": self.procedimiento_dicho,
             "turnos_confirmacion": self.turnos_confirmacion,
             "guion_entregado": self.guion_entregado,
+            "ultima_pregunta": self.ultima_pregunta,
+            "espera_respuesta_salida": self.espera_respuesta_salida,
+            "salida_ofrecida": self.salida_ofrecida,
         }
 
     @classmethod
@@ -170,6 +188,9 @@ class CallState:
             procedimiento_dicho=d.get("procedimiento_dicho"),
             turnos_confirmacion=int(d.get("turnos_confirmacion") or 0),
             guion_entregado=bool(d.get("guion_entregado") or False),
+            ultima_pregunta=d.get("ultima_pregunta"),
+            espera_respuesta_salida=bool(d.get("espera_respuesta_salida") or False),
+            salida_ofrecida=bool(d.get("salida_ofrecida") or False),
         )
 
 
@@ -220,7 +241,8 @@ def seguimiento_pendiente(state: CallState, symptoms: Symptoms) -> str | None:
 def next_action(state: CallState, symptoms: Symptoms, *,
                 escalar: bool = False, repetido: bool = False,
                 emergencia: bool = False, quiere_colgar: bool = False,
-                silencio: bool = False,
+                silencio: bool = False, reanudar: bool = False,
+                progreso: bool = False,
                 max_silencios: int = MAX_SILENCIOS) -> Action:
     """Decide el siguiente movimiento. Función pura: se testea sin LLM ni red.
 
@@ -240,6 +262,14 @@ def next_action(state: CallState, symptoms: Symptoms, *,
     línea compite con la llamada que de verdad importa, así que ahí sí se cierra
     en el turno siguiente.
     """
+    # `sin_progreso` cuenta hasta el turno ANTERIOR: lo que el paciente
+    # acaba de decir todavía no está ahí, porque quien lo suma es `apply`. Sin
+    # esta línea, un turno que SÍ trajo un dato se decidía con el contador viejo y
+    # el paciente recibía "le noto que le cuesta contestarme" justo después de
+    # contestar — medido en la llamada reportada, turno 5: dijo "Me cuesta un
+    # poco más.", el dato se extrajo, y aun así le ofrecieron una enfermera.
+    sin_progreso = 0 if progreso else state.sin_progreso
+
     if state.phase is Phase.TERMINADA:
         return Action(kind="cerrar", phase=Phase.TERMINADA)
 
@@ -268,13 +298,13 @@ def next_action(state: CallState, symptoms: Symptoms, *,
     # y hacerle una pregunta de confirmación después de eso es no escucharlo.
     if state.phase is Phase.ESCALAMIENTO:
         if (emergencia or quiere_colgar
-                or state.sin_progreso >= SIN_PROGRESO_CERRAR
+                or sin_progreso >= SIN_PROGRESO_CERRAR
                 or state.turnos_confirmacion >= MAX_TURNOS_CONFIRMACION):
             return Action(kind="cerrar", phase=Phase.TERMINADA)
         return Action(kind="confirmar", phase=Phase.CONFIRMACION)
 
     if state.phase is Phase.CONFIRMACION:
-        if (quiere_colgar or state.sin_progreso >= SIN_PROGRESO_CERRAR
+        if (quiere_colgar or sin_progreso >= SIN_PROGRESO_CERRAR
                 or state.turnos_confirmacion >= MAX_TURNOS_CONFIRMACION):
             return Action(kind="cerrar", phase=Phase.TERMINADA)
         return Action(kind="confirmar", phase=Phase.CONFIRMACION)
@@ -288,15 +318,31 @@ def next_action(state: CallState, symptoms: Symptoms, *,
     if state.phase in (Phase.CIERRE, Phase.TERMINADA):
         return Action(kind="cerrar", phase=Phase.TERMINADA)
 
+    # El paciente declinó la enfermera: quiere seguir hablando con el agente. Se
+    # retoma el guion por donde iba, y va ANTES del bloque de atasco porque si no
+    # el contador —que sigue alto— volvería a sacar la oferta que acaba de
+    # rechazar. `apply` es quien pone `sin_progreso` a cero.
+    if reanudar:
+        pendiente = state.slot_actual or next(
+            iter(slots_pendientes(state, symptoms)), None)
+        if pendiente:
+            return Action(kind="preguntar", slot=pendiente, phase=Phase.TAMIZAJE)
+
     # --- atasco: cambiar de estrategia, no reformular otra vez ----------------
     # Insistir con otra variante de la misma pregunta a alguien que lleva varios
     # turnos sin dar nada es lo que convierte la llamada en un interrogatorio, y
     # además no funciona: el estilo `evasivo` es el peor del dataset.
-    if state.sin_progreso >= SIN_PROGRESO_CERRAR:
+    if sin_progreso >= SIN_PROGRESO_CERRAR:
         return Action(kind="cerrar", phase=Phase.CIERRE)
-    if state.sin_progreso >= SIN_PROGRESO_OFRECER_SALIDA:
+    # `not salida_ofrecida`: se ofrece UNA vez. Antes se repetía al turno
+    # siguiente con otra formulación —"le noto que le cuesta contestarme" y luego
+    # "veo que no nos estamos entendiendo"— a un paciente que estaba contestando
+    # todas las preguntas; era el mismo interrogatorio del que la oferta pretende
+    # sacar al agente.
+    if (sin_progreso >= SIN_PROGRESO_OFRECER_SALIDA
+            and not state.salida_ofrecida):
         # Conserva `slot_actual` para poder retomar si el paciente dice que sí
-        # quiere seguir.
+        # quiere seguir (ver `reanudar`, arriba).
         return Action(kind="ofrecer_salida", slot=state.slot_actual,
                       phase=Phase.TAMIZAJE)
 
@@ -332,7 +378,7 @@ def next_action(state: CallState, symptoms: Symptoms, *,
     # Se acabó el guion, pero no necesariamente la llamada: si el paciente aún
     # tiene dudas, se le atienden. Solo se cuelga cuando lo dice él, o cuando
     # lleva varios turnos sin aportar nada (el tope que protege la demo en vivo).
-    if quiere_colgar or state.sin_progreso >= SIN_PROGRESO_CERRAR:
+    if quiere_colgar or sin_progreso >= SIN_PROGRESO_CERRAR:
         return Action(kind="cerrar", phase=Phase.CIERRE)
     return Action(kind="confirmar", phase=Phase.CONFIRMACION)
 
@@ -341,7 +387,9 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
           hash_turno: str | None = None, progreso: bool = True,
           intento_real: bool = True, silencio: bool = False,
           procedimiento_dicho: str | None = None,
-          guion_entregado: bool = False) -> CallState:
+          guion_entregado: bool = False,
+          pregunta_emitida: str | None = None,
+          reanudar: bool = False) -> CallState:
     """Avanza el estado tras ejecutar `action`. Devuelve un estado nuevo.
 
     `hash_turno` y `progreso` los calcula el orquestador, que es quien ve el texto
@@ -360,7 +408,10 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
         sin_responder=list(state.sin_responder), turnos=state.turnos + 1,
         seguido=list(state.seguido),
         ultimo_hash=hash_turno if hash_turno is not None else state.ultimo_hash,
-        sin_progreso=0 if progreso else state.sin_progreso + 1,
+        # `reanudar` también lo pone a cero: el paciente acaba de decir que
+        # quiere seguir, y arrancar de nuevo con el contador en 4 lo llevaría al
+        # cierre por atasco en el turno siguiente, que es justo lo que rechazó.
+        sin_progreso=0 if (progreso or reanudar) else state.sin_progreso + 1,
         # Cualquier cosa que diga el paciente devuelve el contador a cero: la
         # escalera de silencio mide silencios SEGUIDOS, no acumulados.
         sin_respuesta=state.sin_respuesta + 1 if silencio else 0,
@@ -372,6 +423,14 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
         # Igual que `procedimiento_dicho`: una vez entregado, entregado. La fase
         # avanza pero el hecho persiste hasta el final de la llamada.
         guion_entregado=guion_entregado or state.guion_entregado,
+        # Lo que el guion pidió preguntar en ESTE turno, para poder leer la
+        # respuesta en el siguiente. None cuando la acción no pregunta por un
+        # slot (cerrar, confirmar, ofrecer_salida): ahí un "no" no habla de
+        # ningún síntoma.
+        ultima_pregunta=pregunta_emitida,
+        espera_respuesta_salida=action.kind == "ofrecer_salida",
+        salida_ofrecida=(action.kind == "ofrecer_salida"
+                         or state.salida_ofrecida),
     )
 
     if action.kind == "sondear":

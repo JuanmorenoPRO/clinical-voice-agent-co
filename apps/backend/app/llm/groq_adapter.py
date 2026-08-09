@@ -178,7 +178,7 @@ class GroqAdapter:
         self, *, slot: str | None, question: str, utterance: str
     ) -> Extraction:
         intent = intent_rules.classify(utterance)
-        base = lexicon.extract(utterance, slot)
+        base = lexicon.extract(utterance, slot, question=question)
 
         if (
             slot is None

@@ -20,7 +20,7 @@ import re
 import unicodedata
 
 from ..schemas import Symptoms
-from . import otros_sintomas
+from . import otros_sintomas, polaridad
 
 
 # Letras repetidas de más: "borrroso", "muuucho", "siiii". Salen del STT y de
@@ -42,6 +42,26 @@ def normalize(text: str) -> str:
     t = "".join(c for c in t if not unicodedata.combining(c))
     t = _VOCALES_REPETIDAS.sub(r"\1", t)
     return _CONSONANTES_REPETIDAS.sub(r"\1\1", t)
+
+
+# Negación que anula un hallazgo si va justo delante: "no está roja", "sin
+# secreción", "nada de eso". Hace falta desde que los patrones categóricos
+# reconocen el adjetivo pelado ("muy roja"): sin la guarda, "no está roja" se
+# anotaría como eritema. Mismo mecanismo y misma redacción que
+# `otros_sintomas._NEGACION`, duplicado a propósito porque este módulo ya importa
+# a aquel y la vuelta cerraría el ciclo.
+_NEGACION_PREVIA = re.compile(r"\b(no|sin|ni|nada|nunca|jamas|tampoco)\b[^.;,]{0,28}$")
+
+
+def _afirmado(patron: re.Pattern[str], texto: str) -> bool:
+    """¿`patron` aparece en `texto` sin una negación justo antes?
+
+    Se recorren TODAS las apariciones: "no está roja, pero la otra sí está roja"
+    afirma el hallazgo en la segunda. Ante varias, basta una sin negar — la
+    asimetría de siempre, un falso negativo cuesta más que un falso positivo.
+    """
+    return any(not _NEGACION_PREVIA.search(texto[:m.start()])
+               for m in patron.finditer(texto))
 
 
 # --- banderas de emergencia ---------------------------------------------------
@@ -239,6 +259,55 @@ _SIN_TERMOMETRO = re.compile(
     r"|termometro\s+no\s+(tengo|hay)"
 )
 
+# Sí/no pelados, que es como de verdad se contesta una pregunta cerrada. Medido
+# en una llamada real, tres veces la misma pregunta a quien ya había contestado:
+#
+#   Agente:   ¿Ha tenido fiebre o calentura estos días?
+#   Paciente: No, yo me he sentido bien.        -> el slot no se resolvía
+#   Agente:   ¿Se ha sentido caliente o con escalofríos...?     (repregunta 1)
+#   Paciente: No, yo me he sentido muy bien.    -> seguía sin resolverse
+#   Agente:   Sin termómetro: ¿lo ha sentido como fiebre, sí o no?  (repregunta 2)
+#
+# Estos patrones solo detectan la POLARIDAD de la respuesta; qué significa la
+# decide `nlu/polaridad.py` a partir de la pregunta que se hizo, porque el mismo
+# "no" vale cosas opuestas según se preguntara "¿ha tenido dificultad?" o "¿ha
+# podido caminar sin problema?".
+#
+# Anclados al principio del turno: es donde va la respuesta a una pregunta
+# cerrada.
+_POLAR_NO = re.compile(
+    r"^\W*(no|nada|ning[uo]n\w*|nunca|jamas|negativo|para\s+nada"
+    r"|que\s+va|que\s+esperanzas|en\s+absoluto|nombre)\b"
+)
+_POLAR_SI = re.compile(
+    r"^\W*(si+|sip|claro|obvio|correcto|exacto|efectivamente|asi\s+es"
+    r"|eso\s+si|pues\s+si|un\s+poc\w+|un\s+poquit\w+|algo|a\s+veces"
+    r"|de\s+vez\s+en\s+cuando)\b"
+)
+
+# El paciente afirma, en general, que está bien. No es el valor de ningún slot
+# —para eso está `_NORMAL_GENERICO`— sino el árbitro de un turno contradictorio.
+# Medido en la llamada reportada:
+#
+#   Agente:   ¿Ha podido levantarse y caminar sin problema estos días?
+#   Paciente: No, yo estoy bien.
+#
+# El "no" apunta a limitación y el "estoy bien" a normalidad, porque ese "no" no
+# niega la pregunta: es el "no pasa nada" del habla corriente. Cuando los dos
+# chocan no se resuelve el slot y se repregunta, que sale más barato que anotar
+# el dato al revés.
+#
+# El lookbehind distingue el caso que sí es una negación de verdad: en "no estoy
+# bien" el "no" va pegado al verbo; en "no, yo estoy bien" no.
+_BIEN_GENERICO = re.compile(
+    r"(?<!no\s)\b(estoy|ando|sigo|voy|me\s+siento|me\s+he\s+sentido|he\s+estado)"
+    r"\s+(muy\s+|super\s+|bastante\s+)?(bien|normal|estable|tranquil\w+)"
+)
+
+# Valores que significan "aquí no pasa nada". Un turno contradictorio puede
+# resolverse hacia uno de estos —no añade riesgo— pero nunca hacia un hallazgo.
+_BENIGNO: frozenset = frozenset({"normal", False})
+
 # --- herida -------------------------------------------------------------------
 _HERIDA: list[tuple[str, re.Pattern[str]]] = [
     (
@@ -260,6 +329,15 @@ _HERIDA: list[tuple[str, re.Pattern[str]]] = [
         re.compile(
             r"rojit\w+|roja?\s+(en\s+)?(el\s+)?(borde|los\s+bordes)|enrojecid\w+|colorad\w+"
             r"|un\s+poco\s+(roja|inflamada|hinchada)|eritema"
+            # El adjetivo pelado, que es como el paciente lo dijo dos veces
+            # seguidas en la llamada reportada ("la área está muy roja") y no
+            # casaba con nada: hasta ahora hacía falta el diminutivo o el borde.
+            # Una herida roja perdida entera es el falso negativo que este módulo
+            # existe para evitar. La guarda de `_afirmado` es la que impide que
+            # "no está roja" entre por aquí.
+            r"|(esta|estaba|se\s+ve|se\s+ha\s+visto|la\s+veo|la\s+tengo|tengo)"
+            r"\s+\w{0,10}\s?roj\w+"
+            r"|\b(muy|mas|bien|algo|bastante|toda|media)\s+roj\w+"
             # "rosadita" es como la paciente colombiana describe un eritema leve, y
             # faltaba. Costaba un rojo entero: en caso_tray_pac_42_00030_7 la fiebre
             # de 38.9 nunca se mide ("he estado como acalorada"), así que el rojo
@@ -360,6 +438,12 @@ _SUENO: list[tuple[str, re.Pattern[str]]] = [
             r"|paso\s+la\s+noche\s+en\s+vela|toda\s+la\s+noche\s+despiert\w+"
             r"|dando\s+vueltas\s+toda\s+la\s+noche|no\s+concilio\s+el\s+sueno"
             r"|(he\s+)?dormido\s+(muy\s+)?mal|pesimo\s+.{0,10}dorm"
+            # "no he dormido bien" se anotaba como `normal`: el patrón de abajo
+            # casa "dormido bien" y nadie miraba el "no" de delante. Ahora la
+            # guarda de `_afirmado` lo suprime allí, y aquí se recoge por lo que
+            # es. El lookahead cede "...bien que digamos" al nivel leve, que es
+            # más específico y se evalúa después.
+            r"|no\s+(he\s+)?(dormido|duermo)\s+(muy\s+)?bien(?!\s+que\s+digamos)"
         ),
     ),
     (
@@ -387,6 +471,126 @@ _CATEGORICOS: dict[str, tuple[str, list[tuple[str, re.Pattern[str]]]]] = {
     "apetito": ("appetite", _APETITO),
     "sueno": ("sleep", _SUENO),
 }
+
+# --- respuestas elípticas: solo significan algo tras SU pregunta --------------
+# El agente hace una pregunta cerrada y el paciente contesta con las palabras que
+# la propia pregunta le ofrece. Barrido de las seis repreguntas del guion contra
+# las respuestas que invitan: 24 de 30 no se entendían. Es el "no me está
+# escuchando" en su forma más literal — el léxico no sabe leer las respuestas a
+# sus propias preguntas:
+#
+#   Agente:   ¿Camina como antes de la cirugía, o le cuesta más?
+#   Paciente: Me cuesta un poco más.        -> nada, y el slot se dio por perdido
+#   Agente:   ¿La herida está seca, o ha manchado el apósito con algo?
+#   Paciente: Seca.                         -> nada
+#   Agente:   ¿Durmió bien anoche o mal?
+#   Paciente: Mal.                          -> nada
+#
+# Van APARTE de `_CATEGORICOS` y solo se aplican al slot que se preguntó, igual
+# que `_NORMAL_GENERICO`. La regla para decidir dónde va cada patrón: *¿dicha
+# mientras se pregunta otra cosa, la frase sigue significando lo mismo?* "La
+# herida está roja" sí, y por eso vive arriba; "me cuesta más" no —puede ser
+# comer— y "hinchada" tampoco —puede ser la pierna—, así que viven aquí.
+_CORTAS: dict[str, list[tuple[str, re.Pattern[str]]]] = {
+    "movilidad": [
+        (
+            "incapacitante_nueva",
+            re.compile(r"^\W*(no\s+puedo|nada|imposible)\b|no\s+me\s+aguanto"),
+        ),
+        (
+            "limitada_esperada",
+            re.compile(
+                # "me cuesta" sin verbo detrás: el patrón de `_MOVILIDAD` exige
+                # "caminar|moverme|levantarme" pegado, y la repregunta del guion
+                # invita justo a la forma corta.
+                r"(me\s+)?cuesta(\s+(un\s+poco|mas|bastante|harto|mucho))*\s*$"
+                r"|(me\s+)?cuesta\s+(un\s+poco\s+)?mas"
+                r"|necesito\s+(que\s+me\s+)?ayud|me\s+(ayudan|toca\s+con\s+ayuda)"
+                r"|mas\s+(despacio|lento|lenta)|no\s+(puedo|como)\s+antes"
+                r"|con\s+dificultad|apenas"
+            ),
+        ),
+        (
+            "normal",
+            re.compile(
+                r"^\W*(sol[oa]|bien|normal|igual|perfecto)\b"
+                r"|puedo\s+sol[oa]|sin\s+ayuda|por\s+mi\s+cuenta"
+                r"|(como|igual\s+que)\s+antes|el\s+mismo\s+de\s+antes"
+            ),
+        ),
+    ],
+    "herida": [
+        (
+            # Solo el ensuciamiento, nunca el apósito a secas: "la gasa está
+            # limpia" es la respuesta CONTRARIA y con `\bgasa\b` suelto salía
+            # `secrecion_purulenta`, que dispara CRÍTICO ella sola.
+            "secrecion_purulenta",
+            re.compile(r"manch\w+|humed\w+|moj\w+|suci\w+"
+                       r"|(gasa|aposito|vendaje)\s+\w{0,8}\s?(amarill|verdos|feo)"),
+        ),
+        (
+            "eritema_leve",
+            re.compile(r"^\W*(hinchad|inflamad|irritad|morad|rosad|roj)\w*"
+                       r"|\b(hinchad|inflamad)\w+"),
+        ),
+        (
+            "normal",
+            re.compile(r"^\W*(sec[ao]|limpi[ao]|bien|normal|igual|perfecta)\b"
+                       r"|\b(limpi[ao]|sec[ao])\b"
+                       r"|como\s+siempre|del\s+color\s+normal|ningun\s+cambio"
+                       # Negar el hallazgo que la repregunta ofrece ES contestar
+                       # que está normal: "¿ha manchado el apósito?" -> "no ha
+                       # manchado nada".
+                       r"|\bno\s+\w{0,6}\s?(ha\s+|he\s+)?(manch|bota|sale|sali)\w*"),
+        ),
+    ],
+    "apetito": [
+        (
+            "muy_disminuido",
+            re.compile(r"^\W*(nada|ningun\w*)\b|ni\s+ganas"),
+        ),
+        (
+            "levemente_disminuido",
+            re.compile(r"picote\w+|^\W*(poquit|poc)\w*\b|a\s+ratos|regular"),
+        ),
+        (
+            "normal",
+            re.compile(r"^\W*(bien|normal|igual|completo|perfecto)\b"
+                       r"|algo\s+completo|de\s+todo|como\s+siempre"),
+        ),
+    ],
+    "sueno": [
+        (
+            "muy_alterado",
+            re.compile(r"^\W*(mal|pesimo|horrible|fatal|terrible)\b|nada\s+bien"
+                       r"|\b(cuatro|cinco|seis|siete|ocho|nueve|diez|[4-9])\s+veces"),
+        ),
+        (
+            # "¿Cuántas veces se despierta?" — la respuesta es un número, y a
+            # partir de cuatro despertares la noche ya no es un sueño interrumpido.
+            "levemente_alterado",
+            re.compile(r"^\W*(dos|tres|2|3)\b|\b(dos|tres|2|3)\s+veces"
+                       r"|a\s+ratos|por\s+ratos|regular|mas\s+o\s+menos"),
+        ),
+        (
+            "normal",
+            re.compile(r"^\W*(bien|normal|igual|perfecto|ninguna)\b"
+                       r"|de\s+corrido|toda\s+la\s+noche|como\s+siempre"),
+        ),
+    ],
+}
+
+# El dolor no es categórico: sus respuestas cortas devuelven un nivel. "Mucho" y
+# "poquito" son literalmente las dos opciones que ofrece su segunda repregunta
+# ("Digámoslo fácil: ¿le duele mucho o poquito?") y ninguna de las dos casaba —
+# `_DOLOR_DESCRIPTOR` exige "me duele mucho", con el verbo.
+_CORTAS_DOLOR: list[tuple[int, re.Pattern[str]]] = [
+    (9, re.compile(r"^\W*(muchisimo|terrible|insoportable|horrible)\b")),
+    (8, re.compile(r"^\W*(mucho|bastante|harto|fuerte|duro)\b")),
+    (5, re.compile(r"^\W*(regular|normal|ahi|medio|mitad)\b|mas\s+o\s+menos")),
+    (2, re.compile(r"^\W*(poquit|poc|lev|casi\s+nada)\w*\b")),
+    (0, re.compile(r"^\W*(nada|ninguno|ninguna|nulo)\b")),
+]
 
 # Afirmación genérica de normalidad: "todo bien", "sin novedad", "nada raro".
 # Vale para cualquier slot categórico, y es de lo más común en la capa limpia del
@@ -430,6 +634,35 @@ _MENCION_TERMICA = re.compile(
 def habla_de_fiebre(t: str) -> bool:
     """¿La frase (ya normalizada) menciona algo térmico, no solo el termómetro?"""
     return bool(_MENCION_TERMICA.search(t))
+
+
+def respuesta_polar(text: str) -> bool | None:
+    """¿El turno es un sí o un no pelados? True, False o None si no lo es.
+
+    Solo la POLARIDAD; qué significa depende de la pregunta. Se expone para el
+    orquestador, que la necesita fuera del tamizaje: la oferta de "¿prefiere que
+    lo llame una enfermera?" también se contesta con un monosílabo, y hasta ahora
+    nadie la leía.
+    """
+    d = parte_declarativa(text)
+    if _POLAR_NO.search(d):
+        return False
+    if _POLAR_SI.search(d):
+        return True
+    return None
+
+
+# Todo lo que un turno puede dejar además de la fiebre. Si algo de esto salió, el
+# turno ya se sabe de qué hablaba y su "no" inicial no es una respuesta polar:
+# "No he dormido nada" contesta por el sueño, no niega la calentura.
+_OTROS_HALLAZGOS: tuple[str, ...] = (
+    "pain_level", "mobility", "wound", "appetite", "sleep", "temperature_c",
+    *(campo for campo, _ in _BANDERAS),
+)
+
+
+def _resolvio_algo(sym: Symptoms) -> bool:
+    return any(getattr(sym, campo) is not None for campo in _OTROS_HALLAZGOS)
 
 
 # Fragmento interrogativo, mismo criterio que `intent._FRAGMENTO` (se duplica en
@@ -478,13 +711,19 @@ def parte_declarativa(text: str) -> str:
     return normalize(_FRAGMENTO_PREGUNTA.sub(_quitar, text))
 
 
-def extract(text: str, slot: str | None = None) -> Symptoms:
+def extract(text: str, slot: str | None = None, *,
+            question: str | None = None) -> Symptoms:
     """Lo que se puede leer del texto sin modelo.
 
     `slot` indica qué se preguntó, para desambiguar: "normal" significa cosas
     distintas según se esté hablando de la herida o del sueño. Las banderas de
     emergencia y la temperatura se buscan SIEMPRE, se preguntara lo que se
     preguntara, porque el paciente las suelta cuando quiere.
+
+    `question` es la pregunta canónica del guion que el paciente está
+    contestando, y hace falta para el sí/no pelado: el slot dice DE QUÉ se habla,
+    pero solo la pregunta dice qué significa un "no" (ver `nlu/polaridad.py`).
+    Sin ella el resto de la extracción funciona igual.
     """
     sym = Symptoms()
     t = normalize(text)
@@ -542,19 +781,25 @@ def extract(text: str, slot: str | None = None) -> Symptoms:
         sym.pain_level = nivel
         sym.sources["pain_level"] = "lexicon"
 
-    # El slot que se preguntó se resuelve primero, y solo ahí vale la afirmación
-    # genérica de normalidad: "todo bien" significa lo que se acaba de preguntar.
+    # El slot que se preguntó se resuelve primero, y en tres pasadas de menos a
+    # más elíptico: el patrón autosuficiente, la respuesta corta a ESTA pregunta,
+    # y la afirmación genérica de normalidad ("todo bien" significa lo que se
+    # acaba de preguntar).
     if slot in _CATEGORICOS:
         campo, patrones = _CATEGORICOS[slot]
-        for valor, patron in patrones:
-            if patron.search(d):
-                setattr(sym, campo, valor)
-                sym.sources[campo] = "lexicon"
+        if not _primera_coincidencia(sym, campo, patrones, d):
+            if not _primera_coincidencia(sym, campo, _CORTAS.get(slot, []), d):
+                if _afirmado(_NORMAL_GENERICO, d):
+                    setattr(sym, campo, "normal")
+                    sym.sources[campo] = "lexicon"
+
+    # Y el dolor, que no es categórico pero también se contesta con una palabra.
+    if slot == "dolor" and sym.pain_level is None:
+        for nivel, patron in _CORTAS_DOLOR:
+            if _afirmado(patron, d):
+                sym.pain_level = nivel
+                sym.sources["pain_level"] = "lexicon"
                 break
-        else:
-            if _NORMAL_GENERICO.search(d):
-                setattr(sym, campo, "normal")
-                sym.sources[campo] = "lexicon"
 
     # Y después se buscan los DEMÁS slots con sus patrones específicos. El paciente
     # no contesta por turnos: suelta "no he pegado el ojo" mientras le preguntan por
@@ -562,16 +807,61 @@ def extract(text: str, slot: str | None = None) -> Symptoms:
     # sueño se extraía en el 36% de las conversaciones aunque el léxico acierta el
     # 84% cuando se le da el turno correcto — el agente perdía el paso al
     # reformular una pregunta y ya no lo recuperaba.
+    #
+    # Aquí NO entra `_CORTAS`: "mal" o "me cuesta más" solo significan algo como
+    # respuesta a su pregunta, y aplicarlas a los demás slots sería inventarse
+    # hallazgos con las palabras de otro tema.
     for otro, (campo, patrones) in _CATEGORICOS.items():
         if otro == slot or getattr(sym, campo) is not None:
             continue
-        for valor, patron in patrones:
-            if patron.search(d):
+        _primera_coincidencia(sym, campo, patrones, d)
+
+    # El sí/no pelado. Va el ÚLTIMO a propósito: la única forma de saber que ese
+    # "no" contesta lo que se preguntó es comprobar que el turno no dejó ningún
+    # otro hallazgo, y eso solo se sabe aquí abajo.
+    #
+    # Qué significa lo dice la PREGUNTA, no el slot (`nlu/polaridad.py`): el mismo
+    # "no" vale `normal` tras "¿ha tenido alguna dificultad?" y `limitada_esperada`
+    # tras "¿ha podido caminar sin problema?".
+    #
+    # `habla_de_medir` mantiene la distinción que costó un rojo: "no me la he
+    # tomado" y "sí la he tomado" empiezan por no/sí pero contestan al TERMÓMETRO,
+    # no al hallazgo. Ahí el slot sigue abierto para que el guion reformule en
+    # cerrada (ver `script.seguimiento_pendiente`).
+    polar = polaridad.de(question)
+    if polar is not None and not _resolvio_algo(sym):
+        campo, si, no = polar
+        estorba = habla_de_medir(t) if campo == "fever" else False
+        if (getattr(sym, campo) is None and not estorba
+                and not (campo == "fever" and habla_de_fiebre(d))):
+            valor = (no if _POLAR_NO.search(d)
+                     else si if _POLAR_SI.search(d) else None)
+            # Turno contradictorio ("No, yo estoy bien" a "¿ha podido caminar sin
+            # problema?"): el monosílabo no puede anotar un hallazgo contra lo que
+            # el paciente acaba de afirmar de sí mismo. Se deja sin resolver.
+            if valor not in _BENIGNO and _BIEN_GENERICO.search(d):
+                valor = None
+            if valor is not None:
                 setattr(sym, campo, valor)
                 sym.sources[campo] = "lexicon"
-                break
 
     return sym
+
+
+def _primera_coincidencia(sym: Symptoms, campo: str,
+                          patrones: list[tuple[str, re.Pattern[str]]],
+                          texto: str) -> bool:
+    """Anota el primer valor cuyo patrón se afirme en `texto`. ¿Anotó algo?
+
+    Los patrones vienen ordenados de más a menos severo: la primera coincidencia
+    gana, que es la lectura conservadora de siempre.
+    """
+    for valor, patron in patrones:
+        if _afirmado(patron, texto):
+            setattr(sym, campo, valor)
+            sym.sources[campo] = "lexicon"
+            return True
+    return False
 
 
 def _dolor(t: str) -> int | None:

@@ -149,6 +149,82 @@ def test_varios_turnos_sin_dato_ofrecen_una_salida():
     assert a.slot == "dolor"
 
 
+def test_el_turno_que_trae_un_dato_no_recibe_la_oferta_de_salida():
+    """`state.sin_progreso` cuenta hasta el turno ANTERIOR: `apply` es quien suma.
+
+    Sin mirar el `progreso` de ESTE turno, un paciente que acababa de contestar
+    recibía "le noto que le cuesta contestarme". Medido en la llamada reportada,
+    turno 5: dijo "Me cuesta un poco más.", el dato se extrajo, y aun así le
+    ofrecieron una enfermera.
+    """
+    atascado = CallState(phase=Phase.TAMIZAJE, slot_actual="movilidad",
+                         sin_progreso=script.SIN_PROGRESO_OFRECER_SALIDA)
+
+    assert script.next_action(atascado, Symptoms()).kind == "ofrecer_salida"
+    con_dato = script.next_action(
+        atascado, Symptoms(mobility="limitada_esperada"), progreso=True)
+    assert con_dato.kind != "ofrecer_salida"
+
+    # Y lo mismo con el cierre por atasco, que es el desenlace más caro.
+    a_punto_de_cerrar = CallState(phase=Phase.TAMIZAJE, slot_actual="movilidad",
+                                  sin_progreso=script.SIN_PROGRESO_CERRAR)
+    assert script.next_action(a_punto_de_cerrar, Symptoms()).kind == "cerrar"
+    assert script.next_action(a_punto_de_cerrar,
+                              Symptoms(mobility="limitada_esperada"),
+                              progreso=True).kind != "cerrar"
+
+
+def test_la_salida_se_ofrece_una_sola_vez():
+    """Antes se repetía al turno siguiente con otra formulación.
+
+    Medido en una llamada real: "le noto que le cuesta contestarme" y, al turno
+    siguiente, "veo que no nos estamos entendiendo" — a un paciente que estaba
+    contestando todas las preguntas. Es el mismo interrogatorio del que la oferta
+    pretende sacar al agente.
+    """
+    ofrecida = CallState(phase=Phase.TAMIZAJE, slot_actual="dolor",
+                         sin_progreso=script.SIN_PROGRESO_OFRECER_SALIDA + 1,
+                         salida_ofrecida=True)
+    assert script.next_action(ofrecida, Symptoms()).kind != "ofrecer_salida"
+
+
+def test_emitir_la_oferta_deja_la_llamada_esperando_su_respuesta():
+    estado = CallState(phase=Phase.TAMIZAJE, slot_actual="dolor",
+                       sin_progreso=script.SIN_PROGRESO_OFRECER_SALIDA)
+    nuevo = script.apply(estado, script.next_action(estado, Symptoms()), Symptoms(),
+                         progreso=False)
+    assert nuevo.espera_respuesta_salida and nuevo.salida_ofrecida
+    # Y la siguiente acción ya no la espera.
+    otra = script.apply(nuevo, Action(kind="preguntar", slot="fiebre"), Symptoms())
+    assert not otra.espera_respuesta_salida
+    assert otra.salida_ofrecida, "el hecho de haberla ofrecido no se olvida"
+
+
+def test_declinar_la_enfermera_retoma_el_slot_pendiente():
+    """El paciente dice que quiere seguir: se le hace caso.
+
+    Y el contador de atasco vuelve a cero — arrancar de nuevo con él en 4 lo
+    llevaría al cierre en el turno siguiente, que es justo lo que rechazó.
+    """
+    estado = CallState(phase=Phase.TAMIZAJE, slot_actual="herida",
+                       sin_progreso=4, salida_ofrecida=True,
+                       espera_respuesta_salida=True)
+    a = script.next_action(estado, Symptoms(), reanudar=True)
+
+    assert a.kind == "preguntar" and a.slot == "herida"
+    assert script.apply(estado, a, Symptoms(), progreso=False,
+                        reanudar=True).sin_progreso == 0
+
+
+def test_aceptar_la_enfermera_cierra_la_llamada():
+    """El orquestador lo traduce a `quiere_colgar`: la oferta se cumple."""
+    estado = CallState(phase=Phase.TAMIZAJE, slot_actual="herida",
+                       sin_progreso=4, salida_ofrecida=True,
+                       espera_respuesta_salida=True)
+    assert script.next_action(estado, Symptoms(),
+                              quiere_colgar=True).kind == "cerrar"
+
+
 def test_el_atasco_persistente_cierra_la_llamada():
     estado = CallState(phase=Phase.TAMIZAJE, slot_actual="dolor",
                        sin_progreso=script.SIN_PROGRESO_CERRAR)

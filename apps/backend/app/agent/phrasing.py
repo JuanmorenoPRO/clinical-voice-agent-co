@@ -453,6 +453,32 @@ def pregunta(slot: str, semilla: str, usadas: list[str] | None = None) -> str:
     return _rotar(PREGUNTAS[slot], semilla, usadas or [])
 
 
+def pregunta_emitida(kind: str, slot: str | None, intento: int,
+                     seguimiento_clase: str | None, *,
+                     semilla: str, usadas: list[str] | None = None) -> str | None:
+    """La pregunta CANÓNICA que corresponde a esta acción, o None si no la hay.
+
+    Es lo que el guion pide preguntar, no lo que acabó diciéndose: el redactor
+    puede reformular la frase —`composer.valida` solo le exige que termine en
+    interrogación—, así que la polaridad de la respuesta no se puede leer del
+    texto final. El orquestador guarda esto en `CallState.ultima_pregunta` y el
+    turno siguiente lo usa para saber qué significa un "sí" o un "no" pelados
+    (ver `nlu/polaridad.py`).
+
+    Devuelve None a propósito para `ofrecer_salida`, `confirmar` y `cerrar`: ahí
+    la última cosa que dijo el agente no pregunta por ningún slot, y un "no" no
+    habla de la herida ni de la fiebre. Ese era el fallo del turno 8 de la
+    llamada reportada.
+    """
+    if kind in ("preguntar", "sondear") and slot:
+        return pregunta(slot, semilla, usadas or [])
+    if kind == "repreguntar" and slot:
+        return repregunta(slot, intento)
+    if kind == "seguimiento" and seguimiento_clase:
+        return seguimiento(seguimiento_clase, semilla, usadas or [])
+    return None
+
+
 def repregunta(slot: str, intento: int) -> str:
     opciones = REPREGUNTAS[slot]
     return opciones[min(intento - 1, len(opciones) - 1)]

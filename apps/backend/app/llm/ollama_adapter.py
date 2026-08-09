@@ -450,7 +450,7 @@ class OllamaAdapter:
         paráfrasis rara que no está en ninguna lista.
         """
         intent = intent_rules.classify(utterance)
-        base = lexicon.extract(utterance, slot)
+        base = lexicon.extract(utterance, slot, question=question)
 
         # Sin slot que rellenar, o con el léxico ya resolviéndolo, no se gasta el
         # modelo: esta es la "ruta rápida" de 0 llamadas al LLM del presupuesto de
