@@ -29,6 +29,34 @@ def _ollama_vivo() -> bool:
 
 pytestmark = pytest.mark.skipif(not _ollama_vivo(), reason="Ollama no está levantado")
 
+@pytest.fixture(scope="module", autouse=True)
+def _modelo_local():
+    """Estos tests verifican el adaptador de Ollama contra el modelo LOCAL.
+
+    El `.env` puede apuntar al LLM de Groq (producción); aqui se fuerza el modelo
+    local y se limpia la cache de settings para que `OllamaAdapter()` no lea el
+    modelo de produccion.
+    """
+    import os
+
+    from app.config import get_settings
+
+    prev = {k: os.environ.get(k) for k in ("LLM_PROVIDER", "LLM_MODEL")}
+    os.environ["LLM_PROVIDER"] = "ollama"
+    os.environ["LLM_MODEL"] = "llama3.2:3b"
+    try:
+        get_settings.cache_clear()
+        yield
+    finally:
+        for k, v in prev.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        get_settings.cache_clear()
+
+
+
 PREGUNTAS = {
     "dolor": "¿Cómo ha estado el dolor, en una escala del 0 al 10?",
     "herida": "¿Cómo está la herida? ¿Hay enrojecimiento o secreción?",

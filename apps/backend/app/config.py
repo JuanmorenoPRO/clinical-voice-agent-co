@@ -35,19 +35,20 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/clinical.db"
 
     # --- LLM (ADR-002 / ADR-010) — compuerta G3 ---
-    # ollama -> llama3.2:3b, el modelo del agente. Está en la lista permitida.
-    # mock   -> extractor determinista, para tests sin Ollama levantado.
-    llm_provider: str = "ollama"
-    llm_model: str = "llama3.2:3b"
+    # groq  -> llama-3.3-70b-versatile (sucesor vigente de Llama 3.1 70B en Groq).
+    # ollama-> llama3.2:3b, el modelo local del agente. Está en la lista permitida.
+    # mock  -> extractor determinista, para tests sin Ollama levantado.
+    llm_provider: str = "groq"
+    llm_model: str = "llama-3.3-70b-versatile"
     ollama_host: str = "http://localhost:11434"
     # Si el modelo tarda más que esto, el turno se completa con el léxico
-    # determinista y se marca degradado. Medido: la extracción va en ~325 ms.
+    # determinista y se marca degradado. Medido en Ollama: la extracción iba en
+    # ~325 ms; en Groq (hosted) el margen sobra.
     llm_timeout_s: float = 2.5
     # La respuesta anclada al RAG procesa evidencia y genera dos frases: es la
     # ruta lenta del sistema y necesita más margen que la extracción de un slot.
     llm_reply_timeout_s: float = 12.0
-    # Mantiene el modelo en RAM entre turnos. Sin esto, el primer turno tras una
-    # pausa cuesta ~24 s de recarga.
+    # Mantiene el modelo en RAM entre turnos (solo Ollama). Groq lo ignora.
     llm_keep_alive: str = "60m"
 
     # --- Embeddings (ADR-011): bge-m3 servido por el mismo Ollama ---

@@ -1,8 +1,8 @@
 """Interfaz única del LLM (ADR-002).
 
 Nada fuera de este paquete conoce al proveedor concreto. El modelo se selecciona
-con LLM_PROVIDER; hoy es `ollama` (llama3.2:3b), el único de la lista permitida
-por la compuerta G3 que sigue siendo invocable — ver docs/spikes-7-agosto.md.
+con LLM_PROVIDER; hoy es `groq` (`llama-3.3-70b-versatile`), el sucesor vigente
+de Llama en Groq permitido por la compuerta G3 — ver docs/spikes-7-agosto.md.
 
 El contrato cambió respecto a la versión anterior. Antes había una única llamada
 `turn()` que extraía síntomas Y redactaba la respuesta. Ahora son dos operaciones
@@ -16,6 +16,7 @@ La redacción de las preguntas y los acuses empáticos NO pasa por aquí: sale d
 banco de plantillas, porque un 3B genera acuses inservibles ("agudo", "se siente
 mal") y cuesta ~11 tokens que en voz se notan.
 """
+
 from __future__ import annotations
 
 from typing import Protocol

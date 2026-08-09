@@ -59,7 +59,7 @@ Referencias de precio: LLM, Together.ai (precio público de un 3B servido); STT,
 
 ## Configuración con la que se midió
 
-- Modelo: `llama3.2:3b` vía Ollama (compuerta G3)
+- Modelo: `llama-3.3-70b-versatile` vía Groq (sucesor vigente de Llama, compuerta G3)
 - Embeddings: `bge-m3`, 1024 dimensiones
 - STT: `whisper-large-v3-turbo` (Groq) · TTS: Kokoro, voz `ef_dora`
 - VAD: 0.7 s de silencio para dar el turno por terminado

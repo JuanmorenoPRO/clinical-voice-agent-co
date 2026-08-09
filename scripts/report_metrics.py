@@ -165,7 +165,7 @@ def main() -> int:
         f"STT, {p['stt']['referencia']}; TTS, {p['tts']['referencia']}.\n")
 
     add("\n## Configuración con la que se midió\n")
-    add(f"- Modelo: `{s.llm_model}` vía Ollama (compuerta G3)")
+    add(f"- Modelo: `{s.llm_model}` ({s.llm_provider}) — compuerta G3")
     add(f"- Embeddings: `{s.embedding_model}`, {s.embedding_dim} dimensiones")
     add(f"- STT: `{s.stt_model}` (Groq) · TTS: Kokoro, voz `{s.tts_voice}`")
     add(f"- VAD: {s.vad_stop_secs} s de silencio para dar el turno por terminado")

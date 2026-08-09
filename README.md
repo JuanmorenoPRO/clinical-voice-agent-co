@@ -4,9 +4,10 @@ Tech Sphere Challenge 2026. Un agente que llama al paciente después de una ciru
 conversa en español colombiano, entiende lo que le cuenta y decide si hay que
 alertar a personal humano.
 
-**El modelo de lenguaje es `llama3.2:3b` vía Ollama**, uno de los cuatro permitidos
-por la compuerta G3. El porqué está en [§ El modelo](#el-modelo-y-por-qué-ese) —
-resumen: los dos permitidos que corren en la nube ya no se pueden invocar.
+**El modelo de lenguaje es el sucesor vigente de Llama en Groq** (`llama-3.3-70b-versatile`),
+uno de los cuatro puestos de la compuerta G3. El porqué está en [§ El modelo](#el-modelo-y-por-qué-ese) —
+resumen: los dos permitidos que corren en la nube ya no se pueden invocar, y la
+nota del reto permite usar el sucesor vigente de ese mismo proveedor.
 
 ---
 
@@ -16,8 +17,7 @@ resumen: los dos permitidos que corren en la nube ya no se pueden invocar.
 [Groq](https://console.groq.com) (un minuto, sin tarjeta). Es la única credencial.
 
 ```bash
-# 1. Modelos (3.2 GB). Se pueden lanzar en paralelo con el resto.
-ollama pull llama3.2:3b &
+# 1. Modelos embeddings (1.2 GB). El LLM vive en Groq; bge-m3 corre local.
 ollama pull bge-m3 &
 
 # 2. Código y dependencias
@@ -39,7 +39,7 @@ cp .env.example .env        # pega tu GROQ_API_KEY
 Abre <http://localhost:8000/docs>. Comprueba que todo está en pie:
 
 ```bash
-curl localhost:8000/health          # {"status":"ok","llm_provider":"ollama",…}
+curl localhost:8000/health          # {"status":"ok","llm_provider":"groq",…}
 curl localhost:8000/voice/status    # {"ready":true}
 ```
 
@@ -222,22 +222,27 @@ lado correcto donde equivocarse. El detalle está en
 
 ## El modelo, y por qué ese
 
-De los cuatro permitidos por G3, dos ya no se pueden invocar (verificado el 7 de
-agosto de 2026):
+De los cuatro puestos permitidos por G3, dos ya no se pueden invocar (verificado el
+7 de agosto de 2026). El puesto de "Llama 3.1 70B vía Groq" tampoco tiene ya modelo
+de esa familia: Groq lo decomisionó en 2025 y apaga `llama-3.3-70b-versatile` el
+16-ago-2026, así que se usa el sucesor vigente que la nota del reto permite
+(lo más reciente de **Llama** disponible en Groq):
 
 | Modelo permitido | Estado |
 |---|---|
 | Google Gemini 1.5 Flash | Retirado; la familia 1.5 devuelve 404 |
-| Llama 3.1 70B vía Groq | Decomisionado el 24-ene-2025 |
-| **Llama 3.2 (1B/3B) local** | ✅ Vivo en Ollama |
+| Llama 3.1 70B / 3.3 70B vía Groq | Decomisionado / apagado el 16-ago-2026 |
+| **Llama vigente en Groq** (`llama-3.3-70b-versatile` hoy, Llama 4 tras el apagado) | ✅ **Modelo del agente** |
+| Llama 3.2 (1B/3B) local | ✅ Vivo en Ollama (alternativa) |
 | Phi-3.5 Mini (3.8B) local | ✅ Vivo en Ollama |
 
-Se eligió **`llama3.2:3b`** por su español, bastante mejor que el de Phi-3.5 para
-hablar con un paciente colombiano. Se midió `llama3.2:1b` y se descartó: es ~100 ms
-más rápido pero falla la extracción y llega a truncar el JSON.
+Se eligió el **sucesor de Llama en Groq** (nube, sin que la máquina de la demo
+sostenga un modelo grande) frente a los dos locales. La alternativa local
+`llama3.2:3b` está aún documentada y se puede volver a elegir cambiando
+`LLM_PROVIDER=ollama` + `LLM_MODEL=llama3.2:3b`.
 
-Whisper de Groq se usa para el reconocimiento de voz. No compromete G3, que
-restringe el modelo *que razona*, no el que transcribe.
+Whisper de Groq se usa para el reconocimiento de voz y comparte la misma clave.
+No compromete G3, que restringe el modelo *que razona*, no el que transcribe.
 
 Todas las mediciones que sostienen estas decisiones —y las que las cambiaron sobre
 la marcha— están en [`docs/spikes-7-agosto.md`](docs/spikes-7-agosto.md).
