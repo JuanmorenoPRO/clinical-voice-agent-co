@@ -101,6 +101,14 @@ _UMBRAL_ECO = 0.6
 # Por debajo de esto no se juzga: "sí", "no", "un cuatro" son respuestas legítimas
 # del paciente que pueden solaparse por casualidad con el vocabulario del agente.
 _MIN_PALABRAS_ECO = 4
+# Palabras propias del paciente (no presentes en la frase del agente) a partir
+# de las cuales una transcripción que "parece eco" se trata como MEZCLA de
+# agente + paciente y se procesa entera. Sin micrófono con AEC, interrumpir al
+# agente produce exactamente eso: su frase y la del paciente revueltas, y el
+# umbral de solapamiento solo descartaba al paciente — que es el fallo terminal
+# (escalera de silencios → cuelgue), mientras que dejar pasar un eco mutado es
+# recuperable (una respuesta rara y la llamada sigue).
+_MIN_PALABRAS_RESIDUO = 3
 
 
 def es_eco(transcripcion: str, ultima_respuesta: str,
@@ -130,7 +138,15 @@ def es_eco(transcripcion: str, ultima_respuesta: str,
     agente = set(lexicon.normalize(ultima_respuesta).split())
     if not agente:
         return False
-    return len(dichas & agente) / len(dichas) >= _UMBRAL_ECO
+    if len(dichas & agente) / len(dichas) < _UMBRAL_ECO:
+        return False
+    # Parece eco, PERO si el paciente aportó vocabulario propio sustancial es
+    # una mezcla de las dos voces (barge-in sin AEC): se procesa la
+    # transcripción original completa. Entera y no el residuo, porque restarle
+    # las palabras del agente se comería negaciones ("no" casi siempre está en
+    # la frase del agente) y `lexicon.parte_declarativa` ya sabe descartar los
+    # fragmentos de pregunta que no van en primera persona.
+    return len(dichas - agente) < _MIN_PALABRAS_RESIDUO
 
 
 # Ritmo de habla de Piper (es, con `length_scale=1.08`), para estimar cuántas
@@ -575,6 +591,9 @@ class ClinicalProcessor(FrameProcessor):
                 # dejar hablar a nadie. Se descarta y se deja rastro, porque desde
                 # fuera un eco se ve igual que un paciente que repite lo que oye.
                 logger.warning(f"[voz] descartado, es el eco del propio agente: {text!r}")
+                emit(VoiceEvent.ECHO_DISCARDED,
+                     conversation_id=self._conversation_id,
+                     phase=self._ultimo_phase, slot=self._ultimo_slot)
                 self._armar_vigilancia()
                 return
             if self._agente_hablando and intent_nlu.classify(text) == "ininteligible":

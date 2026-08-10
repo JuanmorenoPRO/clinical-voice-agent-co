@@ -766,6 +766,23 @@ def test_un_fragmento_corto_de_eco_no_interrumpe():
     assert not es_eco("sí sí tuve fiebre", pregunta, min_palabras=2)
 
 
+def test_la_mezcla_de_voces_no_se_descarta_como_eco():
+    """Sin AEC, interrumpir al agente produce una transcripción con las DOS
+    voces revueltas: el vocabulario del agente domina y el umbral de
+    solapamiento descartaba al paciente entero — de ahí a la escalera de
+    silencios y al cuelgue. Si hay residuo propio sustancial, es mezcla y se
+    procesa; el eco puro (residuo ~0) se sigue descartando."""
+    from app.voice.pipeline import es_eco
+
+    pregunta = "¿Ha tenido fiebre o calentura estos días?"
+    # Mezcla: la frase del agente + un "sí me duele" del paciente encima.
+    assert not es_eco("ha tenido fiebre o calentura estos días sí me duele",
+                      pregunta, min_palabras=2)
+    # Eco puro, aunque el STT mute una palabra: se descarta como siempre.
+    assert es_eco("ha tenido fiebre o calentura estos días", pregunta,
+                  min_palabras=2)
+
+
 def test_con_el_agente_callado_no_hay_interrupcion():
     import asyncio
 

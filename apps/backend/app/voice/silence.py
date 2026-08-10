@@ -141,6 +141,11 @@ class VoiceEvent(StrEnum):
     AGENT_INTERRUPTED = "AGENT_INTERRUPTED"
     CONNECTION_LOST = "CONNECTION_LOST"
     SILENCE_PROMPT_TRIGGERED = "SILENCE_PROMPT_TRIGGERED"
+    # Una transcripción se descartó por ser el eco del propio agente. Desde
+    # fuera un descarte de estos es invisible —el paciente habló y "no pasó
+    # nada"— y si el filtro se equivoca, es la antesala de la escalera de
+    # silencios y del cuelgue: tiene que quedar rastro auditable.
+    ECHO_DISCARDED = "ECHO_DISCARDED"
 
 
 def emit(
