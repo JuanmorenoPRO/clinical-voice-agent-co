@@ -76,6 +76,7 @@ from pipecat.workers.runner import WorkerRunner
 from ..agent import phrasing
 from ..agent.orchestrator import abandon_conversation, ensure_conversation, process_turn
 from ..agent.phrasing import APERTURA
+from ..nlu import intent as intent_nlu
 from ..nlu import lexicon
 from ..schemas import TurnResponse
 from ..config import get_settings
@@ -130,6 +131,31 @@ def es_eco(transcripcion: str, ultima_respuesta: str,
     if not agente:
         return False
     return len(dichas & agente) / len(dichas) >= _UMBRAL_ECO
+
+
+# Ritmo de habla de Piper (es, con `length_scale=1.08`), para estimar cuántas
+# palabras alcanzaron a sonar antes de una interrupción. Pipecat no reporta
+# upstream el texto reproducido (`TTSTextFrame` muere en el transporte de
+# salida), así que se estima por tiempo. Calibrable con `scripts/spike_voice.py`.
+_PALABRAS_POR_SEGUNDO = 2.6
+# El margen SUMA a propósito: cubre el audio en vuelo (cola del transporte,
+# jitter del navegador) y errar por exceso solo mantiene la protección anti-eco;
+# errar por defecto reintroduciría los falsos positivos que esto arregla.
+_MARGEN_PALABRAS = 4
+
+
+def prefijo_pronunciado(texto: str, segundos: float) -> str:
+    """Las palabras de `texto` que alcanzaron a sonar en `segundos` de TTS.
+
+    Tras un barge-in, `_ultima_respuesta` guardaba la frase COMPLETA aunque el
+    paciente la cortara en la palabra tres: el anti-eco comparaba los turnos
+    siguientes contra vocabulario que jamás sonó y los descartaba como eco —
+    y de ahí a la escalera de silencios y al cuelgue.
+    """
+    if segundos <= 0:
+        return ""
+    n = int(segundos * _PALABRAS_POR_SEGUNDO) + _MARGEN_PALABRAS
+    return " ".join(texto.split()[:n])
 
 
 class ClinicalProcessor(FrameProcessor):
@@ -207,6 +233,13 @@ class ClinicalProcessor(FrameProcessor):
         # Lo último que dijo el agente, para descartar su propio eco.
         self._ultima_respuesta = ""
         self._deadline = 0.0
+        # Cuándo arrancó el TTS en curso, para estimar cuánto texto llegó a
+        # sonar si el paciente interrumpe (ver `prefijo_pronunciado`).
+        self._t_bot_arranco: float | None = None
+        # El paciente cortó al agente a media frase: la pregunta persistida no
+        # se oyó entera. Viaja con el turno (kwarg) hasta el orquestador para
+        # que un "sí/no" pelado no se lea contra una pregunta no escuchada.
+        self._pregunta_interrumpida = False
 
     # --- vigilancia de inactividad -------------------------------------------
     # El VAD detecta cuándo el paciente DEJA de hablar, pero no tiene nada que
@@ -354,7 +387,22 @@ class ClinicalProcessor(FrameProcessor):
         if self._turnos_en_vuelo == 0:
             self._procesando = False
 
-    def _run_turn(self, text: str) -> TurnResponse:
+    def _registrar_interrupcion(self) -> None:
+        """El paciente cortó al agente: deja el estado acorde a lo que SONÓ.
+
+        Idempotente (la interrupción confirmada y el `BotStoppedSpeakingFrame`
+        que provoca pueden llegar los dos): la primera llamada trunca
+        `_ultima_respuesta` a lo que alcanzó a pronunciarse y marca el turno
+        que viene como `pregunta_interrumpida`; las siguientes no hacen nada.
+        """
+        if self._t_bot_arranco is None:
+            return
+        segundos = time.monotonic() - self._t_bot_arranco
+        self._t_bot_arranco = None
+        self._pregunta_interrumpida = True
+        self._ultima_respuesta = prefijo_pronunciado(self._ultima_respuesta, segundos)
+
+    def _run_turn(self, text: str, interrumpida: bool = False) -> TurnResponse:
         session = SessionLocal()
         try:
             # El id se fija ANTES de procesar. Si el turno revienta a mitad
@@ -369,6 +417,7 @@ class ClinicalProcessor(FrameProcessor):
                 text=text,
                 conversation_id=self._conversation_id,
                 patient_id=self._patient_id,
+                pregunta_interrumpida=interrumpida,
             )
             self._conversation_id = result.conversation_id
             self._ultimo_phase = result.phase
@@ -389,7 +438,7 @@ class ClinicalProcessor(FrameProcessor):
                and time.monotonic() - t0 < max_s):
             await asyncio.sleep(0.1)
 
-    async def _turno_y_responder(self, text: str) -> None:
+    async def _turno_y_responder(self, text: str, interrumpida: bool = False) -> None:
         """Procesa un turno del paciente y pone voz a la respuesta.
 
         Corre como tarea propia (no inline en `process_frame`) y serializada por
@@ -401,7 +450,7 @@ class ClinicalProcessor(FrameProcessor):
         try:
             async with self._turno_lock:
                 try:
-                    result = await asyncio.to_thread(self._run_turn, text)
+                    result = await asyncio.to_thread(self._run_turn, text, interrumpida)
                 finally:
                     self._turno_termina()
                 if self._terminado:
@@ -444,6 +493,7 @@ class ClinicalProcessor(FrameProcessor):
             # Mientras suena la pregunta el reloj no corre. Contar desde antes lo
             # haría vencer con el paciente todavía escuchando.
             self._agente_hablando = True
+            self._t_bot_arranco = time.monotonic()
             self._cancelar_vigilancia()
         elif isinstance(frame, BotStoppedSpeakingFrame):
             # OJO: este frame llega por DOS motivos distintos y solo uno de ellos
@@ -455,7 +505,11 @@ class ClinicalProcessor(FrameProcessor):
                 emit(VoiceEvent.AGENT_INTERRUPTED,
                      conversation_id=self._conversation_id,
                      phase=self._ultimo_phase, slot=self._ultimo_slot)
+                # Cubre el modo BARGE_IN_VAD, donde el corte lo dispara el
+                # `UserTurnProcessor` sin pasar por la rama de transcripción.
+                self._registrar_interrupcion()
             self._agente_hablando = False
+            self._t_bot_arranco = None    # terminó de hablar: sonó entera
             self._armar_vigilancia()      # `_puede_vigilar` filtra el caso malo
         elif isinstance(frame, EndFrame):
             self._terminado = True
@@ -523,6 +577,14 @@ class ClinicalProcessor(FrameProcessor):
                 logger.warning(f"[voz] descartado, es el eco del propio agente: {text!r}")
                 self._armar_vigilancia()
                 return
+            if self._agente_hablando and intent_nlu.classify(text) == "ininteligible":
+                # Compuerta de ruido del barge-in: una tos o un carraspeo que el
+                # STT transcribe como basura no puede cortarle el TTS al agente
+                # ni convertirse en turno. Con el agente callado sí baja al
+                # orquestador, que ya sabe contestar "no le escuché bien".
+                logger.info(f"[voz] ruido mientras el agente habla, se ignora: {text!r}")
+                self._armar_vigilancia()
+                return
             logger.info(f"[voz] paciente: {text}")
             self._cancelar_vigilancia()
             self._escalera.reset()        # turno real: episodio de silencio nuevo
@@ -539,11 +601,16 @@ class ClinicalProcessor(FrameProcessor):
                 emit(VoiceEvent.AGENT_INTERRUPTED,
                      conversation_id=self._conversation_id,
                      phase=self._ultimo_phase, slot=self._ultimo_slot)
+                self._registrar_interrupcion()
                 await self.broadcast_interruption()
             # El orquestador toca la base de datos: corre en tarea propia (ver
             # `_turno_y_responder`) para sobrevivir a las interrupciones y no
             # bloquear el event loop del pipeline de audio.
-            self._tarea_turno = asyncio.create_task(self._turno_y_responder(text))
+            # La marca de interrupción se consume AQUÍ, no dentro de la tarea:
+            # pertenece a este turno y a ningún otro.
+            interrumpida, self._pregunta_interrumpida = self._pregunta_interrumpida, False
+            self._tarea_turno = asyncio.create_task(
+                self._turno_y_responder(text, interrumpida))
             return
 
         await self.push_frame(frame, direction)

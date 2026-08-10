@@ -270,6 +270,7 @@ async def process_turn_async(
     text: str,
     conversation_id: str | None = None,
     patient_id: str | None = None,
+    pregunta_interrumpida: bool = False,
 ) -> TurnResponse:
     started = time.perf_counter()
     conv = _get_or_create_conversation(session, conversation_id, patient_id)
@@ -294,6 +295,13 @@ async def process_turn_async(
     # dos rutas: es también el contexto que se le da al LLM.
     pregunta_previa = estado.ultima_pregunta or (
         prior[-1].final_response if prior else phrasing.APERTURA)
+    # El paciente cortó la pregunta a media frase (barge-in): el estado la da
+    # por hecha —se persiste antes de sonar el TTS— pero él no llegó a oírla
+    # entera. Un "sí" o un "no" pelados NO pueden leerse contra ella
+    # (`polaridad.de("")` devuelve None), así que el slot queda abierto y el
+    # guion repregunta por su vía normal, que es lo honesto.
+    if pregunta_interrumpida:
+        pregunta_previa = ""
 
     # El paciente no dijo NADA. Se cortocircuita el LLM igual que en la ruta de
     # emergencia y por la misma razón de fondo: no hay nada que extraer del
@@ -378,7 +386,9 @@ async def process_turn_async(
     # llamada real, dos ofertas seguidas a alguien que estaba contestando todo, y
     # su "No." ignorado.
     acepta_salida = declina_salida = False
-    if estado.espera_respuesta_salida and not silencio:
+    # `not pregunta_interrumpida`: si el paciente cortó la oferta a media frase,
+    # su "no" no puede consumirse contra una oferta que no llegó a oír entera.
+    if estado.espera_respuesta_salida and not silencio and not pregunta_interrumpida:
         polar = lexicon.respuesta_polar(text)
         acepta_salida = polar is True or intent_nlu.contiene_despedida(text)
         declina_salida = polar is False
@@ -1086,7 +1096,9 @@ def _crear_alerta_procedimiento(
 def process_turn(
     session: Session, *, text: str,
     conversation_id: str | None = None, patient_id: str | None = None,
+    pregunta_interrumpida: bool = False,
 ) -> TurnResponse:
     """Envoltorio síncrono para el endpoint de texto y el framework de evaluación."""
     return asyncio.run(process_turn_async(
-        session, text=text, conversation_id=conversation_id, patient_id=patient_id))
+        session, text=text, conversation_id=conversation_id, patient_id=patient_id,
+        pregunta_interrumpida=pregunta_interrumpida))

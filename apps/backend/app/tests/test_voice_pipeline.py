@@ -593,7 +593,7 @@ def test_el_gentle_suena_local_sin_crear_turno():
     async def escenario():
         p = _procesador(timeout=0.05, gentle=1.0)
 
-        def _no_debe_llamarse(text):  # noqa: ARG001
+        def _no_debe_llamarse(text, interrumpida=False):  # noqa: ARG001
             raise AssertionError("el gentle no puede tocar el orquestador")
 
         p._run_turn = _no_debe_llamarse
@@ -622,7 +622,7 @@ def test_tras_el_gentle_el_siguiente_vencimiento_inyecta_silencio():
         p = _procesador(timeout=0.05, gentle=0.05)
         inyectados = []
 
-        def _stub(text):
+        def _stub(text, interrumpida=False):  # noqa: ARG001
             inyectados.append(text)
             return _respuesta("¿Sigue ahí? No le escuché nada.")
 
@@ -651,7 +651,7 @@ def test_una_respuesta_real_reinicia_la_escalera():
 
     async def escenario():
         p = _procesador(timeout=30, gentle=30)
-        p._run_turn = lambda text: _respuesta()
+        p._run_turn = lambda text, interrumpida=False: _respuesta()
         await _meter(p, BotStoppedSpeakingFrame())
         assert p._escalera.al_vencer() is Escalon.GENTLE   # noqa: SLF001
 
@@ -675,7 +675,7 @@ def test_el_sondeo_se_descarta_si_el_paciente_arranca_mientras_se_generaba():
     async def escenario():
         p = _procesador(timeout=0.05, gentle=0)
 
-        def _stub(text):  # noqa: ARG001
+        def _stub(text, interrumpida=False):  # noqa: ARG001
             p._paciente_hablando = True                # arrancó a hablar justo ahora
             return _respuesta("¿Sigue ahí? No le escuché nada.")
 
@@ -705,7 +705,7 @@ def test_una_transcripcion_valida_interrumpe_al_agente():
 
     async def escenario():
         p = _procesador()
-        p._run_turn = lambda text: _respuesta()
+        p._run_turn = lambda text, interrumpida=False: _respuesta()
         visto = {}
 
         async def _broadcast():
@@ -773,7 +773,7 @@ def test_con_el_agente_callado_no_hay_interrupcion():
 
     async def escenario():
         p = _procesador()
-        p._run_turn = lambda text: _respuesta()
+        p._run_turn = lambda text, interrumpida=False: _respuesta()
 
         async def _no_debe_interrumpir():
             raise AssertionError("no había a quién interrumpir")
@@ -799,7 +799,7 @@ def test_el_turno_corre_en_tarea_propia():
     async def escenario():
         p = _procesador()
 
-        def _lento(text):  # noqa: ARG001
+        def _lento(text, interrumpida=False):  # noqa: ARG001
             _time.sleep(0.1)
             return _respuesta()
 
@@ -810,6 +810,100 @@ def test_el_turno_corre_en_tarea_propia():
         assert not p._tarea_turno.done()               # noqa: SLF001
         await p._tarea_turno                           # noqa: SLF001
         assert any(isinstance(f, TTSSpeakFrame) for f in p.empujados)
+
+    asyncio.run(escenario())
+
+
+# --- lo que el paciente alcanzó a oír antes de interrumpir -----------------------
+
+
+def test_prefijo_pronunciado():
+    from app.voice.pipeline import prefijo_pronunciado
+
+    texto = "uno dos tres cuatro cinco seis siete ocho nueve diez once doce"
+    # El TTS nunca llegó a arrancar: no sonó nada.
+    assert prefijo_pronunciado(texto, 0) == ""
+    assert prefijo_pronunciado(texto, -1) == ""
+    # ~1 s de audio: 2.6 palabras/s + margen de 4 por el audio en vuelo.
+    assert prefijo_pronunciado(texto, 1.0) == "uno dos tres cuatro cinco seis"
+    # Sonó de sobra: se conserva entero.
+    assert prefijo_pronunciado(texto, 60) == texto
+
+
+def test_tras_un_corte_el_anti_eco_solo_ve_lo_pronunciado():
+    """Bug D: `_ultima_respuesta` guardaba la frase COMPLETA aunque el barge-in
+    la cortara en la palabra cinco. El anti-eco descartaba entonces respuestas
+    del paciente que solapaban con la COLA nunca pronunciada."""
+    from app.voice.pipeline import es_eco, prefijo_pronunciado
+
+    pregunta = ("Listo, tomo nota. ¿Ha notado la herida enrojecida, inflamada "
+                "o con alguna secreción o líquido saliendo de ella?")
+    # Contra el texto completo, la respuesta que repite la cola se descartaría...
+    assert es_eco("alguna secreción o líquido saliendo", pregunta, min_palabras=2)
+    # ...contra lo que de verdad sonó (corte a ~0.5 s), se procesa como turno.
+    cortada = prefijo_pronunciado(pregunta, 0.5)
+    assert not es_eco("alguna secreción o líquido saliendo", cortada, min_palabras=2)
+
+
+def test_el_barge_in_marca_el_turno_como_interrumpido():
+    """La marca viaja SOLO con el turno que interrumpió: el orquestador no puede
+    leer un "sí/no" pelado contra una pregunta que el paciente no oyó entera,
+    pero el turno siguiente vuelve a la normalidad."""
+    import asyncio
+
+    from pipecat.frames.frames import BotStartedSpeakingFrame, BotStoppedSpeakingFrame
+
+    async def escenario():
+        p = _procesador()
+        marcas = []
+
+        def _stub(text, interrumpida=False):  # noqa: ARG001
+            marcas.append(interrumpida)
+            return _respuesta()
+
+        p._run_turn = _stub
+
+        async def _broadcast():
+            pass
+
+        p.broadcast_interruption = _broadcast
+
+        completa = "¿Ha podido levantarse y caminar sin problema por la casa?"
+        p._ultima_respuesta = completa
+        await _meter(p, BotStartedSpeakingFrame())
+        await _meter(p, _transcripcion("espere le pregunto a mi hija"))
+        # El anti-eco quedó comparando contra lo poco que llegó a sonar...
+        assert p._ultima_respuesta != completa         # noqa: SLF001
+        await p._tarea_turno                           # noqa: SLF001
+        # ...y el turno bajó al orquestador marcado como interrumpido.
+        assert marcas == [True]
+
+        # Turno siguiente, con el agente ya callado: sin marca.
+        await _meter(p, BotStoppedSpeakingFrame())
+        await _meter(p, _transcripcion("sí ha caminado sin problema"))
+        await p._tarea_turno                           # noqa: SLF001
+        assert marcas == [True, False]
+
+    asyncio.run(escenario())
+
+
+def test_una_tos_no_corta_el_tts():
+    """Compuerta de ruido del barge-in: una transcripción de basura fonotáctica
+    mientras el agente habla no interrumpe ni se convierte en turno."""
+    import asyncio
+
+    from pipecat.frames.frames import BotStartedSpeakingFrame
+
+    async def escenario():
+        p = _procesador()
+
+        async def _no_debe_interrumpir():
+            raise AssertionError("el ruido interrumpió al agente")
+
+        p.broadcast_interruption = _no_debe_interrumpir
+        await _meter(p, BotStartedSpeakingFrame())
+        await _meter(p, _transcripcion("asdkjh"))
+        assert p._tarea_turno is None                  # noqa: SLF001
 
     asyncio.run(escenario())
 
@@ -839,7 +933,8 @@ def test_un_turno_fallido_no_pierde_la_conversacion(monkeypatch):
 
     recibidos = []
 
-    def _explota(session, *, text, conversation_id, patient_id):
+    def _explota(session, *, text, conversation_id, patient_id,
+                 pregunta_interrumpida=False):
         recibidos.append(conversation_id)
         raise RuntimeError("groq caído")
 
@@ -857,7 +952,8 @@ def test_un_turno_fallido_no_pierde_la_conversacion(monkeypatch):
                    and f.text == phrasing.FALLO_TECNICO for f in p.empujados)
 
         # El segundo turno reutiliza la MISMA conversación.
-        def _sano(session, *, text, conversation_id, patient_id):
+        def _sano(session, *, text, conversation_id, patient_id,
+                  pregunta_interrumpida=False):
             recibidos.append(conversation_id)
             return _respuesta()
 
