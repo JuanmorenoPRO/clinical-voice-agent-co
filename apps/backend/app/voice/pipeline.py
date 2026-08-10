@@ -90,6 +90,8 @@ _PROMPT_STT = (
     "Términos frecuentes: dolor, fiebre, herida quirúrgica, secreción, purulenta, "
     "eritema, movilidad, apetito, sueño, cicatriz, puntos, analgésico."
 )
+# Prefijo para detectar cuando Whisper alucina _PROMPT_STT verbatim (caso exacto).
+_PREFIJO_PROMPT_STT = _PROMPT_STT[:35]
 
 
 # Solapamiento de palabras a partir del cual una transcripción se considera eco de
@@ -580,6 +582,13 @@ class ClinicalProcessor(FrameProcessor):
 
         if isinstance(frame, TranscriptionFrame) and frame.text and frame.text.strip():
             text = frame.text.strip()
+            # Whisper alucina _PROMPT_STT cuando recibe silencio o ruido: devuelve
+            # el initial_prompt como si fuera una transcripción real. Se detecta
+            # por prefijo exacto y por solapamiento de vocabulario (para fragmentos).
+            if text.startswith(_PREFIJO_PROMPT_STT) or es_eco(text, _PROMPT_STT, min_palabras=4):
+                logger.warning("[voz] descartado: Whisper alucinó el prompt STT: %r", text[:80])
+                self._armar_vigilancia()
+                return
             # Mientras el agente habla el filtro de eco se endurece: un
             # fragmento corto de su propia frase no puede cortarle el TTS.
             min_palabras = (self._min_palabras_eco_hablando if self._agente_hablando
