@@ -1,5 +1,12 @@
 # Arquitectura — Agente de Voz para Seguimiento Post-Operatorio
 
+> ⚠️ **Documento histórico.** Es el borrador escrito *antes* de recibir los materiales
+> del reto, y su diagrama **no corresponde a lo implementado** (aquí hay PostgreSQL +
+> pgvector, consola Next.js y Databricks; el sistema real usa SQLite, ChromaDB y HTML
+> estático). La arquitectura vigente está en
+> [`../docs/arquitectura.md`](../docs/arquitectura.md). Se conserva porque documenta de
+> dónde salieron las decisiones.
+
 | Campo | Valor |
 |---|---|
 | Estado | Borrador — a la espera de materiales oficiales (⏳ 7 de agosto) |

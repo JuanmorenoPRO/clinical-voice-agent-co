@@ -118,8 +118,12 @@ ruidosa, que es justo donde el modelo se gana el sueldo.
 | Groq `whisper-large-v3-turbo` | ~500 |
 | Léxico + intención + decisión | <5 |
 | Extracción con el LLM (0,53× de media) | ~170 |
-| Kokoro TTS (0 si la frase está cacheada) | 0–250 |
+| TTS local, medido con Kokoro (0 si la frase está cacheada) | 0–250 |
 | **Total típico** | **~1.400** |
+
+El TTS por defecto es hoy **Piper** (`es_MX-claude-high`), que resultó ~5× más
+rápido en caliente que Kokoro; Kokoro sigue disponible con `TTS_PROVIDER=kokoro` y
+es el que midió `spike_voice.py`, así que esa fila es un techo, no el caso típico.
 
 Los 700 ms del VAD son la mitad del presupuesto y son una decisión, no una
 limitación: bajarlo a 0,4 s recortaría un tercio a costa de cortar a quien hace
@@ -320,10 +324,14 @@ apps/backend/app/
   decision/     reglas puras + umbrales calibrados contra el ground truth
   rag/          ChromaDB, embeddings, ingesta en caliente, recuperación con citas
   llm/          adaptador de Ollama y esquemas de extracción restringida
-  voice/        pipeline Pipecat (Groq STT → orquestador → Kokoro TTS)
+  voice/        pipeline Pipecat (Groq STT → orquestador → Piper TTS)
 scripts/        construcción del índice, carga del dataset, métricas, spikes
 docs/           calibración del triaje, mediciones, decisiones de arquitectura
 ```
+
+Los diagramas de la arquitectura y del flujo de decisión —el entregable 02, con
+cada caja anotada con el archivo que la implementa— están en
+[`docs/arquitectura.md`](docs/arquitectura.md).
 
 ## Licencia
 
