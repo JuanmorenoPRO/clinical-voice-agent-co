@@ -85,8 +85,17 @@ from .silence import Escalon, SilenceConfig, SilenceLadder, VoiceEvent, emit
 
 # Sesga la transcripción hacia el dominio clínico. Es un truco barato y efectivo:
 # sin él, Whisper convierte "eritema" en "he tema" y "purulenta" en "prudente".
+#
+# Las dos preguntas de ejemplo no son relleno: el prompt inicial es lo que más
+# influye en la PUNTUACIÓN que Whisper devuelve, y sin un solo `¿?` delante casi
+# nunca los pone. Sin signos, `nlu/intent.py` pierde dos de cada tres preguntas
+# del paciente y el agente sigue con el guion como si no hubiera oído nada. El
+# arreglo de verdad es determinista y vive allí; esto sólo reduce el problema en
+# el origen.
 _PROMPT_STT = (
     "Llamada de seguimiento postoperatorio con un paciente colombiano. "
+    "El paciente responde y a veces pregunta: «¿cuándo me puedo bañar?», "
+    "«¿esto es normal?». "
     "Términos frecuentes: dolor, fiebre, herida quirúrgica, secreción, purulenta, "
     "eritema, movilidad, apetito, sueño, cicatriz, puntos, analgésico."
 )

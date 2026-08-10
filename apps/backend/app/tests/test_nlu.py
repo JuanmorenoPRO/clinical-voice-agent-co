@@ -1135,6 +1135,65 @@ def test_la_despedida_con_tengo_que_colgar_no_es_pregunta():
     assert intent.classify("eso es todo, tengo que colgar") == "despedida"
 
 
+# --- la pregunta que no arranca ninguna frase -------------------------------------
+# `_PREGUNTA` mira el inicio del TURNO y `_cola_interrogativa` el de la ÚLTIMA
+# FRASE. Fuera de esas dos posiciones, sin `¿?`, la pregunta era invisible: dos de
+# cada tres del corpus se perdían (ver test_calibracion_intent.py). Los agregados
+# de allí protegen la tendencia; estos casos protegen el razonamiento.
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # El turno reportado en una llamada real: la pregunta pegada a un
+        # sustantivo, sin signos y sin abrir frase. El agente la ignoró y siguió
+        # con la pregunta de cierre del guion.
+        "No, está bien. Solo la diarrea que puedo tomar para la diarrea.",
+        # Interrogativa indirecta: "no sé" NO la anula, es la forma más común de
+        # preguntar algo en voz.
+        "Pero no se que puedo tomar para la diarrea",
+        "no se que puedo hacer con la herida",
+        "como debo curar la herida",
+        "cuanto tiempo tengo que esperar para bañarme",
+        # A: le pide al agente una opinión o un dato que él tendría.
+        "usted cree que eso es muy importante",
+        "usted sabe si eso de la herida se demora mucho en sanar",
+        # C: el miedo dicho como pregunta retórica.
+        "no sera que deberia comer menos por la operacion",
+        "no vaya a ser que se me abra algo doctor",
+        # G: petición explícita de información.
+        "me puede confirmar que todo esta bien",
+    ],
+)
+def test_la_pregunta_sin_signos_en_mitad_del_turno_se_reconoce(texto):
+    assert intent.classify(texto) == "pregunta_clinica"
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # "no sé" SIN modal de permiso: el paciente no tiene el dato, no pregunta.
+        # Es la discriminación fina de la familia y la que más fácil se rompe.
+        "la verdad no se cuanto me marco el termometro",
+        "no se que decirle doctora",
+        "no se, mas o menos un 4",
+        # Factivo: el paciente afirma saberlo.
+        "ya se que tengo que cuidarme",
+        "uno ya sabe que despues de una operacion asi hay que tener cuidado",
+        # Discurso referido: el "que" es complementizador, no interrogativo.
+        "me dijeron que puedo caminar",
+        "el doctor me dijo que puedo comer normal",
+        "me explicaron que tengo que cambiar el aposito",
+        # Relativo libre: "lo que", no "qué".
+        "lo que puedo comer me cae mal",
+        # Cortesía: la charla manda sobre la familia A.
+        "usted cree que va a llover hoy",
+    ],
+)
+def test_la_pregunta_sin_signos_no_atrapa_respuestas(texto):
+    assert intent.classify(texto) != "pregunta_clinica"
+
+
 # --- reclamo: "no me respondiste la pregunta" ------------------------------------
 
 

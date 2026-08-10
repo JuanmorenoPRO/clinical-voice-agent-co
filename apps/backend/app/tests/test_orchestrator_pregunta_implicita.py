@@ -56,6 +56,26 @@ def test_la_pregunta_sin_signo_pegada_a_la_respuesta_se_escucha(session):
     assert turno.intent == "pregunta_clinica"
 
 
+def test_la_pregunta_sin_signo_en_mitad_del_turno_se_escucha(session):
+    """El turno reportado, tal cual llegó por voz.
+
+    Aquí la pregunta ni abre el turno ni abre la última frase: va pegada a un
+    sustantivo ("solo la diarrea que puedo tomar..."), que es donde ninguna de las
+    dos ramas ancladas de `_PREGUNTA` podía verla. El agente respondió con la
+    pregunta de cierre del guion, como si no hubiera oído nada.
+    """
+    r = process_turn(
+        session, text="No, está bien. Solo la diarrea que puedo tomar para la diarrea."
+    )
+
+    turno = session.query(Turn).filter(Turn.conversation_id == r.conversation_id
+                                       ).order_by(Turn.created_at).all()[-1]
+    assert turno.intent == "pregunta_clinica"
+    # Sin corpus RAG en este test, lo correcto es abstenerse — pero abstenerse es
+    # haber oído la pregunta, que es justo lo que no pasaba.
+    assert "no tengo informaci" in r.response.lower()
+
+
 def test_la_abstencion_no_encadena_una_segunda_transicion(session):
     """Bug real: "Sobre eso no tengo información...  Voy a continuar entonces
     con las preguntas de su seguimiento. Un 4, ahí en la mitad. ¿Ha tenido

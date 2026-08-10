@@ -63,7 +63,7 @@ _ADMIN = re.compile(
     re.I,
 )
 
-# Los marcadores de pregunta se sacaron del análisis de los 1.687 turnos reales de
+# Los marcadores de pregunta se sacaron del análisis de los 2.071 turnos reales de
 # paciente del dataset. Una versión más laxa marcaba el 42% de los turnos como
 # pregunta clínica —"es normal después de la operación" y "cuando me muevo" son
 # afirmaciones, no preguntas— y eso habría disparado el RAG en casi cada turno.
@@ -200,6 +200,83 @@ def _cola_interrogativa(t: str) -> bool:
     if _VERBO_SLOT.match(ultima):
         return False
     return bool(_ARRANQUE_FRASE.match(ultima))
+
+
+# --- la pregunta que no arranca la frase --------------------------------------
+# `_cola_interrogativa` sólo ve la pregunta cuando abre la ÚLTIMA frase, y
+# `_PREGUNTA` cuando abre el turno. Fuera de esas dos posiciones, una pregunta sin
+# `¿?` es invisible. Medido sobre los 2.071 turnos del dataset: al quitarles los
+# signos, 433 preguntas clínicas —dos de cada tres— caen al default `respuesta`,
+# y ahí el RAG no se consulta nunca (ver el guard de `orchestrator.py`). Como
+# Whisper no devuelve signos, ése es el caso normal en voz, no el raro.
+#
+# Cuatro familias, elegidas midiendo una a una cuántas preguntas recuperan y
+# cuántas respuestas rompen. Las otras tres que aparecen en el corpus —"eso ya es
+# fiebre", "¿ya acabamos?", "¿fue el lunes o el martes?"— hoy rompen tantas
+# respuestas como preguntas recuperan y se quedan fuera a propósito: necesitan un
+# diseño propio, no un alternante más aquí.
+_WH = r"(?:qu[eé]|cu[aá]l(?:es)?|c[oó]mo|cu[aá]nt[oa]s?|d[oó]nde)"
+# Modal de PERMISO, y esto es lo que hace fina la discriminación de la familia D:
+# "no sé qué PUEDO TOMAR" pregunta, "no sé cuánto me MARCÓ el termómetro" es una
+# respuesta —el paciente no tiene el dato— y sin el modal no casa ninguna.
+_MODAL_PERMISO = (r"(?:puedo|podr[ií]a|podr[ée]|debo|deber[ií]a|tengo\s+que"
+                  r"|me\s+toca|hay\s+que|se\s+puede)")
+
+_PREGUNTA_SIN_SIGNOS = re.compile(
+    # A. le pide al agente una opinión o un dato que él tendría: "usted cree que
+    #    eso es importante", "usted sabe si la herida se demora en sanar". Es la
+    #    familia más numerosa del corpus con diferencia.
+    r"\b(?:usted\s+)?(?:cree|sabe|piensa|opina|considera|recomienda)\s+(?:que|si)\b"
+    # C. el miedo dicho como pregunta retórica: "no será que debería comer menos".
+    r"|\bno\s+(?:ser[ií]a|sera)\s+que\b|\bno\s+vaya\s+a\s+ser\b"
+    # G. petición explícita de información.
+    r"|\bme\s+(?:puede|podr[ií]a)\s+(?:decir|confirmar|explicar|aclarar)\b"
+    # D. interrogativa directa o indirecta en cualquier posición del turno: wh +
+    #    modal de permiso + infinitivo. El caso reportado ("solo la diarrea que
+    #    puedo tomar para la diarrea") vive aquí, pegado a un sustantivo, que es
+    #    donde ninguna de las dos ramas ancladas podía verlo. El lookbehind deja
+    #    fuera el relativo libre: "lo que puedo comer me cae mal" no pregunta nada.
+    rf"|(?<!lo\s)\b{_WH}\b(?:\s+\w+){{0,3}}?\s+{_MODAL_PERMISO}\b"
+    rf"\s+(?:\w+\s+){{0,2}}\w+(?:ar|er|ir)(?:me|se|lo|la|le)?\b",
+    re.I,
+)
+
+# Lo que precede al patrón y lo convierte en afirmación. Dos cosas distintas:
+# discurso referido ("me dijeron que puedo caminar") y factivo ("ya sé que tengo
+# que cuidarme", "uno ya sabe que eso es normal").
+#
+# Deliberadamente NO cubre el "no sé" pelado, aunque sea la tentación obvia: "no
+# sé qué puedo tomar" es una pregunta indirecta de verdad —la del turno 12 de la
+# llamada reportada— y bloquearla perdería justo el caso que motivó todo esto.
+# Los "no sé" que sí son respuesta ("no sé cuánto me marcó", "no sé qué decirle")
+# no llevan modal de permiso, así que no casan con la familia D y no hacen falta
+# aquí.
+_ANTES_AFIRMATIVO = re.compile(
+    r"\b(dij(?:o|eron)|dicen|dice|explic\w+|recomend\w+|mand\w+|indic\w+"
+    r"|sab[ií]a)\s+(?:me\s+)?$"
+    r"|\b(uno\s+)?ya\s+(lo\s+)?(s[eé]\s+)?$",
+    re.I,
+)
+
+
+def _pregunta_sin_signos(t: str) -> bool:
+    """¿El turno pregunta algo aunque la transcripción no traiga `¿?`?
+
+    Sobre texto ya normalizado. Sólo lo consulta `classify` cuando el turno no
+    tiene ningún signo de interrogación en ninguna parte, y como última rama: así
+    ningún turno que hoy se clasifica bien puede cambiar de intención.
+    """
+    # La cortesía y la meta-conversación mandan: "usted cree que va a llover" casa
+    # con la familia A y no es una consulta clínica. Ambas ramas ya existen en
+    # `classify`, pero sólo se consultan sobre los fragmentos con `¿?`.
+    if _SOCIAL.search(t) or _META.search(t):
+        return False
+    for m in _PREGUNTA_SIN_SIGNOS.finditer(t):
+        if _ANTES_AFIRMATIVO.search(t[:m.start()].rstrip() + " "):
+            continue
+        return True
+    return False
+
 
 # Negarse a seguir. Antes incluía "adiós/chao/hasta luego", que no es lo mismo:
 # despedirse al final de una llamada bien llevada es cooperar, no rechazar, y
@@ -429,6 +506,10 @@ def classify(text: str) -> Intent:
     # repite?" también es la última frase y ya tiene respuesta determinista.
     if not fragmentos and _cola_interrogativa(t):
         return "pregunta_clinica"
+    # Y la que no arranca ninguna frase, que es la mayoría. Va la ÚLTIMA, después
+    # de meta y de las dos ramas ancladas, para que todas conserven su precedencia.
+    if not fragmentos and _pregunta_sin_signos(t):
+        return "pregunta_clinica"
     return "respuesta"
 
 
@@ -477,7 +558,7 @@ def menciona_automedicacion(text: str) -> bool:
     indirectamente si puede/debe hacerlo?
 
     No es parte de `classify()` a propósito: `_PREGUNTA` está calibrada contra
-    los 1.687 turnos reales del dataset (ver comentario más arriba) y ampliarla
+    los 2.071 turnos reales del dataset (ver comentario más arriba) y ampliarla
     arriesga esa calibración. Este detector vive aparte y solo lo consulta el
     orquestador en la ventana posterior a un guion crítico.
     """
@@ -507,7 +588,7 @@ def pide_aclaracion(text: str) -> bool:
     pregunta del guion)?
 
     Misma doctrina que `menciona_automedicacion`: NO es parte de `classify()`
-    porque `_PREGUNTA` está calibrada contra los 1.687 turnos del dataset. Este
+    porque `_PREGUNTA` está calibrada contra los 2.071 turnos del dataset. Este
     detector vive aparte y el orquestador solo lo consulta para reclasificar un
     `respuesta` a `pregunta_clinica`; los demás intents conservan su precedencia.
     Casa también en el caso mixto ("sí, pero qué es calentura"): los síntomas
