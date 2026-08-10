@@ -812,3 +812,58 @@ def test_el_turno_corre_en_tarea_propia():
         assert any(isinstance(f, TTSSpeakFrame) for f in p.empujados)
 
     asyncio.run(escenario())
+
+
+# --- contexto: un turno fallido no borra la conversación -------------------------
+
+
+def test_un_turno_fallido_no_pierde_la_conversacion(monkeypatch):
+    """Si el primer turno revienta (red del LLM caída), el id de la conversación
+    ya tiene que estar fijado. Sin esto, `_conversation_id` quedaba en `None`, el
+    turno siguiente creaba una conversación NUEVA y el guion volvía a empezar
+    desde cero: la "pérdida total de contexto" que se veía tras un fallo."""
+    import asyncio
+
+    from pipecat.frames.frames import TTSSpeakFrame
+
+    from app.agent import phrasing
+    from app.voice import pipeline as vp
+
+    class _Session:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(vp, "SessionLocal", _Session)
+    monkeypatch.setattr(vp, "ensure_conversation",
+                        lambda session, conversation_id, patient_id: "conv-1")
+
+    recibidos = []
+
+    def _explota(session, *, text, conversation_id, patient_id):
+        recibidos.append(conversation_id)
+        raise RuntimeError("groq caído")
+
+    monkeypatch.setattr(vp, "process_turn", _explota)
+
+    async def escenario():
+        p = _procesador()
+        await _meter(p, _transcripcion("me duele como un cuatro"))
+        await p._tarea_turno                           # noqa: SLF001
+        # El id se fijó ANTES de procesar y sobrevivió al fallo...
+        assert p._conversation_id == "conv-1"          # noqa: SLF001
+        assert recibidos == ["conv-1"]
+        # ...y el paciente no se quedó con un teléfono mudo.
+        assert any(isinstance(f, TTSSpeakFrame)
+                   and f.text == phrasing.FALLO_TECNICO for f in p.empujados)
+
+        # El segundo turno reutiliza la MISMA conversación.
+        def _sano(session, *, text, conversation_id, patient_id):
+            recibidos.append(conversation_id)
+            return _respuesta()
+
+        monkeypatch.setattr(vp, "process_turn", _sano)
+        await _meter(p, _transcripcion("no señorita, fiebre no he tenido"))
+        await p._tarea_turno                           # noqa: SLF001
+        assert recibidos[-1] == "conv-1"
+
+    asyncio.run(escenario())

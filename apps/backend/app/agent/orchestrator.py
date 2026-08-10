@@ -91,6 +91,21 @@ def _get_or_create_conversation(
     return conv
 
 
+def ensure_conversation(
+    session: Session, conversation_id: str | None, patient_id: str | None
+) -> str:
+    """Crea (o encuentra) la conversación y la deja COMMITEADA.
+
+    Existe para la capa de voz: el id tiene que quedar fijado antes de procesar
+    el primer turno, porque si ese turno revienta a mitad (red del LLM, etc.) y
+    nadie guardó el id, el turno siguiente crearía una conversación nueva y el
+    contexto acumulado se perdería entero.
+    """
+    conv = _get_or_create_conversation(session, conversation_id, patient_id)
+    session.commit()
+    return conv.id
+
+
 def _prior_turns(session: Session, conversation_id: str) -> list[Turn]:
     return (
         session.query(Turn)

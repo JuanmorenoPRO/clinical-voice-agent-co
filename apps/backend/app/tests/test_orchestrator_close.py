@@ -28,6 +28,18 @@ def session(tmp_path):
         yield s
 
 
+def test_ensure_conversation_sobrevive_a_un_turno_fallido(session):
+    """El id queda commiteado ANTES de procesar: aunque el turno reviente a
+    mitad y la sesión haga rollback, la conversación sigue existiendo y el
+    turno siguiente conserva el contexto (ver `voice/pipeline._run_turn`)."""
+    from app.agent.orchestrator import ensure_conversation
+
+    cid = ensure_conversation(session, None, None)
+    session.rollback()  # el turno reventó a mitad
+    r = process_turn(session, text="me duele poquito", conversation_id=cid)
+    assert r.conversation_id == cid
+
+
 def test_el_primer_turno_critico_entrega_el_guion_completo(session):
     r = process_turn(session, text="Me duele un berraco, no aguanto")
     assert r.risk_level == "CRÍTICO"

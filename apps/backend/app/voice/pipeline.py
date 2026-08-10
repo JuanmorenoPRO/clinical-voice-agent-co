@@ -74,7 +74,7 @@ from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.workers.runner import WorkerRunner
 
 from ..agent import phrasing
-from ..agent.orchestrator import abandon_conversation, process_turn
+from ..agent.orchestrator import abandon_conversation, ensure_conversation, process_turn
 from ..agent.phrasing import APERTURA
 from ..nlu import lexicon
 from ..schemas import TurnResponse
@@ -357,6 +357,13 @@ class ClinicalProcessor(FrameProcessor):
     def _run_turn(self, text: str) -> TurnResponse:
         session = SessionLocal()
         try:
+            # El id se fija ANTES de procesar. Si el turno revienta a mitad
+            # (red del LLM caída, etc.) con el id todavía en None, el turno
+            # siguiente crearía una conversación NUEVA y perdería todo el
+            # contexto acumulado: síntomas, fase y slot del guion.
+            if self._conversation_id is None:
+                self._conversation_id = ensure_conversation(
+                    session, None, self._patient_id)
             result = process_turn(
                 session,
                 text=text,
@@ -422,6 +429,12 @@ class ClinicalProcessor(FrameProcessor):
             # En una tarea suelta la excepción se perdería en silencio
             # ("Task exception was never retrieved") y la llamada quedaría muda.
             logger.exception("[voz] el turno falló; se rearma el reloj")
+            if not self._terminado:
+                # El paciente habló y no puede quedarse con un teléfono mudo:
+                # se le pide repetir, y `_ultima_respuesta` se actualiza para
+                # que el anti-eco compare contra lo que de verdad sonó.
+                self._ultima_respuesta = phrasing.FALLO_TECNICO
+                await self.push_frame(TTSSpeakFrame(phrasing.FALLO_TECNICO))
             self._armar_vigilancia()
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:

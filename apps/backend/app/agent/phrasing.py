@@ -392,6 +392,10 @@ RECHAZO = (
 )
 NO_ENTENDI = "Perdone, no le escuché bien. ¿Me lo repite?"
 
+# El turno reventó por dentro (red del LLM, base de datos). Sin esta frase el
+# paciente se queda hablando con un teléfono mudo y no sabe si lo oyeron.
+FALLO_TECNICO = "Disculpe, tuve un problema de mi lado. ¿Me lo puede repetir?"
+
 # Trámites: horarios, costos, EPS, transporte, citas. No los responde el corpus
 # clínico y no son de esta llamada, pero callarlos tampoco vale: `intent ==
 # pregunta_administrativa` no tenía rama propia y caía en el `else` genérico, así
@@ -605,8 +609,8 @@ def cierre(nombre: str | None, escalado: bool) -> str:
 # un turno normal cuesta 0 ms.
 def textos_cacheables() -> list[str]:
     fijos = [APERTURA, PREGUNTA_ABIERTA, META_REPETIR, META_PROGRESO, SOCIAL,
-             FUERA_DE_MISION, RECHAZO, NO_ENTENDI, TERCERO, ADMINISTRATIVA,
-             CIERRE_SIN_RESPUESTA]
+             FUERA_DE_MISION, RECHAZO, NO_ENTENDI, FALLO_TECNICO, TERCERO,
+             ADMINISTRATIVA, CIERRE_SIN_RESPUESTA]
     for banco in (PREGUNTAS, REPREGUNTAS):
         for opciones in banco.values():
             fijos.extend(opciones)
