@@ -1084,3 +1084,81 @@ def test_la_calibracion_de_classify_no_se_movio():
     # reclasificación a pregunta_clinica la hace el orquestador, no esto).
     assert intent.classify("eh") == "ininteligible"
     assert intent.classify("que es calentura") == "respuesta"
+
+
+# --- la pregunta pegada AL FINAL del turno, sin signos ---------------------------
+# Bug real (llamada del 10/08/26): "No, la veo bien. Me duele a veces cuando hago
+# ejercicio. Debo seguir haciendo ejercicio o es malo." cayó en `respuesta` dos
+# veces — el conector "seguir" + gerundio no estaba en la rama calibrada, y la
+# rama de arranques interrogativos ancla al inicio del TURNO, no de la frase.
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "No, la veo bien. Me duele a veces cuando hago ejercicio. "
+        "Debo seguir haciendo ejercicio o es malo.",
+        "Debo seguir haciendo ejercicio o es malo",
+        "puedo seguir trabajando",
+        "¿debo seguir haciendo fuerza?",
+        "un 4, pero puedo seguir haciendo ejercicio",
+        "La herida se ve bien. Será que puedo mojarla",
+        "He comido bien. Qué pasa si me da fiebre",
+    ],
+)
+def test_la_pregunta_al_final_del_turno_se_reconoce(texto):
+    assert intent.classify(texto) == "pregunta_clinica"
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Verbos de slot: respuestas de movilidad/sueño/apetito, no consultas.
+        "sí, puedo seguir caminando sin problema",
+        "Sí. Puedo caminar bien.",
+        "Sí. Puedo comer de todo.",
+        # Negación: reporte, no consulta.
+        "no puedo seguir trabajando, me duele",
+        "cuando me muevo me duele un poco",
+        "Un 4, apenas se nota",
+        # "será" epistémico en mitad del habla (caso real del dataset): es una
+        # estimación, no una pregunta. En la cola solo dispara "será que...".
+        "Ay, no, tranquilo, es como un dolorcito ahí en la herida, nada del "
+        "otro mundo... será como un 4, pero es soportable.",
+    ],
+)
+def test_la_cola_interrogativa_no_atrapa_respuestas(texto):
+    assert intent.classify(texto) == "respuesta"
+
+
+def test_la_despedida_con_tengo_que_colgar_no_es_pregunta():
+    assert intent.classify("eso es todo, tengo que colgar") == "despedida"
+
+
+# --- reclamo: "no me respondiste la pregunta" ------------------------------------
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "no me respondiste la pregunta del ejercicio",
+        "No, he comido bien, pero no me respondiste la pregunta del ejercicio.",
+        "no me ha contestado lo que le pregunté",
+        "dejó sin responder mi pregunta",
+    ],
+)
+def test_reclama_respuesta(texto):
+    assert intent.reclama_respuesta(texto) is True
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "ya le respondí todo",
+        "le contesté todas las preguntas",
+        "[silencio]",
+        "Un 4, apenas se nota",
+    ],
+)
+def test_reclama_respuesta_no_falsos_positivos(texto):
+    assert intent.reclama_respuesta(texto) is False

@@ -107,3 +107,58 @@ def test_la_muletilla_en_texto_no_pide_repetir_ni_gasta(session):
     # Y el slot sigue vivo: el "no" pelado aún se lee contra la pregunta.
     r4 = process_turn(session, text="No.", conversation_id=r1.conversation_id)
     assert r4.symptoms.fever is False
+
+
+# --- reclamo: "no me respondiste la pregunta" ------------------------------------
+# Llamada real del 10/08/26: la pregunta del ejercicio se ignoró y el reclamo
+# también — el guion siguió con el apetito y el sueño como si nada.
+
+
+def test_la_pregunta_al_final_del_turno_se_responde(session):
+    """El turno real que se ignoró: respuesta del slot + pregunta pegada al
+    final sin signos. Debe bajar por la ruta de pregunta clínica (aquí, sin
+    corpus, la abstención honesta) en vez de saltar a la siguiente pregunta."""
+    r = process_turn(session, text="No, la veo bien. Me duele a veces cuando hago "
+                                   "ejercicio. Debo seguir haciendo ejercicio o es malo.")
+    turno = _ultimo_turno(session, r.conversation_id)
+    assert turno.intent == "pregunta_clinica"
+    assert "no tengo informaci" in r.response.lower()
+
+
+def test_el_reclamo_rescata_la_pregunta_original_para_el_rag(session, monkeypatch):
+    consultas = []
+
+    def _retrieve(sess, query, *, procedure=None):
+        consultas.append(query)
+        from app.rag.retrieve import RagResult
+        return RagResult(answer="", confidence=0.0, sources=[], has_evidence=False)
+
+    monkeypatch.setattr("app.agent.orchestrator.rag.retrieve", _retrieve)
+
+    r1 = process_turn(session, text="Un 4.")
+    process_turn(session, text="cuando podría volver a jugar fútbol",
+                 conversation_id=r1.conversation_id)
+    r3 = process_turn(session, text="No, pero no me respondiste la pregunta del fútbol.",
+                      conversation_id=r1.conversation_id)
+
+    turno = _ultimo_turno(session, r1.conversation_id)
+    assert turno.intent == "pregunta_clinica"
+    # La consulta del RAG del reclamo lleva la pregunta ORIGINAL del historial,
+    # no solo el reclamo ("la pregunta del fútbol" no recupera nada por sí sola).
+    assert "jugar" in consultas[-1]
+    # Y el "No" del arranque —que sí contesta la pregunta de fiebre oída— se
+    # fusiona igual: reclasificar el intent no pierde los síntomas del turno.
+    assert r3.symptoms.fever is False
+
+
+def test_el_reclamo_no_gasta_repregunta(session):
+    r1 = process_turn(session, text="Un 4.")
+    process_turn(session, text="no me respondiste mi pregunta",
+                 conversation_id=r1.conversation_id)
+    process_turn(session, text="sigue sin responderme la pregunta",
+                 conversation_id=r1.conversation_id)
+
+    # Tras dos reclamos, el slot de fiebre sigue vivo: el "sí" aún resuelve.
+    r4 = process_turn(session, text="Sí, sí he tenido calentura.",
+                      conversation_id=r1.conversation_id)
+    assert r4.symptoms.fever is True

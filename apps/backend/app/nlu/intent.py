@@ -115,17 +115,45 @@ _ACTIVIDAD_POSTOP = (
     r"|tener\s+relaciones|hacer\s+fuerza|cocinar|bailar|jugar"
     r"|banarme|ducharme"
 )
+# Las mismas actividades en gerundio, para el conector "seguir": "debo seguir
+# HACIENDO ejercicio o es malo" llegó en una llamada real y caía en `respuesta`
+# porque la rama de abajo solo veía el infinitivo. Mismo criterio de exclusión
+# que la lista de arriba: sin "caminando/durmiendo/comiendo/moviendome", que
+# son vocabulario de los slots — "sí, puedo seguir caminando sin problema" es
+# la respuesta de movilidad, no una consulta.
+_ACTIVIDAD_POSTOP_GERUNDIO = (
+    r"haciendo\s+ejercicio|haciendo\s+deporte|trotando|corriendo|nadando"
+    r"|manejando|conduciendo|trabajando|viajando|volando"
+    r"|levantando\s+peso|cargando\s+peso|teniendo\s+relaciones"
+    r"|haciendo\s+fuerza|cocinando|bailando|jugando|banandome|duchandome"
+)
+
+# Arranque interrogativo de frase, compartido entre la primera rama de
+# `_PREGUNTA` (anclada al inicio del TURNO) y `_cola_interrogativa` (anclada al
+# inicio de la ÚLTIMA frase). "tengo que" lleva lookahead: "tengo que
+# colgar/irme" es una despedida, no una consulta, y desde que la pregunta tiene
+# precedencia sobre la despedida (ver `classify`) confundirlas mandaba la
+# despedida al RAG.
+#
+# `sera` es un parámetro porque el "será" pelado solo es fiable al inicio del
+# turno (así está calibrado): en mitad del habla es epistémico — "será como un
+# 4, pero es soportable" es una respuesta del dataset que la heurística de cola
+# marcaba como pregunta. En la cola se exige "será que".
+def _arranque_pregunta(sera: str) -> str:
+    return (
+        r"(puedo|debo"
+        r"|tengo que (?!colgar|irme|salir|cortar|dejarl[oa]|terminar|contestar otra)"
+        rf"|{sera}|hasta cuando|cada cuanto|que hago"
+        r"|que pasa si|en\s+cuantos?\s+(dias?|semanas?|meses?|tiempo)"
+        r"|a\s+los\s+cuantos?\s+dias?|que\s+tan\s+pronto|como\s+hago)\b"
+    )
+
+
+_ARRANQUE_PREGUNTA = _arranque_pregunta(r"sera")
 
 _PREGUNTA = re.compile(
     r"[¿?]"
-    # "tengo que" lleva lookahead: "tengo que colgar/irme" es una despedida, no
-    # una consulta, y desde que la pregunta tiene precedencia sobre la despedida
-    # (ver `classify`) confundirlas mandaba la despedida al RAG.
-    r"|^\s*(y\s+)?(puedo|debo"
-    r"|tengo que (?!colgar|irme|salir|cortar|dejarl[oa]|terminar|contestar otra)"
-    r"|sera|hasta cuando|cada cuanto|que hago"
-    r"|que pasa si|en\s+cuantos?\s+(dias?|semanas?|meses?|tiempo)"
-    r"|a\s+los\s+cuantos?\s+dias?|que\s+tan\s+pronto|como\s+hago)\b"
+    rf"|^\s*(y\s+)?{_ARRANQUE_PREGUNTA}"
     r"|\b(cuando|hasta\s+cuando|en\s+cuantos?\s+(?:dias?|semanas?|meses?|tiempo)"
     r"|a\s+los\s+cuantos?\s+dias?|que\s+tan\s+pronto)"
     r"\s+(me\s+|se\s+)?(puedo|puede|podre|podria|voy\s+a\s+poder|vuelvo|volveria)\b"
@@ -137,10 +165,41 @@ _PREGUNTA = re.compile(
     # palabra del turno completo (esa rama exige `^`) y no había "¿?" (Whisper
     # no los pone). El doble lookbehind de negación replica el de
     # `_AUTOMEDICACION`: "no puedo trabajar" es una respuesta, no una consulta.
-    rf"|(?<!no\s)(?<!no\sme\s)\b(puedo|podre|podria|debo)\s+(volver\s+a\s+)?"
-    rf"({_ACTIVIDAD_POSTOP})\b",
+    rf"|(?<!no\s)(?<!no\sme\s)\b(puedo|podre|podria|debo)\s+(volver\s+a\s+|seguir\s+)?"
+    rf"({_ACTIVIDAD_POSTOP}|{_ACTIVIDAD_POSTOP_GERUNDIO})\b",
     re.I,
 )
+
+# La última frase del turno arranca como pregunta. Es el patrón real de estas
+# llamadas: el paciente contesta primero y pregunta AL FINAL — "No, la veo
+# bien. Me duele a veces cuando hago ejercicio. Debo seguir haciendo ejercicio
+# o es malo." La primera rama de `_PREGUNTA` no lo ve porque su ancla es el
+# inicio del turno completo. Solo se consulta cuando no hubo fragmentos con `?`
+# (ver `classify`).
+_FRASE_SPLIT = re.compile(r"[.!?;]+")
+_ARRANQUE_FRASE = re.compile(
+    rf"^\W*(y\s+|pero\s+|entonces\s+|o\s+)?{_arranque_pregunta(r'sera\s+que')}",
+    re.I)
+# Guarda de los verbos de slot: "Puedo caminar bien." como última frase es la
+# respuesta de movilidad, no una consulta. Un "puedo/debo" pegado a vocabulario
+# de los seis slots no dispara la heurística; la pregunta genuina sobre esas
+# actividades llega con "cuándo puedo..." o "¿...?", que ya cubren otras ramas.
+_VERBO_SLOT = re.compile(
+    r"^\W*(y\s+|pero\s+|entonces\s+|o\s+)?(puedo|debo)\s+(seguir\s+)?"
+    r"(caminar|caminando|dormir|durmiendo|comer|comiendo"
+    r"|moverme|moviendome|levantarme|levantandome|pararme|parandome)\b",
+    re.I,
+)
+
+
+def _cola_interrogativa(t: str) -> bool:
+    frases = [f.strip() for f in _FRASE_SPLIT.split(t) if f.strip()]
+    if not frases:
+        return False
+    ultima = frases[-1]
+    if _VERBO_SLOT.match(ultima):
+        return False
+    return bool(_ARRANQUE_FRASE.match(ultima))
 
 # Negarse a seguir. Antes incluía "adiós/chao/hasta luego", que no es lo mismo:
 # despedirse al final de una llamada bien llevada es cooperar, no rechazar, y
@@ -365,6 +424,11 @@ def classify(text: str) -> Intent:
         return "pregunta_clinica"
     if _META.search(t):
         return "meta"
+    # Última red antes del default: la pregunta pegada AL FINAL del turno, sin
+    # signos (Whisper no los pone). Después de `_META` a propósito — "¿me lo
+    # repite?" también es la última frase y ya tiene respuesta determinista.
+    if not fragmentos and _cola_interrogativa(t):
+        return "pregunta_clinica"
     return "respuesta"
 
 
@@ -476,6 +540,29 @@ def es_muletilla_pensando(text: str) -> bool:
     contenido, y sigue su curso normal.
     """
     return bool(_PENSANDO.match(_norm(text)))
+
+
+# El paciente reclama que su pregunta quedó sin responder: "no me respondiste
+# la pregunta del ejercicio". No es meta (repetir la pregunta del AGENTE sería
+# exactamente lo contrario de lo que pide) ni cae en ninguna otra rama — en una
+# llamada real el reclamo se ignoró y el guion siguió con el sueño.
+_RECLAMO_RESPUESTA = re.compile(
+    r"\bno\s+me\s+(respondi(o|ste)|ha(s)?\s+respondido|contest(o|aste)|ha(s)?\s+contestado)\b"
+    r"|\b(quedo|se\s+quedo|dejaste|dejo)\s+sin\s+(responder|contestar)\b"
+    r"|\bsin\s+responder(me)?\s+(la|mi)\s+pregunta\b",
+    re.I,
+)
+
+
+def reclama_respuesta(text: str) -> bool:
+    """¿El paciente reclama una respuesta que quedó pendiente?
+
+    Misma doctrina que `pide_aclaracion`: fuera de `classify()` (no toca la
+    calibración) y consultado solo por el orquestador, que reclasifica a
+    `pregunta_clinica` y enriquece la consulta del RAG con la pregunta original
+    del historial.
+    """
+    return bool(_RECLAMO_RESPUESTA.search(_norm(text)))
 
 
 def is_injection(text: str) -> bool:

@@ -343,6 +343,23 @@ async def process_turn_async(
     if aclaracion:
         extraccion.intent = "pregunta_clinica"
 
+    # El paciente reclama que su pregunta quedó sin responder ("no me
+    # respondiste la pregunta del ejercicio"). Se reclasifica a pregunta
+    # clínica y, como el texto del reclamo es pobre para recuperar evidencia
+    # (nombra el tema, no la pregunta), se rescata del historial la última
+    # pregunta clínica que hizo el paciente y se antepone a la consulta del
+    # RAG. Si no se encuentra, va el reclamo tal cual — degradación aceptable.
+    reclamo = (extraccion.intent == "respuesta"
+               and intent_nlu.reclama_respuesta(text))
+    consulta_rag = text
+    if reclamo:
+        extraccion.intent = "pregunta_clinica"
+        for turno_previo in reversed(prior[-6:]):
+            u = turno_previo.patient_utterance or ""
+            if u and intent_nlu.classify(u) == "pregunta_clinica":
+                consulta_rag = f"{u} {text}"
+                break
+
     del_turno = extraccion.symptoms
     # Antes de fusionar: lo que el paciente cuenta fuera del guion y todavía no
     # estaba anotado. Solo eso se le reconoce en voz alta y solo eso cuenta como
@@ -515,12 +532,12 @@ async def process_turn_async(
             # inventados citando documentos sin relación.
             evidence = rag.retrieve(
                 session,
-                build_query(text, procedure=procedimiento,
+                build_query(consulta_rag, procedure=procedimiento,
                             day_postop=acumulado.day_postop),
                 procedure=procedimiento,
             )
             pertinente = evidence.has_evidence and await llm.pregunta_es_del_dominio(
-                question=text, evidence=evidence.answer)
+                question=consulta_rag, evidence=evidence.answer)
             if evidence.has_evidence and not pertinente:
                 log.info("evidencia recuperada pero no pertinente para: %r", text[:60])
                 evidence.has_evidence = False
@@ -606,7 +623,7 @@ async def process_turn_async(
     nuevo_estado = script.apply(
         estado, action, acumulado, hash_turno=hash_turno, progreso=progreso,
         intento_real=(extraccion.intent not in ("saludo", "meta", "social")
-                      and not proc_nuevo and not aclaracion
+                      and not proc_nuevo and not aclaracion and not reclamo
                       and not intent_nlu.es_muletilla_pensando(text)),
         silencio=silencio,
         procedimiento_dicho=proc_dicho,
