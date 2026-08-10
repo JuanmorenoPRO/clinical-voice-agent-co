@@ -261,17 +261,34 @@ def test_confirmar_cierre_escalado_recuerda_esperar_el_contacto():
         assert texto not in phrasing.CONFIRMAR_CIERRE
 
 
-# --- una pregunta clínica contestada no gasta el tope de confirmación --------
-# Bug medido: dos preguntas reales seguidas ("¿puedo tomar X?" contestada dos
-# veces) agotaban MAX_TURNOS_CONFIRMACION y la tercera pregunta legítima se
-# cortaba a la fuerza — la llamada colgaba sin responder y sin despedida.
+# --- el tope de confirmación y su única excepción -----------------------------
+# Bug medido: tras el guion de seguridad, dos preguntas reales seguidas ("¿puedo
+# tomar X?" contestada dos veces) agotaban MAX_TURNOS_CONFIRMACION y la tercera
+# pregunta legítima se cortaba a la fuerza — la llamada colgaba sin responder y
+# sin despedida. La exención nació de ahí, y por eso pide `guion_entregado`: en
+# una llamada normal alargar el cierre no compra seguridad, solo turnos.
 
 
-def test_una_pregunta_respondida_no_gasta_el_tope_de_confirmacion():
-    estado = CallState(phase=Phase.CONFIRMACION, turnos_confirmacion=1)
+def test_una_pregunta_respondida_tras_escalar_no_gasta_el_tope():
+    estado = CallState(phase=Phase.CONFIRMACION, turnos_confirmacion=1,
+                       guion_entregado=True)
     a = Action(kind="confirmar", phase=Phase.CONFIRMACION)
     nuevo = apply(estado, a, CRITICO, pregunta_respondida=True)
     assert nuevo.turnos_confirmacion == 1, "no debe subir: se contestó una pregunta real"
+
+
+def test_una_pregunta_respondida_en_llamada_normal_si_gasta_el_tope():
+    """Sin guion de seguridad de por medio, el cierre son dos preguntas y ya.
+
+    La duda del último turno se contesta igual (ver el guard de `cerrar` en
+    `orchestrator.py`), así que el tope no le cuesta una respuesta al paciente.
+    Sin esto, cada reformulación de la misma duda compraba un turno más y el
+    cierre se iba a seis turnos — medido al mejorar el clasificador de preguntas.
+    """
+    estado = CallState(phase=Phase.CONFIRMACION, turnos_confirmacion=1)
+    a = Action(kind="confirmar", phase=Phase.CONFIRMACION)
+    nuevo = apply(estado, a, CRITICO, pregunta_respondida=True)
+    assert nuevo.turnos_confirmacion == 2
 
 
 def test_un_turno_de_relleno_sigue_gastando_el_tope():
@@ -282,10 +299,10 @@ def test_un_turno_de_relleno_sigue_gastando_el_tope():
     assert nuevo.turnos_confirmacion == 2
 
 
-def test_dos_preguntas_reales_seguidas_no_agotan_el_tope():
+def test_dos_preguntas_reales_seguidas_tras_escalar_no_agotan_el_tope():
     """El escenario reportado: dos turnos de pregunta_clinica contestada NO
     deben empujar la fase al cierre forzado por tope."""
-    estado = CallState(phase=Phase.CONFIRMACION)
+    estado = CallState(phase=Phase.CONFIRMACION, guion_entregado=True)
     for _ in range(2):
         a = next_action(estado, CRITICO)
         assert a.kind == "confirmar"
@@ -294,6 +311,17 @@ def test_dos_preguntas_reales_seguidas_no_agotan_el_tope():
     assert next_action(estado, CRITICO).kind == "confirmar", (
         "con el tope intacto, una tercera pregunta real debe poder seguir"
     )
+
+
+def test_dos_preguntas_reales_seguidas_en_llamada_normal_cierran():
+    """La contrapartida: sin escalamiento, el tope manda y la llamada cierra."""
+    estado = CallState(phase=Phase.CONFIRMACION)
+    for _ in range(2):
+        a = next_action(estado, CRITICO)
+        assert a.kind == "confirmar"
+        estado = apply(estado, a, CRITICO, pregunta_respondida=True)
+    assert estado.turnos_confirmacion == 2
+    assert next_action(estado, CRITICO).kind == "cerrar"
 
 
 def test_el_estado_nuevo_sobrevive_a_la_serializacion():

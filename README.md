@@ -270,7 +270,7 @@ la marcha— están en [`docs/spikes-7-agosto.md`](docs/spikes-7-agosto.md).
 cd apps/backend && ../../.venv/bin/python -m pytest app/tests -q
 ```
 
-766 tests. Los del motor de decisión, el léxico y el guion —452— corren sin modelo,
+802 tests. Los del motor de decisión, el léxico y el guion —484— corren sin modelo,
 sin red y sin base de datos, en un cuarto de segundo:
 
 ```bash

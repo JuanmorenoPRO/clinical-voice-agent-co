@@ -76,15 +76,22 @@ SIN_PROGRESO_CERRAR = 5
 # algo más...?" / "¿Quedamos así...?" indefinidamente con un paciente que ya
 # había dicho "no, nada más, gracias".
 #
-# Excepción (`apply(..., pregunta_respondida=True)`): una pregunta clínica real
-# que el sistema SÍ contestó no gasta este presupuesto. El tope frena el
-# relleno/ruido indefinido, no a alguien que está preguntando algo de verdad —
-# medido en una llamada real donde dos preguntas seguidas sobre un medicamento
-# agotaron el tope y la tercera se cortó a la fuerza, sin respuesta y sin que
-# el paciente se hubiera despedido. `sin_progreso` (abajo) sigue siendo el
-# freno de emergencia: en confirmación no hay slot que resolver, así que sube
-# en TODOS los turnos de este tramo y cierra a los cinco si la llamada de
-# verdad no avanza.
+# Excepción (`apply(..., pregunta_respondida=True)`), y SOLO en una llamada que
+# escaló: una pregunta clínica real que el sistema contestó no gasta este
+# presupuesto. Medido en una llamada real: tras el guion de seguridad, dos
+# preguntas seguidas sobre un medicamento agotaron el tope y la tercera se cortó
+# a la fuerza, sin respuesta y sin que el paciente se hubiera despedido. Ahí el
+# riesgo de callar pesa más que el de alargar.
+#
+# En una llamada normal la excepción NO aplica: dos preguntas de cierre y se
+# cierra. La duda del último turno se contesta igual —el guard de
+# `action.kind == "cerrar"` en `orchestrator.py` baja a la ruta del redactor con
+# la despedida como texto obligatorio—, así que el tope no le cuesta al paciente
+# ninguna respuesta, solo le ahorra turnos.
+#
+# `sin_progreso` (abajo) sigue siendo el freno de emergencia: en confirmación no
+# hay slot que resolver, así que sube en TODOS los turnos de este tramo y cierra
+# a los cinco si la llamada de verdad no avanza.
 MAX_TURNOS_CONFIRMACION = 2
 
 # Silencios SEGUIDOS antes de colgar. Tres es la escalera mínima que no cuelga a
@@ -469,11 +476,20 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
     if action.kind == "confirmar":
         # La llamada está esperando al paciente, no recorriendo el guion: no hay
         # slot que resolver ni que dar por perdido. Cada turno de confirmación
-        # gasta uno de los MAX_TURNOS_CONFIRMACION, EXCEPTO si el paciente hizo
-        # una pregunta clínica real y se le contestó: ese turno no es relleno,
-        # es exactamente lo que se le pide al agente que haga (ver el
-        # comentario junto a MAX_TURNOS_CONFIRMACION).
-        if not pregunta_respondida:
+        # gasta uno de los MAX_TURNOS_CONFIRMACION.
+        #
+        # La exención por pregunta contestada vale SOLO si la llamada escaló
+        # (`guion_entregado`). El motivo es de riesgo, no de conversación: tras
+        # un guion de seguridad, dejar sin responder una duda de medicación es
+        # peor que alargar la llamada, y por eso el paciente puede insistir (ver
+        # `test_varias_preguntas_reales_seguidas_tras_escalar_no_cuelgan_a_la_fuerza`).
+        # En una llamada normal no: la pregunta se contesta EN el turno de cierre
+        # —esa ruta ya existe, ver el guard de `action.kind == "cerrar"` en
+        # `orchestrator.py`— y la llamada acaba. Sin este matiz la exención se
+        # volvió un agujero en cuanto el clasificador de preguntas mejoró:
+        # medido, seis turnos de cierre encadenados en vez de dos, porque cada
+        # reformulación de la misma duda compraba un turno más.
+        if not (pregunta_respondida and state.guion_entregado):
             nuevo.turnos_confirmacion = state.turnos_confirmacion + 1
         return nuevo
 

@@ -263,12 +263,31 @@ _PREGUNTA_SIN_SIGNOS = re.compile(
     #      subordinante deja fuera el completivo: "quiero saber QUE ya no me
     #      duele" es un reporte.
     r"|\bme\s+preguntaba\s+(?:que\s+)?(?:si|cuando|cuanto|cual|como)\b"
+    # "le/les preguntaba" va suelto, sin subordinante: en segunda persona no hay
+    # eco posible —es el paciente preguntándole al agente, nunca al revés— y así
+    # entra también "le preguntaba por lo del acetaminofén".
+    r"|\b(?:le|les)\s+preguntaba\b"
     r"|(?<!no\s)\b(?:tengo|tenia|me\s+queda|me\s+quedo)\s+"
     r"(?:una\s+|la\s+|esa\s+|otra\s+|esta\s+)?duda\b"
     r"|(?<!usted\s)\b(?:quer[ií]a|quisiera|quiero|me\s+gustar[ií]a|necesito)\s+"
     r"(?:sab|pregunt|consult)\w*\s+(?:le\s+|me\s+)?"
     r"(?:si|cuando|cuanto|cual|como|donde|algo|una|otra)\b"
-    r"|\b(?:una|otra)\s+pregunt(?:a|ica)\b",
+    r"|\b(?:una|otra)\s+pregunt(?:a|ica)\b"
+    # F. pedir permiso para tomarse o aplicarse algo. `_ACTIVIDAD_POSTOP` deja
+    #    estos verbos fuera a propósito (solapan con el vocabulario de los
+    #    slots), así que "Podría tomar acetaminofén" —turno 10 de una llamada
+    #    real, repetido tres veces hasta que el paciente dio con la forma que el
+    #    regex sí reconocía— no lo veía ninguna rama: "podria" no está en la
+    #    lista de arranques de `_PREGUNTA`, y meterlo ahí convertiría en pregunta
+    #    el condicional epistémico ("podría ser el clima", "podría decirse que
+    #    estoy mejor"). Exigir la ACCIÓN concreta detrás es lo que separa las dos
+    #    cosas. Vive aquí y no en `_PREGUNTA` para heredar la guarda de discurso
+    #    referido de `_ANTES_AFIRMATIVO`: "me dijeron que puedo tomar
+    #    acetaminofén" es un reporte, no una consulta.
+    r"|(?<!no\s)(?<!no\sme\s)\b(?:me\s+)?(?:puedo|podria|podre|deberia|debo)\s+"
+    r"(?:ya\s+)?(?:tomar(?:me)?|aplicar(?:me|le)?|usar|poner(?:me|le)?"
+    r"|mojar(?:la|me)?|destapar(?:la|me)?|quitar(?:me)?|despegar(?:la|me)?"
+    r"|echar(?:me|le)?)\b",
     re.I,
 )
 
@@ -282,10 +301,18 @@ _PREGUNTA_SIN_SIGNOS = re.compile(
 # Los "no sé" que sí son respuesta ("no sé cuánto me marcó", "no sé qué decirle")
 # no llevan modal de permiso, así que no casan con la familia D y no hacen falta
 # aquí.
+#
+# La tercera rama cubre el discurso referido cuando el match NO empieza en el
+# "que". La familia D engancha por la palabra _WH —"me dijeron QUE puedo
+# caminar"—, y ahí el texto previo acaba en el verbo de habla; la familia F
+# engancha por el modal, y el texto previo acaba en "que". Sin este alternante,
+# "me dijeron que puedo tomar acetaminofén" pasaría por consulta.
 _ANTES_AFIRMATIVO = re.compile(
     r"\b(dij(?:o|eron)|dicen|dice|explic\w+|recomend\w+|mand\w+|indic\w+"
     r"|sab[ií]a)\s+(?:me\s+)?$"
-    r"|\b(uno\s+)?ya\s+(lo\s+)?(s[eé]\s+)?$",
+    r"|\b(uno\s+)?ya\s+(lo\s+)?(s[eé]\s+)?$"
+    r"|\b(dij(?:o|eron)|dicen|dice|explic\w+|recomend\w+|mand\w+|indic\w+)"
+    r"\s+(?:me\s+)?que\s+$",
     re.I,
 )
 
@@ -358,6 +385,37 @@ def niega_mas_temas(text: str) -> bool:
     if not all(p in _TOKENS_CIERRE for p in palabras):
         return False
     return bool(_TOKENS_CONFORMIDAD.intersection(palabras))
+
+
+# Lo mismo que `_TOKENS_CIERRE` más lo que tampoco propone ningún tema: el "sí"
+# —que en `niega_mas_temas` no está a propósito— y el relleno. Un "sí" pelado a
+# "¿quiere preguntarme algo?" dice que SÍ tiene algo, pero no dice qué, y
+# mandarlo al RAG sería consultar el corpus con la palabra "sí".
+_TOKENS_SIN_TEMA = _TOKENS_CIERRE | {
+    "si", "sip", "sisi", "pues", "eh", "ah", "mm", "mmm", "este", "y", "o", "que",
+}
+
+
+def propone_un_tema(text: str) -> bool:
+    """¿El turno pone algo sobre la mesa, o es puro cierre?
+
+    Es el complemento exacto de `niega_mas_temas`: aquel reconoce el "no tengo
+    nada", este el "sí tengo esto". Fuera de `classify` y por la misma doctrina
+    que `pide_aclaracion`: NO decide solo. El orquestador únicamente lo consulta
+    cuando el agente ACABA de invitar a preguntar —la fase que `script.py` llama
+    `ABIERTO`, "¿algo más que quiera contarme o preguntarme?"—, y ahí la forma
+    sobra: "Podría tomar acetaminofén" y "Lo del acetaminofén" son la misma
+    pregunta, y ninguna de las dos tiene forma de pregunta.
+    """
+    if es_muletilla_pensando(text) or niega_mas_temas(text):
+        return False
+    if contiene_despedida(text):
+        return False
+    palabras = re.findall(r"[a-zñ]+", _norm(text))
+    # Dos palabras es el suelo: "el acetaminofén" propone un tema, "sí" no.
+    if len(palabras) < 2:
+        return False
+    return not all(p in _TOKENS_SIN_TEMA for p in palabras)
 
 
 def contiene_despedida(text: str) -> bool:

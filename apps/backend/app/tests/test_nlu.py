@@ -1237,6 +1237,11 @@ def test_la_pregunta_sin_signos_no_atrapa_respuestas(texto):
         "necesito saber si esto es normal",
         # El anuncio pelado, antes de la pregunta.
         "doctora, una pregunta, cada cuanto me cambio el aposito",
+        # Segunda persona: el turno 11 de la llamada del 10/08, literal. Va
+        # suelto, sin subordinante, porque en "le preguntaba" no hay eco posible.
+        "Le preguntaba si de pronto es posible que pueda tomar acetaminogen "
+        "para el dolor.",
+        "le preguntaba por lo del acetaminofen",
     ],
 )
 def test_la_duda_anunciada_se_reconoce(texto):
@@ -1278,6 +1283,96 @@ def test_la_duda_anunciada_no_atrapa_respuestas(texto):
 )
 def test_el_eco_de_la_pregunta_es_meta(texto):
     assert intent.classify(texto) == "meta"
+
+
+# --- pedir permiso para tomarse algo -------------------------------------------
+# Bug real (llamada del 10/08, 7:12 p. m.): la misma consulta tres veces seguidas
+# —"Podría tomar acetaminofén", "Le preguntaba si de pronto es posible...", "Puedo
+# tomar acetaminofén"— y solo la tercera se contestó, porque empezaba por "Puedo",
+# que sí está en la lista de arranques interrogativos. El paciente tuvo que dar con
+# la forma que el regex reconocía.
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # El turno 10, literal, con el error de transcripción incluido.
+        "Podría tomar acetaminopeno.",
+        "un 4, podria tomar algo para el dolor",
+        "el dolor sigue igual, podria tomar acetaminofen",
+        # No solo medicación: también el cuidado de la herida.
+        "deberia mojar la herida en la ducha",
+        "me puedo quitar el aposito hoy",
+    ],
+)
+def test_el_permiso_de_medicacion_se_reconoce(texto):
+    assert intent.classify(texto) == "pregunta_clinica"
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # El condicional epistémico, que es la razón de exigir la ACCIÓN concreta
+        # detrás del modal en vez de meter "podría" en la lista de arranques.
+        "podria ser el clima",
+        "podria decirse que estoy mejor",
+        "no podria decirle exactamente",
+        # Negación: reporte, no consulta.
+        "no puedo tomar nada solido",
+        "no me puedo tomar nada",
+        # Discurso referido y factivo: el permiso ya se lo dieron.
+        "me dijeron que puedo tomar acetaminofen",
+        "el doctor me dijo que puedo tomar acetaminofen",
+        "me recomendaron que puedo tomar suero",
+        "ya me puedo tomar las pastillas normales",
+        # "tomarse la temperatura" en pasado no pide permiso de nada.
+        "me tome la temperatura y marco 37",
+    ],
+)
+def test_el_permiso_de_medicacion_no_atrapa_respuestas(texto):
+    assert intent.classify(texto) != "pregunta_clinica"
+
+
+# --- "¿quiere preguntarme algo?": leer la respuesta como el tema que propone ----
+# `propone_un_tema` no clasifica por sí solo: el orquestador solo lo consulta tras
+# la invitación abierta del guion (ver test_orchestrator_close.py). Aquí se fija
+# la frontera entre "sí tengo esto" y el cierre puro.
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Elipsis pura: ningún patrón léxico puede verlo, solo el contexto.
+        "Lo del acetaminofén",
+        "el acetaminofen",
+        "era eso del control",
+        "Podría tomar acetaminofén",
+    ],
+)
+def test_propone_un_tema(texto):
+    assert intent.propone_un_tema(texto) is True
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Un "sí" pelado dice que sí tiene algo, pero no dice qué: consultar el
+        # RAG con la palabra "sí" no ayuda a nadie.
+        "sí",
+        "Sí.",
+        "si claro",
+        # Negación de más temas y despedida: la llamada cierra, no se abre nada.
+        "no",
+        "No, nada, así está bien.",
+        "Listo, gracias.",
+        "muchas gracias, hasta luego",
+        "no tengo mas dudas",
+        # Todavía está pensando.
+        "ehh...",
+    ],
+)
+def test_propone_un_tema_no_falsos_positivos(texto):
+    assert intent.propone_un_tema(texto) is False
 
 
 # --- reclamo: "no me respondiste la pregunta" ------------------------------------

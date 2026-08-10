@@ -311,6 +311,65 @@ def test_la_confirmacion_cierra_por_tope_aunque_no_se_entienda_al_paciente(sessi
     )
 
 
+# --- "¿quiere preguntarme algo?": la respuesta ES la pregunta -------------------
+# Llamada real del 10/08, 7:12 p. m.: tras la invitación abierta, "Podría tomar
+# acetaminofén" y "Le preguntaba si de pronto es posible..." recibieron cada una
+# otra pregunta de cierre. Solo la tercera formulación —"Puedo tomar acetaminofén",
+# que empieza por un arranque interrogativo de la lista— se contestó.
+
+
+def test_la_invitacion_a_preguntar_lee_el_turno_como_pregunta(session):
+    """Con la invitación en el aire, el formato sobra.
+
+    Se usa a propósito un turno SIN ninguna pista léxica —"Lo del acetaminofén"—
+    para que el test aísle la regla de contexto: si pasara por la familia F de
+    `_PREGUNTA_SIN_SIGNOS` no estaría probando nada nuevo.
+    """
+    from app.models import Turn
+
+    cid = _tamizaje_completo(session)
+    r = process_turn(session, text="Lo del acetaminofén.", conversation_id=cid)
+    assert r.call_ended is False
+
+    turno = session.query(Turn).filter(Turn.conversation_id == cid).order_by(
+        Turn.created_at).all()[-1]
+    assert turno.intent == "pregunta_clinica"
+
+
+def test_el_cierre_de_una_llamada_normal_no_pasa_de_dos_preguntas(session):
+    """El tope manda aunque los tres turnos sean preguntas de verdad.
+
+    Los tres son la MISMA duda reformulada, que es como se comporta alguien al
+    que no le contestan. Al mejorar el clasificador las tres pasaron a
+    `pregunta_clinica`, y con la exención del tope aplicándose a todas el cierre
+    se fue a seis turnos. Se contestan igual —la del tercero sale pegada a la
+    despedida— pero la llamada acaba ahí.
+    """
+    cid = _tamizaje_completo(session)
+    textos = ["Podría tomar acetaminopeno.",
+              "Le preguntaba si de pronto es posible que pueda tomar acetaminogen "
+              "para el dolor.",
+              "Puedo tomar acetaminofén para el dolor."]
+    resultados = [process_turn(session, text=t, conversation_id=cid) for t in textos]
+
+    assert [r.call_ended for r in resultados] == [False, False, True], (
+        "el cierre de una llamada normal son dos preguntas, no seis"
+    )
+
+
+def test_la_invitacion_no_convierte_un_si_pelado_en_pregunta(session):
+    """"Sí" dice que tiene algo que preguntar, pero no dice qué: mandarlo al RAG
+    sería consultar el corpus con la palabra "sí"."""
+    from app.models import Turn
+
+    cid = _tamizaje_completo(session)
+    process_turn(session, text="Sí.", conversation_id=cid)
+
+    turno = session.query(Turn).filter(Turn.conversation_id == cid).order_by(
+        Turn.created_at).all()[-1]
+    assert turno.intent == "respuesta"
+
+
 # --- el guion de seguridad no se repite (chat real del 9 de agosto) -------------
 
 
