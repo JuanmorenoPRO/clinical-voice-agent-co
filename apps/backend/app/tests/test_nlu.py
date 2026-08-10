@@ -535,8 +535,8 @@ _CAMPO_DE_SLOT = {"dolor": "pain_level", "movilidad": "mobility",
         ("herida", "seca", "normal"),
         ("herida", "ha manchado el apósito", "secrecion_purulenta"),
         ("herida", "manchó la gasa", "secrecion_purulenta"),
-        # "¿Ha comido hoy algo completo, o solo picoteado?"
-        ("apetito", "picoteado", "levemente_disminuido"),
+        # "¿Ha comido hoy algo completo, o solo porciones pequeñas?"
+        ("apetito", "porciones pequeñas", "levemente_disminuido"),
         ("apetito", "poquito", "levemente_disminuido"),
         ("apetito", "algo completo", "normal"),
         # "¿Cuántas veces se despierta...?" / "¿Durmió bien anoche o mal?"

@@ -88,7 +88,7 @@ SIN_POLARIDAD: frozenset[str] = frozenset({
     "¿La ve del color normal de la piel, o más roja de lo que estaba?",
     "¿Cómo ha estado su apetito desde la cirugía?",
     "¿Qué tal el apetito? ¿Le provoca la comida o le ha costado?",
-    "¿Ha comido hoy algo completo, o solo picoteado?",
+    "¿Ha comido hoy algo completo, o solo porciones pequeñas?",
     "¿Cómo ha estado durmiendo desde la cirugía?",
     "¿Ha logrado descansar en las noches, o algo se lo ha impedido?",
     "Cuénteme cómo va el sueño: ¿duerme de corrido o se despierta?",
