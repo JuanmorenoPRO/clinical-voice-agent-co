@@ -886,7 +886,22 @@ def _validar_grounding(
     if evidence is None or not evidence.has_evidence:
         return ABSTENCION
     if es_abstencion(respuesta):
-        return respuesta          # el modelo ya declaró el límite; se respeta
+        # El modelo declaró el límite, pero lo declara a SU manera y ese texto
+        # salía verbatim: este `return` estaba antes de `_sin_preguntas` y de
+        # cualquier otra guarda. Medido en una llamada real, el turno completo
+        # fue "Usted suena un poco asustado, ¿cómo está sintiéndose después de
+        # la operación? Sobre eso no tengo información en los documentos del
+        # hospital. Se lo paso a enfermería." + la transición + la repregunta
+        # del guion: una emoción inventada, una pregunta extra que se pisa con
+        # la del guion, y cuatro frases donde el prompt pedía dos.
+        #
+        # Y hay algo peor que el estilo: al abstenerse el llamador quita las
+        # FUENTES (`evidence = None`), así que la media abstención —"se menciona
+        # en el documento que...; sin embargo no hay información específica"—
+        # sacaba una afirmación clínica sin cita. Al declararse el límite no
+        # queda nada del texto del modelo que valga la pena conservar: se emite
+        # la frase canónica.
+        return ABSTENCION
 
     # Se quitan las preguntas antes que nada: el guion añade la suya después, y
     # dos preguntas seguidas en voz hacen que el paciente conteste solo una.

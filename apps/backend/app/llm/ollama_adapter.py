@@ -71,8 +71,10 @@ _SYSTEM_REPLY = """Respondes UNA pregunta de un paciente usando EXCLUSIVAMENTE l
 que se te entrega.
 - Maximo 2 frases, espanol colombiano hablado, calido, sin tecnicismos.
 - Trata al paciente de USTED, nunca de tu.
-- Si el paciente suena asustado o angustiado por lo que pregunta, valide ese
-  sentimiento en pocas palabras antes de darle la respuesta clinica.
+- Si el paciente DICE que esta asustado o angustiado, valide ese sentimiento en
+  pocas palabras antes de darle la respuesta clinica. Si no lo ha dicho, no se
+  lo atribuya: "usted suena asustado" a alguien que solo hizo una pregunta suena
+  a formulario, no a alguien que escucha.
 - NUNCA abras con una muletilla generica de empatia ("entiendo", "entiendo su
   preocupacion", "lamento que este pasando por esto", "gracias por contarme"):
   un modelo pequeno cae en ellas y suenan a formulario, no a alguien que escucha.
@@ -84,6 +86,9 @@ que se te entrega.
 - NO hagas preguntas: el sistema anade la siguiente pregunta despues de tu respuesta.
 """
 
+# La abstención canónica, palabra por palabra la que pide `_SYSTEM_REPLY`. Sin
+# espacio final: el orquestador la concatena con la transición y la siguiente
+# pregunta, y el sobrante salía como un doble espacio en la traza.
 ABSTENCION = (
     "Sobre eso no tengo información en los documentos del hospital. "
 )
@@ -202,8 +207,18 @@ _APERTURA_POSTIZA = re.compile(
     re.I,
 )
 _EMOCION_INVENTADA = re.compile(
-    r"^\s*(parece\s+que|veo\s+que|noto\s+que|entiendo\s+que|s[eé]\s+que|"
-    r"comprendo\s+que|lamento\s+que|imagino\s+que|debe\s+de\s+ser)\b[^.!?]*[.!?]\s*",
+    r"^\s*("
+    r"(parece\s+que|veo\s+que|noto\s+que|entiendo\s+que|s[eé]\s+que"
+    r"|comprendo\s+que|lamento\s+que|imagino\s+que|debe\s+de\s+ser)\b"
+    # La misma emoción inventada sin el "que" delante: "Usted suena un poco
+    # asustado", "se le nota preocupado". Medido con el 70B, y es la forma que
+    # el patrón anterior dejaba pasar entera. La otra ruta ya la rechaza
+    # (`composer._EMOCION_ATRIBUIDA`); aquí, donde no hay aduana que devuelva el
+    # turno a las plantillas, se recorta.
+    r"|(usted\s+)?(parece|suena|se\s+(le\s+)?nota|lo\s+noto|la\s+noto)\s+"
+    r"(un\s+poco\s+|algo\s+|muy\s+|bastante\s+)?"
+    r"(preocupad|ansios|asustad|angustiad|nervios|estresad|frustrad|impacient)"
+    r")[^.!?]*[.!?]\s*",
     re.I,
 )
 

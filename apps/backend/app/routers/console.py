@@ -18,7 +18,7 @@ router = APIRouter(prefix="/console", tags=["console"])
 # Valores admitidos en los filtros de la consola. Se declaran como `Literal` para
 # que FastAPI los valide y los documente solo: son el mismo vocabulario cerrado
 # que `Alert.status` y `Alert.risk_level` en models.py.
-ESTADO_ALERTA = Literal["pending", "attended", "deleted"]
+ESTADO_ALERTA = Literal["pending", "attended"]
 NIVEL_ALERTA = Literal["ALTO", "CRÍTICO"]
 
 
@@ -36,7 +36,7 @@ def patients(session: Session = Depends(get_session)) -> list[dict]:
 @router.get("/alerts")
 def alerts(
     status: ESTADO_ALERTA | None = Query(
-        None, description="pending|attended|deleted. Sin valor: todo menos las borradas."
+        None, description="pending|attended. Sin valor: todas."
     ),
     risk_level: NIVEL_ALERTA | None = Query(None, description="ALTO|CRÍTICO"),
     limit: int = Query(50, ge=1, le=500),
@@ -53,10 +53,6 @@ def alerts(
     q = session.query(Alert)
     if status is not None:
         q = q.filter(Alert.status == status)
-    else:
-        # Sin filtro explícito, las borradas no se listan pero siguen en la tabla
-        # (ver `delete_alert`). Pedir `status=deleted` es lo único que las muestra.
-        q = q.filter(Alert.status != "deleted")
     if risk_level is not None:
         q = q.filter(Alert.risk_level == risk_level)
 
@@ -108,28 +104,10 @@ def attend_alert(alert_id: str, session: Session = Depends(get_session)) -> dict
     return {"id": alert_id, "status": alert.status}
 
 
-@router.delete("/alerts/{alert_id}")
-def delete_alert(alert_id: str, session: Session = Depends(get_session)) -> dict:
-    """Borrado LÓGICO, y solo de lo ya atendido.
-
-    La fila no se elimina: pasa a `status="deleted"` y deja de listarse. En un
-    sistema clínico, qué se alertó y quién lo cerró es justo lo que no puede
-    desaparecer, y además la deduplicación de alertas
-    (`agent/orchestrator.py::_crear_alerta_si_procede` y su espejo en
-    `summary/service.py`) consulta TODAS las alertas de la conversación: una
-    alerta borrada de verdad haría que la misma regla volviera a dispararse.
-
-    El 409 es la contraparte de la UI, donde el botón está deshabilitado hasta
-    atender: borrar sin haber atendido es perder una alerta pendiente de vista.
-    """
-    alert = session.get(Alert, alert_id)
-    if alert is None:
-        raise HTTPException(404, "Alerta no encontrada")
-    if alert.status != "attended":
-        raise HTTPException(409, "Solo se puede borrar una alerta ya atendida")
-    alert.status = "deleted"
-    session.commit()
-    return {"id": alert_id, "status": alert.status}
+# No hay endpoint para borrar una alerta, ni siquiera lógico. Una alerta se
+# atiende, no se hace desaparecer: en una consola clínica, quitar de la vista algo
+# que el motor de decisión consideró digno de alarma es exactamente el error que no
+# se puede permitir. Ver el comentario de `Alert.status` en models.py.
 
 
 @router.get("/conversations")

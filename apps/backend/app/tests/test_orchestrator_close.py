@@ -205,6 +205,47 @@ def test_la_respuesta_generada_no_hace_preguntas():
     assert _sin_preguntas("¿Y cómo sigue?") == ""
 
 
+@pytest.mark.parametrize(
+    "cruda",
+    [
+        # El turno medido: emoción inventada + pregunta extra delante de la
+        # abstención. Salía verbatim porque el `return` de la abstención iba
+        # antes de todas las guardas.
+        "Usted suena un poco asustado, ¿cómo está sintiéndose después de la "
+        "operación? Sobre eso no tengo información en los documentos del "
+        "hospital. Se lo paso a enfermería.",
+        # La media abstención: una afirmación clínica que se quedaría sin cita,
+        # porque al abstenerse el orquestador quita las fuentes.
+        "Se menciona en el documento que si nota algún cambio en la incisión "
+        "debe llamar a la oficina. Sin embargo, no hay información específica "
+        "sobre los síntomas de la cesárea.",
+    ],
+)
+def test_la_abstencion_del_modelo_se_normaliza(cruda):
+    """Al declarar el límite no queda nada del texto del modelo que conservar."""
+    from app.agent.orchestrator import _validar_grounding
+    from app.llm.ollama_adapter import ABSTENCION
+    from app.schemas import RagResult
+
+    evidencia = RagResult(answer="La herida se lava con agua y jabón.",
+                          sources=[], confidence=0.9, has_evidence=True)
+    salida = _validar_grounding(cruda, evidencia, riesgo="NORMAL")
+    assert salida == ABSTENCION
+    assert "?" not in salida
+    assert "asustado" not in salida
+
+
+def test_la_emocion_atribuida_sin_que_tambien_se_recorta():
+    """`sin_muletillas` solo cazaba "parece QUE..."; el 70B la dice sin el "que"."""
+    from app.llm.ollama_adapter import sin_muletillas
+    salida = sin_muletillas(
+        "Usted suena un poco asustado. Puede ducharse desde las 48 horas."
+    )
+    assert salida == "Puede ducharse desde las 48 horas."
+    assert sin_muletillas("Se le nota preocupada, pero la herida se seca sola.") \
+        == ""
+
+
 # --- el bucle de cierre (chat real del 9 de agosto) -----------------------------
 
 

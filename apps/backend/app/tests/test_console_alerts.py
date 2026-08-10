@@ -45,12 +45,10 @@ def client(tmp_path):
                 ("CRÍTICO", "attended"),
                 ("ALTO", "pending"),
                 ("ALTO", "attended"),
-                ("ALTO", "deleted"),
-                ("CRÍTICO", "deleted"),
             ])
         ])
-        s.add(Alert(id="a6", conversation_id="conv-1", created_at=_MAS_RECIENTE,
-                    risk_level="CRÍTICO", status="pending", triggered_rules=["regla_6"]))
+        s.add(Alert(id="a4", conversation_id="conv-1", created_at=_MAS_RECIENTE,
+                    risk_level="CRÍTICO", status="pending", triggered_rules=["regla_4"]))
         s.commit()
 
     def _override():
@@ -68,24 +66,21 @@ def _get(client, **params):
     return r.json()
 
 
-def test_sin_filtros_no_aparecen_las_borradas(client):
-    """El comportamiento por defecto no cambia: el borrado lógico sigue oculto."""
+def test_sin_filtros_se_listan_todas(client):
+    """No hay estado oculto: sin filtro salen todas las alertas que existen."""
     page = _get(client)
     assert page["total"] == 5
     assert {a["status"] for a in page["items"]} == {"pending", "attended"}
 
 
 def test_filtro_por_estado(client):
-    assert {a["id"] for a in _get(client, status="pending")["items"]} == {"a0", "a2", "a6"}
+    assert {a["id"] for a in _get(client, status="pending")["items"]} == {"a0", "a2", "a4"}
     assert {a["id"] for a in _get(client, status="attended")["items"]} == {"a1", "a3"}
-    # Pedirlas explícitamente es lo único que muestra las borradas — hasta ahora
-    # se quedaban en la tabla sin que nada las pudiera consultar.
-    assert {a["id"] for a in _get(client, status="deleted")["items"]} == {"a4", "a5"}
 
 
 def test_filtro_por_nivel_no_cuela_el_otro(client):
     items = _get(client, risk_level="CRÍTICO")["items"]
-    assert {a["id"] for a in items} == {"a0", "a1", "a6"}
+    assert {a["id"] for a in items} == {"a0", "a1", "a4"}
     assert all(a["risk_level"] == "CRÍTICO" for a in items)
 
 
@@ -109,13 +104,12 @@ def test_la_paginacion_no_repite_ni_pierde_filas(client):
            for a in _get(client, limit=2, offset=off)["items"]]
     assert len(ids) == 5
     assert len(set(ids)) == 5, f"página repetida o perdida: {ids}"
-    # Y las cinco son exactamente las no borradas.
-    assert set(ids) == {"a0", "a1", "a2", "a3", "a6"}
+    assert set(ids) == {"a0", "a1", "a2", "a3", "a4"}
 
 
 def test_el_orden_es_de_mas_reciente_a_mas_antigua(client):
     items = _get(client)["items"]
-    assert items[0]["id"] == "a6"          # la única posterior al resto
+    assert items[0]["id"] == "a4"          # la única posterior al resto
     fechas = [a["created_at"] for a in items]
     assert fechas == sorted(fechas, reverse=True)
 
@@ -125,3 +119,15 @@ def test_un_filtro_con_errata_falla_en_vez_de_ignorarse(client):
     assert client.get("/console/alerts", params={"status": "basura"}).status_code == 422
     assert client.get("/console/alerts", params={"risk_level": "ALTA"}).status_code == 422
     assert client.get("/console/alerts", params={"limit": 0}).status_code == 422
+
+
+def test_una_alerta_no_se_puede_borrar(client):
+    """El borrado desapareció del contrato, no solo de la interfaz.
+
+    `deleted` era un estado válido y `DELETE /console/alerts/{id}` lo ponía. Ya no
+    existe ninguno de los dos: una alerta se atiende y se queda en la tabla.
+    """
+    assert client.get("/console/alerts", params={"status": "deleted"}).status_code == 422
+    # 404 y no 405: la ruta entera dejó de existir. `/console/alerts/{id}` solo se
+    # sirve hoy con el sufijo `/attend`, así que no queda ni el método equivocado.
+    assert client.delete("/console/alerts/a0").status_code == 404

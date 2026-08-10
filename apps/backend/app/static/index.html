@@ -140,10 +140,9 @@
       <div class="fila" style="margin-bottom:12px">
         <label class="dim" for="aEstado">Estado</label>
         <select id="aEstado">
-          <option value="">Todas (sin borradas)</option>
+          <option value="">Todas</option>
           <option value="pending">Pendientes</option>
           <option value="attended">Atendidas</option>
-          <option value="deleted">Borradas</option>
         </select>
         <label class="dim" for="aNivel">Nivel</label>
         <select id="aNivel">
@@ -411,12 +410,6 @@ async function cargarAlertas() {
           ${abierta ? "Ocultar" : "Ver llamada"}</button>
         ${a.status === "pending"
           ? `<button class="b g" onclick="atender('${esc(a.id)}')">Atender</button>` : ""}
-        ${a.status === "deleted" ? "" : `
-        <button class="b g" onclick="borrarAlerta('${esc(a.id)}')"
-          ${a.status === "attended" ? "" : "disabled"}
-          title="${a.status === "attended"
-            ? "Quitar la alerta de la lista"
-            : "Primero hay que marcarla como atendida"}">Borrar</button>`}
       </td>
     </tr>${detalle}`;
   }).join("")
@@ -457,13 +450,8 @@ async function atender(id) {
   await api(`/console/alerts/${id}/attend`, { method: "POST" });
   cargarAlertas();
 }
-async function borrarAlerta(id) {
-  try {
-    await api(`/console/alerts/${id}`, { method: "DELETE" });
-  } catch (e) { return alert("No se pudo borrar: " + e.message); }
-  if (alertaAbierta && alertaAbierta.id === id) alertaAbierta = null;
-  cargarAlertas();
-}
+// Una alerta se atiende y se queda: no hay forma de borrarla desde la consola
+// (tampoco desde la API, ver routers/console.py).
 setInterval(() => { if ($("#alertas").classList.contains("on")) cargarAlertas(); }, 5000);
 
 // ── trazas ────────────────────────────────────────────────────────────
