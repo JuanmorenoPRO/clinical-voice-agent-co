@@ -427,9 +427,24 @@ CONFIRMAR_CIERRE: tuple[str, ...] = (
     "¿Quedamos así, o quiere preguntarme algo más?",
 )
 
+# Misma fase, pero la confirmación viene de un guion crítico: no basta con
+# preguntar si quedó claro, hay que dejar explícito que la llamada no
+# resuelve el cuadro por sí sola y que alguien lo va a contactar para
+# revisarlo de verdad.
+CONFIRMAR_CIERRE_ESCALADO: tuple[str, ...] = (
+    "Recuerde que debe esperar a que el personal de enfermería lo contacte "
+    "para revisar bien cómo sigue. ¿Tiene alguna otra duda antes de colgar?",
+    "Quedamos en que van a contactarlo para valorar su estado con calma. "
+    "¿Hay algo más en lo que le pueda ayudar antes de despedirnos?",
+    "No se quede esperando a mejorar solo: el personal lo contacta para "
+    "revisarlo. ¿Quedamos así, o quiere preguntarme algo más?",
+)
 
-def confirmar_cierre(semilla: str, usadas: list[str] | None = None) -> str:
-    return _rotar(CONFIRMAR_CIERRE, semilla, usadas or [])
+
+def confirmar_cierre(semilla: str, usadas: list[str] | None = None, *,
+                     escalado: bool = False) -> str:
+    banco = CONFIRMAR_CIERRE_ESCALADO if escalado else CONFIRMAR_CIERRE
+    return _rotar(banco, semilla, usadas or [])
 TERCERO = "Gracias por acompañarlo, lo que me cuente también me sirve."
 
 

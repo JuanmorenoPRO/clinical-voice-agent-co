@@ -278,6 +278,92 @@ def test_el_guion_critico_no_se_repite_tras_el_cierre_anunciado(session):
     assert r is not None and r.call_ended is True
 
 
+# --- automedicación tras escalar: se verifica, no se ignora --------------------
+
+
+def test_una_mencion_de_medicamento_tras_escalar_se_trata_como_pregunta(session):
+    """Chat real: tras el guion de dolor_severo, "me voy a tomar un
+    metronidazol" recibía un acuse vacío ("Anotado, tomará el metronidazol")
+    pegado a la pregunta de cierre genérica, porque la frase declarativa no
+    matcheaba el clasificador de preguntas y el RAG nunca se consultaba.
+
+    Sin corpus cargado en este test, el RAG no tiene evidencia — lo que importa
+    es que el turno SÍ se procesa como `pregunta_clinica` (se abstiene con
+    seguridad y ofrece pasarlo a enfermería) en vez de como un acuse ciego, y
+    que el cierre de confirmación usa el banco escalado.
+    """
+    from app.models import Turn
+
+    primero = process_turn(session, text="Me duele un berraco, no aguanto")
+    assert primero.risk_level == "CRÍTICO"
+    cid = primero.conversation_id
+
+    segundo = process_turn(session, text="Me voy a tomar un metronidazol.",
+                           conversation_id=cid)
+    assert segundo.call_ended is False
+
+    turno = session.query(Turn).filter(Turn.conversation_id == cid).order_by(
+        Turn.created_at).all()[-1]
+    assert turno.intent == "pregunta_clinica"
+    # No es el acuse vacío del bug: no se limita a repetir el nombre del
+    # medicamento sin decir nada más.
+    assert "anotado" not in segundo.response.lower()
+
+
+def test_el_cierre_de_confirmacion_tras_escalar_usa_el_banco_escalado(session):
+    """"Ok"/"listo"/"entendido" sueltos ya cierran la llamada (niega_mas_temas):
+    se necesita una respuesta que la mantenga abierta, como en
+    `test_turnos_posteriores_no_reabren_el_guion`."""
+    from app.agent import phrasing
+
+    primero = process_turn(session, text="Me duele un berraco, no aguanto")
+    segundo = process_turn(session, text="Espere",
+                           conversation_id=primero.conversation_id)
+
+    assert segundo.call_ended is False
+    assert segundo.response in phrasing.CONFIRMAR_CIERRE_ESCALADO
+
+
+def test_varias_preguntas_reales_seguidas_tras_escalar_no_cuelgan_a_la_fuerza(session):
+    """Reproduce el chat real completo: tras el guion de dolor_severo, el
+    paciente pregunta por un medicamento de tres formas distintas (garbled STT
+    incluido) en tres turnos seguidos. Antes del fix, el segundo y tercer turno
+    no se reclasificaban como pregunta clínica (la regex no cubría "me puedo
+    tomar" ni "quisiera saber si..."), y aunque se reclasificaran,
+    MAX_TURNOS_CONFIRMACION=2 colgaba la llamada en el tercer turno sin
+    responder y sin que el paciente se hubiera despedido.
+    """
+    from app.models import Turn
+
+    primero = process_turn(session, text="Me duele un berraco, no aguanto")
+    assert primero.risk_level == "CRÍTICO"
+    cid = primero.conversation_id
+
+    turnos_paciente = [
+        "Listo, me puedo tomar un metro ni a sol.",
+        "Si quisiera saber si me puedo tomar una acetaminofén.",
+        "Sí, me puedo tomar una acetaminofén o algo.",
+    ]
+    respuestas = []
+    for texto in turnos_paciente:
+        r = process_turn(session, text=texto, conversation_id=cid)
+        assert r.call_ended is False, f"no debía colgar en {texto!r}"
+        respuestas.append(r)
+
+    turnos = session.query(Turn).filter(Turn.conversation_id == cid).order_by(
+        Turn.created_at).all()
+    # Los tres turnos del paciente (después del guion) se procesaron como
+    # pregunta clínica, no como relleno.
+    for t in turnos[-3:]:
+        assert t.intent == "pregunta_clinica", t.patient_utterance
+
+    # Y una despedida explícita después SÍ cierra: el fix no vuelve infinita
+    # la fase de confirmación.
+    ultimo = process_turn(session, text="Listo, muchas gracias, hasta luego.",
+                          conversation_id=cid)
+    assert ultimo.call_ended is True
+
+
 def test_el_guion_de_incertidumbre_no_se_repite(session):
     """El agujero exacto del guard viejo: el guion que nace de la política de
     incertidumbre (`no_se_pudo_evaluar`, sintetizado con `final=True`) no vive

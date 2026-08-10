@@ -156,7 +156,8 @@ def _texto_de(action: Action, *, semilla: str, recientes: list[str],
               slot_respondido: str | None = None,
               acumulado: Symptoms | None = None,
               del_turno: Symptoms | None = None,
-              con_prefijo: bool = False) -> str:
+              con_prefijo: bool = False,
+              estado: CallState | None = None) -> str:
     """Traduce la acción del guion a lo que se dice. Todo determinista.
 
     `con_acuse=False` suprime el acuse de recibo. Se usa cuando el turno ya se
@@ -179,7 +180,10 @@ def _texto_de(action: Action, *, semilla: str, recientes: list[str],
         # aparte y temprana era el bug: ante "¿qué cuidados debo tener con la
         # herida?" el agente contestaba "¿hay algo más antes de despedirnos?",
         # que desde fuera es no escuchar.
-        return phrasing.confirmar_cierre(semilla, recientes)
+        return phrasing.confirmar_cierre(
+            semilla, recientes,
+            escalado=bool(estado and estado.guion_entregado),
+        )
     if action.kind == "repreguntar":
         # Normalmente una repregunta no lleva acuse: el slot no se resolvió y
         # decir "anotado" sería falso. Pero el turno puede haber traído OTRO dato
@@ -289,6 +293,19 @@ async def process_turn_async(
         llm_calls += 1
     tokens_in += extraccion.usage.tokens_in
     tokens_out += extraccion.usage.tokens_out
+
+    # Ventana posterior a un guion crítico: una declaración de automedicación
+    # ("me voy a tomar un metronidazol") no matchea el clasificador de
+    # preguntas —es una afirmación, no una pregunta— y sin esto se acusaba de
+    # recibo sin más y se colgaba sin verificar nada contra el RAG. Se
+    # reclasifica solo aquí: `guion_entregado` únicamente se enciende cuando ya
+    # se entregó un guion de seguridad (ver `script.py`), así que esto no toca
+    # ninguna llamada verde ni amarilla.
+    if (extraccion.intent == "respuesta"
+            and estado.guion_entregado
+            and estado.phase in (Phase.ESCALAMIENTO, Phase.CONFIRMACION)
+            and intent_nlu.menciona_automedicacion(text)):
+        extraccion.intent = "pregunta_clinica"
 
     del_turno = extraccion.symptoms
     # Antes de fusionar: lo que el paciente cuenta fuera del guion y todavía no
@@ -477,7 +494,7 @@ async def process_turn_async(
         pregunta_guion = _texto_de(action, semilla=semilla, recientes=recientes,
                                    nombre=nombre,
                                    preocupante=decision.risk_level != "NORMAL",
-                                   con_acuse=False, con_prefijo=True)
+                                   con_acuse=False, con_prefijo=True, estado=estado)
         anterior = estado.slot_actual
         ctx = composer.build_context(
             prior=prior, text=text, intent=extraccion.intent,
@@ -557,6 +574,10 @@ async def process_turn_async(
             action.kind, action.slot, action.intento, action.seguimiento,
             semilla=conv.id + str(len(prior)), usadas=recientes),
         reanudar=declina_salida,
+        # Una pregunta clínica real que se contestó no gasta el presupuesto de
+        # MAX_TURNOS_CONFIRMACION (ver el comentario en script.py): el tope
+        # frena el relleno indefinido, no a alguien preguntando algo de verdad.
+        pregunta_respondida=extraccion.intent == "pregunta_clinica",
     )
 
     # UNKNOWN explícito: el slot que quedó sin respuesta se anota en el turno en
@@ -706,7 +727,7 @@ async def _texto_fallback(
         # visitas y recibía la siguiente pregunta del guion, sin más.
         siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
                               nombre=nombre, preocupante=False, con_acuse=False,
-                              con_prefijo=True)
+                              con_prefijo=True, estado=estado)
         final = f"{phrasing.ADMINISTRATIVA} {phrasing.volviendo(semilla, recientes)} {siguiente}"
     elif extraccion.intent == "saludo":
         # El paciente saluda: se le devuelve el saludo y se le hace la pregunta
@@ -718,18 +739,20 @@ async def _texto_fallback(
         final = f"{phrasing.saludo_de_vuelta(semilla, recientes)} {pregunta}"
     elif extraccion.intent == "meta":
         siguiente = _texto_de(action, semilla=semilla,
-                              recientes=recientes, nombre=nombre, preocupante=False)
+                              recientes=recientes, nombre=nombre, preocupante=False,
+                              estado=estado)
         final = f"{phrasing.META_REPETIR} {siguiente}"
     elif extraccion.intent == "social":
         siguiente = _texto_de(action, semilla=semilla,
-                              recientes=recientes, nombre=nombre, preocupante=False)
+                              recientes=recientes, nombre=nombre, preocupante=False,
+                              estado=estado)
         final = f"{phrasing.SOCIAL} {siguiente}"
     elif extraccion.intent == "pregunta_clinica" and discrepa:
         # El corpus no puede responder sobre una cirugía que discrepa de la
         # ficha (ver la ruta del redactor): abstención determinista, sin citas.
         siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
                               nombre=nombre, preocupante=False, con_acuse=False,
-                              con_prefijo=True)
+                              con_prefijo=True, estado=estado)
         final = (phrasing.abstencion_procedimiento(proc_vigente, procedimiento)
                  + " " + phrasing.transicion_abstencion(semilla, recientes)
                  + " " + siguiente)
@@ -739,7 +762,7 @@ async def _texto_fallback(
         # corpus no puede responderlo. Ruta determinista, sin modelo.
         siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
                               nombre=nombre, preocupante=False, con_acuse=False,
-                              con_prefijo=True)
+                              con_prefijo=True, estado=estado)
         final = (phrasing.sintoma_consultado(
             otros_sintomas.senales(nuevos_otros), semilla, recientes)
             + " " + phrasing.volviendo(semilla, recientes) + " " + siguiente)
@@ -757,16 +780,33 @@ async def _texto_fallback(
         # Si se acabó absteniendo, no se citan fuentes: decir "no tengo información"
         # y adjuntar una cita es incoherente, y en la traza parecería que el agente
         # ignoró evidencia que sí tenía.
-        siguiente = _texto_de(action, semilla=semilla,
-                              recientes=recientes, nombre=nombre, preocupante=False)
         if es_abstencion(respuesta):
             evidence = None
             # Sin este puente, la pregunta clínica sin resolver se pegaba justo
             # antes de la siguiente pregunta del guion y sonaba a que el agente
             # ignoraba lo que acababa de decir en vez de retomar el seguimiento.
+            # `con_acuse=False`: el puente YA lo da `transicion_abstencion`; sin
+            # esto, `_texto_de` le apilaba detrás su propio acuse/reflejo por
+            # defecto y el turno encadenaba tres frases de transición seguidas
+            # ("Sobre eso no tengo información... Voy a continuar entonces...
+            # Un 4, ahí en la mitad...") — medido en una llamada real.
             transicion = phrasing.transicion_abstencion(semilla, recientes)
+            siguiente = _texto_de(action, semilla=semilla, recientes=recientes,
+                                  nombre=nombre, preocupante=False, con_acuse=False,
+                                  con_prefijo=True, estado=estado)
             final = f"{respuesta} {transicion} {siguiente}"
         else:
+            # `acumulado`/`del_turno`/`slot_respondido`: un turno puede traer la
+            # respuesta del slot Y una pregunta clínica en la misma frase ("un 4,
+            # ¿eso es normal?", o sin signos "un 4, con eso puedo hacer
+            # ejercicio"). Sin esto, contestar la pregunta hacía perder el
+            # reflejo del dato ("Un 4, ahí en la mitad"). Solo aplica aquí, con
+            # respuesta real: en la abstención de arriba el puente ya lo da
+            # `transicion_abstencion` y no hace falta un segundo acuse detrás.
+            siguiente = _texto_de(action, semilla=semilla,
+                                  recientes=recientes, nombre=nombre, preocupante=False,
+                                  estado=estado, acumulado=acumulado, del_turno=del_turno,
+                                  slot_respondido=estado.slot_actual)
             final = f"{respuesta} {siguiente}"
     else:
         preocupante = decision.risk_level != "NORMAL"
@@ -814,7 +854,7 @@ async def _texto_fallback(
                                     and progreso,
                                     slot_respondido=estado.slot_actual,
                                     acumulado=acumulado, del_turno=del_turno,
-                                    con_prefijo=bool(prefijo))
+                                    con_prefijo=bool(prefijo), estado=estado)
     return final, evidence, usos
 
 # El prompt prohíbe que la respuesta haga preguntas —el guion añade la suya

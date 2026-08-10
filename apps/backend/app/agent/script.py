@@ -75,6 +75,16 @@ SIN_PROGRESO_CERRAR = 5
 # cualquier dato nuevo reseteaba ese contador, el agente podía alternar "¿Hay
 # algo más...?" / "¿Quedamos así...?" indefinidamente con un paciente que ya
 # había dicho "no, nada más, gracias".
+#
+# Excepción (`apply(..., pregunta_respondida=True)`): una pregunta clínica real
+# que el sistema SÍ contestó no gasta este presupuesto. El tope frena el
+# relleno/ruido indefinido, no a alguien que está preguntando algo de verdad —
+# medido en una llamada real donde dos preguntas seguidas sobre un medicamento
+# agotaron el tope y la tercera se cortó a la fuerza, sin respuesta y sin que
+# el paciente se hubiera despedido. `sin_progreso` (abajo) sigue siendo el
+# freno de emergencia: en confirmación no hay slot que resolver, así que sube
+# en TODOS los turnos de este tramo y cierra a los cinco si la llamada de
+# verdad no avanza.
 MAX_TURNOS_CONFIRMACION = 2
 
 # Silencios SEGUIDOS antes de colgar. Tres es la escalera mínima que no cuelga a
@@ -389,7 +399,8 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
           procedimiento_dicho: str | None = None,
           guion_entregado: bool = False,
           pregunta_emitida: str | None = None,
-          reanudar: bool = False) -> CallState:
+          reanudar: bool = False,
+          pregunta_respondida: bool = False) -> CallState:
     """Avanza el estado tras ejecutar `action`. Devuelve un estado nuevo.
 
     `hash_turno` y `progreso` los calcula el orquestador, que es quien ve el texto
@@ -401,6 +412,10 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
     para quien todavía no la ha oído. Sin esto, "Hola, buenas." se comía uno de
     los dos intentos del slot de dolor y el agente le respondía a un saludo con la
     reformulación cerrada ("¿más cerca de tres o de ocho?").
+
+    `pregunta_respondida=True` cuando este turno era `action.kind == "confirmar"`
+    y el paciente hizo una pregunta clínica real que el sistema contestó: no
+    gasta `MAX_TURNOS_CONFIRMACION` (ver el comentario junto a esa constante).
     """
     nuevo = CallState(
         phase=action.phase, slot_actual=action.slot,
@@ -453,10 +468,13 @@ def apply(state: CallState, action: Action, symptoms: Symptoms, *,
 
     if action.kind == "confirmar":
         # La llamada está esperando al paciente, no recorriendo el guion: no hay
-        # slot que resolver ni que dar por perdido. Sí cuenta para el tope de la
-        # fase: cada pregunta de confirmación gasta uno de los
-        # MAX_TURNOS_CONFIRMACION.
-        nuevo.turnos_confirmacion = state.turnos_confirmacion + 1
+        # slot que resolver ni que dar por perdido. Cada turno de confirmación
+        # gasta uno de los MAX_TURNOS_CONFIRMACION, EXCEPTO si el paciente hizo
+        # una pregunta clínica real y se le contestó: ese turno no es relleno,
+        # es exactamente lo que se le pide al agente que haga (ver el
+        # comentario junto a MAX_TURNOS_CONFIRMACION).
+        if not pregunta_respondida:
+            nuevo.turnos_confirmacion = state.turnos_confirmacion + 1
         return nuevo
 
     # El slot que se estaba preguntando: o se resolvió, o consume un intento.

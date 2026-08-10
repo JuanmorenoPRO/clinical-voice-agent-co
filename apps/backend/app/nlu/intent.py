@@ -105,6 +105,17 @@ _SOCIAL = re.compile(
 # real donde lo preguntó tres veces seguidas. Exigen el verbo de posibilidad
 # detrás ("cuando puedo/podré/podría...") a propósito: "cuando me muevo me duele"
 # es una afirmación, y un "cuando" suelto marcaba media capa limpia del dataset.
+# Verbos de actividad postoperatoria típicos de "¿puedo volver a...?": elegidos
+# a propósito para NO solapar con el vocabulario de los seis slots (caminar,
+# dormir, comer, moverse), que es justo lo que un "puedo" sin ancla podría
+# confundir con la respuesta de movilidad/sueño/apetito en vez de una pregunta.
+_ACTIVIDAD_POSTOP = (
+    r"hacer\s+ejercicio|hacer\s+deporte|trotar|correr|nadar|manejar|conducir"
+    r"|trabajar|viajar|volar|levantar\s+peso|cargar\s+peso"
+    r"|tener\s+relaciones|hacer\s+fuerza|cocinar|bailar|jugar"
+    r"|banarme|ducharme"
+)
+
 _PREGUNTA = re.compile(
     r"[¿?]"
     # "tengo que" lleva lookahead: "tengo que colgar/irme" es una despedida, no
@@ -119,7 +130,15 @@ _PREGUNTA = re.compile(
     r"|a\s+los\s+cuantos?\s+dias?|que\s+tan\s+pronto)"
     r"\s+(me\s+|se\s+)?(puedo|puede|podre|podria|voy\s+a\s+poder|vuelvo|volveria)\b"
     r"|\b(eso|esto|sera)\s+(es|esta)\s+(normal|bien|grave|peligroso)"
-    r"|(?<!nada que )(?<!no me )\bme\s+(tengo\s+que\s+)?preocup",
+    r"|(?<!nada que )(?<!no me )\bme\s+(tengo\s+que\s+)?preocup"
+    # Sin ancla al inicio del turno, a diferencia de la primera rama de arriba:
+    # medido en una llamada real, "Un 4. Con ese dolor puedo volver a hacer
+    # ejercicio." caía en `respuesta` porque el "puedo" no era la primera
+    # palabra del turno completo (esa rama exige `^`) y no había "¿?" (Whisper
+    # no los pone). El doble lookbehind de negación replica el de
+    # `_AUTOMEDICACION`: "no puedo trabajar" es una respuesta, no una consulta.
+    rf"|(?<!no\s)(?<!no\sme\s)\b(puedo|podre|podria|debo)\s+(volver\s+a\s+)?"
+    rf"({_ACTIVIDAD_POSTOP})\b",
     re.I,
 )
 
@@ -365,6 +384,40 @@ def _pregunta_clinica_en(raw: str, t: str) -> bool:
         if _PREGUNTA.search(f):
             return True
     return bool(not fragmentos and _PREGUNTA.search(t))
+
+
+# Declaración o pregunta indirecta de automedicación ("voy a tomar/me voy a
+# tomar/pienso tomar[me]/me puedo tomar/puedo tomar X", "quisiera/quiero saber
+# si..."), sin forma de pregunta directa: no matchea `_PREGUNTA` (sin "¿/?" ni
+# verbo de posibilidad al inicio de la frase). Solo se consulta en la ventana
+# posterior a un guion crítico (ver `orchestrator.py`), donde una mención así
+# merece verificarse contra el RAG antes de despedirse. Medido en una llamada
+# real: "me puedo tomar" y "si quisiera saber si..." son la forma MÁS común de
+# preguntar algo así en voz, más común que "voy a tomar", y la primera versión
+# de este detector no las cubría — el RAG nunca se consultaba.
+#
+# Doble lookbehind para la negación ("no puedo tomar nada" / "no me puedo
+# tomar nada"): uno solo no bastaba, porque "me" se cuela entre "no" y
+# "puedo" y el lookbehind de tres caracteres ya no ve el "no".
+_AUTOMEDICACION = re.compile(
+    r"(?<!no\s)(?<!no\sme\s)"
+    r"\b(voy\s+a|me\s+voy\s+a|pienso|quiero|puedo|me\s+puedo)\s+tomar(me)?\b"
+    r"|\bme\s+tom(o|ar[ée]|ar[íi]a)\b"
+    r"|\bquisiera\s+saber\b|\bquiero\s+saber\b|\bpuedo\s+saber\b",
+    re.I,
+)
+
+
+def menciona_automedicacion(text: str) -> bool:
+    """¿El paciente anuncia que va a tomarse algo por su cuenta, o pregunta
+    indirectamente si puede/debe hacerlo?
+
+    No es parte de `classify()` a propósito: `_PREGUNTA` está calibrada contra
+    los 1.687 turnos reales del dataset (ver comentario más arriba) y ampliarla
+    arriesga esa calibración. Este detector vive aparte y solo lo consulta el
+    orquestador en la ventana posterior a un guion crítico.
+    """
+    return bool(_AUTOMEDICACION.search(_norm(text)))
 
 
 def is_injection(text: str) -> bool:

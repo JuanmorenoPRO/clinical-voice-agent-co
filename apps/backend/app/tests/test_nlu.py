@@ -819,6 +819,51 @@ def test_la_negacion_no_se_traga_contenido(texto):
     assert intent.niega_mas_temas(texto) is False
 
 
+# --- automedicación: declaración, no pregunta -----------------------------------
+# Se usa en la ventana posterior a un guion crítico: "me voy a tomar X" no
+# matchea `_PREGUNTA` (sin "¿/?" ni verbo de posibilidad al inicio), pero el
+# orquestador necesita saber que ahí hay algo que verificar contra el RAG.
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "Me voy a tomar un metronidazol.",
+        "A ver, toma la letra. Me voy a tomar un metronidazol.",
+        "Voy a tomarme un acetaminofén.",
+        "Pienso tomar ibuprofeno para el dolor.",
+        "Quiero tomarme algo para el dolor.",
+        "Me tomo un acetaminofén ahora mismo.",
+        # Regresión: forma real más común que "voy a tomar" y que la primera
+        # versión de este detector no cubría — el RAG nunca se consultaba.
+        "Listo, me puedo tomar un metro ni a sol.",
+        "Si quisiera saber si me puedo tomar una acetaminofén.",
+        "Sí, me puedo tomar una acetaminofén o algo.",
+        "¿Puedo tomar un café?",
+        "Quiero saber si es grave lo que tengo.",
+    ],
+)
+def test_menciona_automedicacion(texto):
+    assert intent.menciona_automedicacion(texto) is True
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "No voy a tomar nada, gracias.",
+        "No puedo tomar nada, me da alergia.",
+        "No me puedo tomar nada de eso.",
+        "No, nada más, gracias.",
+        "Un 8, mucho dolor.",
+        "Camino bien, sin problema.",
+        "La herida se ve bien.",
+        "[silencio]",
+    ],
+)
+def test_menciona_automedicacion_no_falsos_positivos(texto):
+    assert intent.menciona_automedicacion(texto) is False
+
+
 # --- preguntas sin signos de interrogación (transcripciones Whisper) ------------
 # Bug medido: el paciente preguntó "cuando podria volver a jugar futbol" tres
 # veces —sin `¿?` porque el STT no los pone— y las tres cayeron en `respuesta`.
@@ -848,6 +893,42 @@ def test_la_pregunta_sin_signos_se_reconoce(texto):
     ],
 )
 def test_una_afirmacion_con_cuando_sigue_siendo_respuesta(texto):
+    assert intent.classify(texto) == "respuesta"
+
+
+# --- preguntas sin signo Y sin "cuando", pegadas a la respuesta del slot -------
+# Bug real: "Un 4. Con ese dolor puedo volver a hacer ejercicio." se clasificaba
+# entero como `respuesta` porque "puedo" no era la primera palabra del turno
+# (esa rama exige `^`) y no traía "cuando" (la otra rama sin ancla). El agente
+# reflejaba el dolor y pasaba derecho a la siguiente pregunta del guion sin
+# haber oído la pregunta sobre el ejercicio.
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "Un 4. Con ese dolor puedo volver a hacer ejercicio.",
+        "Un 3, tranquilo. Debo manejar hoy mismo",
+        "Bien. Podria volver a trabajar ya",
+        "Un 2. ¿Puedo bañarme ya?",
+        "Todo bien, puedo tener relaciones ya",
+    ],
+)
+def test_la_pregunta_de_actividad_pegada_a_la_respuesta_se_reconoce(texto):
+    assert intent.classify(texto) == "pregunta_clinica"
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "No puedo caminar bien desde ayer.",
+        "No puedo dormir, me despierto a cada rato.",
+        "No puedo trabajar bien, me canso mucho.",
+        "Un 3, apenas se nota",
+        "Camino bien, sin problema.",
+    ],
+)
+def test_la_pregunta_de_actividad_no_atrapa_respuestas_normales(texto):
     assert intent.classify(texto) == "respuesta"
 
 

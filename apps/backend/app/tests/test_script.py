@@ -238,6 +238,64 @@ def test_el_atasco_se_reinicia_cuando_hay_dato():
     assert script.apply(estado, a, Symptoms(), progreso=False).sin_progreso == 5
 
 
+# --- cierre de confirmación tras un guion crítico ------------------------------
+# La fase de CONFIRMACIÓN se reusa tanto al final de un tamizaje normal como
+# tras entregar un guion de seguridad. En el segundo caso, "¿le quedó claro?"
+# no basta: hay que dejar explícito que hay que esperar el contacto del
+# personal antes de colgar.
+
+
+def test_confirmar_cierre_normal_no_usa_el_banco_escalado():
+    from app.agent import phrasing
+
+    for i in range(6):
+        assert phrasing.confirmar_cierre(f"semilla-{i}") in phrasing.CONFIRMAR_CIERRE
+
+
+def test_confirmar_cierre_escalado_recuerda_esperar_el_contacto():
+    from app.agent import phrasing
+
+    for i in range(6):
+        texto = phrasing.confirmar_cierre(f"semilla-{i}", escalado=True)
+        assert texto in phrasing.CONFIRMAR_CIERRE_ESCALADO
+        assert texto not in phrasing.CONFIRMAR_CIERRE
+
+
+# --- una pregunta clínica contestada no gasta el tope de confirmación --------
+# Bug medido: dos preguntas reales seguidas ("¿puedo tomar X?" contestada dos
+# veces) agotaban MAX_TURNOS_CONFIRMACION y la tercera pregunta legítima se
+# cortaba a la fuerza — la llamada colgaba sin responder y sin despedida.
+
+
+def test_una_pregunta_respondida_no_gasta_el_tope_de_confirmacion():
+    estado = CallState(phase=Phase.CONFIRMACION, turnos_confirmacion=1)
+    a = Action(kind="confirmar", phase=Phase.CONFIRMACION)
+    nuevo = apply(estado, a, CRITICO, pregunta_respondida=True)
+    assert nuevo.turnos_confirmacion == 1, "no debe subir: se contestó una pregunta real"
+
+
+def test_un_turno_de_relleno_sigue_gastando_el_tope():
+    """El comportamiento de siempre no cambia cuando no hubo pregunta real."""
+    estado = CallState(phase=Phase.CONFIRMACION, turnos_confirmacion=1)
+    a = Action(kind="confirmar", phase=Phase.CONFIRMACION)
+    nuevo = apply(estado, a, CRITICO, pregunta_respondida=False)
+    assert nuevo.turnos_confirmacion == 2
+
+
+def test_dos_preguntas_reales_seguidas_no_agotan_el_tope():
+    """El escenario reportado: dos turnos de pregunta_clinica contestada NO
+    deben empujar la fase al cierre forzado por tope."""
+    estado = CallState(phase=Phase.CONFIRMACION)
+    for _ in range(2):
+        a = next_action(estado, CRITICO)
+        assert a.kind == "confirmar"
+        estado = apply(estado, a, CRITICO, pregunta_respondida=True)
+    assert estado.turnos_confirmacion == 0
+    assert next_action(estado, CRITICO).kind == "confirmar", (
+        "con el tope intacto, una tercera pregunta real debe poder seguir"
+    )
+
+
 def test_el_estado_nuevo_sobrevive_a_la_serializacion():
     """Vive en la BD entre turnos: si no round-trippea, el atasco no se detecta."""
     estado = CallState(phase=Phase.TAMIZAJE, slot_actual="fiebre",
