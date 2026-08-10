@@ -420,6 +420,64 @@ def menciona_automedicacion(text: str) -> bool:
     return bool(_AUTOMEDICACION.search(_norm(text)))
 
 
+# Pregunta definicional/aclaratoria sin signos de interrogación, que es como la
+# entrega Whisper: "que es calentura", "que significa supuracion", "no se que es
+# eso". Caía en el default `respuesta` (la rama sin "¿?" de `_PREGUNTA` solo
+# cubre verbos de posibilidad) y el léxico encima extraía el TÉRMINO preguntado
+# como síntoma reportado: el paciente preguntaba qué es calentura y quedaba
+# anotado `fever=True`. Guardas del primer alternante: "lo que es la fiebre, sí
+# la he tenido" (topicalizador) y "que es lo que le digo" (eco) NO son
+# aclaraciones.
+_ACLARACION = re.compile(
+    r"(?<!lo\s)\bque\s+es\s+(?!lo\s)"
+    r"|\bque\s+significa\b|\bque\s+quiere\s+decir\b"
+    r"|\ba\s+que\s+se\s+refiere\b|\bcomo\s+es\s+eso\s+de\b"
+    r"|\bno\s+se\s+que\s+es\b"
+    r"|\bno\s+(le\s+)?entiendo\s+(eso|esa\s+palabra|que\s+es|la\s+pregunta)\b",
+    re.I,
+)
+
+
+def pide_aclaracion(text: str) -> bool:
+    """¿El paciente pregunta qué significa algo (típicamente un término de la
+    pregunta del guion)?
+
+    Misma doctrina que `menciona_automedicacion`: NO es parte de `classify()`
+    porque `_PREGUNTA` está calibrada contra los 1.687 turnos del dataset. Este
+    detector vive aparte y el orquestador solo lo consulta para reclasificar un
+    `respuesta` a `pregunta_clinica`; los demás intents conservan su precedencia.
+    Casa también en el caso mixto ("sí, pero qué es calentura"): los síntomas
+    del resto del turno se extraen igual.
+    """
+    return bool(_ACLARACION.search(_norm(text)))
+
+
+# Turno compuesto SOLO de muletillas de duda: el paciente está PENSANDO, no
+# fallando en responder. Exclusiones deliberadas: "bueno" (respuesta legítima y
+# token de cierre en `niega_mas_temas`), "aja" (asentimiento), "ya" (respuesta).
+# "es que" entra: si Whisper corta "Es que—" a mitad de arranque, tratarlo como
+# pensando es lo deseado y el resto llega en el frame siguiente.
+_PENSANDO = re.compile(
+    r"^\W*((eh+|ee+|mm+|hm+|um+|uy|ay|este|esto|pues|o\s+sea|a\s+ver"
+    r"|como\s+se\s+llama|como\s+le\s+digo|es\s+que|dejeme\s+(pensar|ver)"
+    r"|espere(me)?|un\s+moment(o|ico))[\s.,;:…¡!¿?-]*)+$",
+    re.I,
+)
+
+
+def es_muletilla_pensando(text: str) -> bool:
+    """¿El turno es puro relleno de duda ("ehh...", "este...", "a ver...")?
+
+    No cambia `classify()` —"eh" sigue siendo `ininteligible` allí— porque la
+    reacción correcta no es del clasificador sino de quien lo consulta: la capa
+    de voz no crea turno (deja pensar y rearma el reloj de silencio) y el
+    orquestador, en modo texto, no gasta repregunta ni contesta "¿me lo
+    repite?" a quien no ha terminado de hablar. "Eh, sí, un 4" NO casa: trae
+    contenido, y sigue su curso normal.
+    """
+    return bool(_PENSANDO.match(_norm(text)))
+
+
 def is_injection(text: str) -> bool:
     """Solo el intento de manipular instrucciones, sin la petición de acto médico.
 

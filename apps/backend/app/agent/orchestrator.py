@@ -330,6 +330,19 @@ async def process_turn_async(
             and intent_nlu.menciona_automedicacion(text)):
         extraccion.intent = "pregunta_clinica"
 
+    # Pregunta definicional sin signos, como la entrega Whisper: "que es
+    # calentura" caía en `respuesta` y el agente contestaba la fiebre que nadie
+    # reportó en vez de la duda. Mismo patrón que la automedicación (detector
+    # fuera de `classify` para no tocar su calibración), pero SIN gating de
+    # fase: la aclaración ocurre típicamente en pleno TAMIZAJE. Solo se
+    # reclasifica desde `respuesta`: los demás intents conservan su precedencia.
+    # El caso mixto ("un 4, pero qué es eso de la calentura") funciona solo,
+    # porque los síntomas del turno se fusionan independientemente del intent.
+    aclaracion = (extraccion.intent == "respuesta"
+                  and intent_nlu.pide_aclaracion(text))
+    if aclaracion:
+        extraccion.intent = "pregunta_clinica"
+
     del_turno = extraccion.symptoms
     # Antes de fusionar: lo que el paciente cuenta fuera del guion y todavía no
     # estaba anotado. Solo eso se le reconoce en voz alta y solo eso cuenta como
@@ -468,7 +481,12 @@ async def process_turn_async(
         final = phrasing.RECHAZO
         action = Action(kind="cerrar", phase=Phase.TERMINADA)
     elif extraccion.intent == "ininteligible":
-        final = phrasing.NO_ENTENDI
+        # "¿Me lo repite?" a quien va por "ehh..." es la respuesta equivocada:
+        # está pensando, no fallando. En voz la muletilla ni siquiera llega
+        # aquí (el pipeline la deja pasar sin crear turno); esto cubre el modo
+        # texto y lo que se cuele. La basura real del STT sigue con NO_ENTENDI.
+        final = (phrasing.PENSANDO if intent_nlu.es_muletilla_pensando(text)
+                 else phrasing.NO_ENTENDI)
     elif action.kind == "cerrar" and extraccion.intent != "pregunta_clinica":
         # El paciente se despidió, o el guion se agotó/atascó: cierre verbatim
         # —pre-sintetizable y con las instrucciones de cuándo llamar—. La
@@ -579,11 +597,17 @@ async def process_turn_async(
     # contestarla: esos turnos no gastan reintentos del slot. Contar de qué lo
     # operaron tampoco: el paciente no esquivó la pregunta, corrigió el registro,
     # y cobrárselo como un intento fallido le acorta el margen para contestar de
-    # verdad. Misma doctrina que ya documenta `script.apply`.
+    # verdad. Misma doctrina que ya documenta `script.apply`. Preguntar qué
+    # significa la pregunta (`aclaracion`) o pensar en voz alta ("ehh...")
+    # tampoco es esquivarla — sin esto, dos aclaraciones seguidas quemaban las
+    # dos repreguntas y el slot caía en "no me supo decir". El bucle lo acota
+    # `sin_progreso` (ofrecer salida a los 3, cerrar a los 5); la basura real
+    # del STT ("asdkjh") NO está exenta y sigue gastando como siempre.
     nuevo_estado = script.apply(
         estado, action, acumulado, hash_turno=hash_turno, progreso=progreso,
         intento_real=(extraccion.intent not in ("saludo", "meta", "social")
-                      and not proc_nuevo),
+                      and not proc_nuevo and not aclaracion
+                      and not intent_nlu.es_muletilla_pensando(text)),
         silencio=silencio,
         procedimiento_dicho=proc_dicho,
         # El guion de seguridad se entregó en ESTE turno: queda registrado en el

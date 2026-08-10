@@ -925,6 +925,68 @@ def test_una_tos_no_corta_el_tts():
     asyncio.run(escenario())
 
 
+# --- muletillas: el paciente que dice "ehh..." está pensando ---------------------
+
+
+def test_la_muletilla_no_crea_turno_y_deja_pensar():
+    """El VAD corta a "Ehh..." tras ~1 s de pausa y eso llegaba como turno: el
+    agente contestaba "¿me lo repite?" encima del paciente que seguía pensando
+    y quemaba una de las dos repreguntas del slot. Ahora no es un turno: no
+    baja al orquestador, el reloj sigue vigilando y la escalera NO se resetea
+    (el episodio de silencio continúa: lo próximo es la frase suave, no un
+    segundo gentle)."""
+    import asyncio
+
+    from pipecat.frames.frames import BotStoppedSpeakingFrame, TTSSpeakFrame
+
+    async def escenario():
+        p = _procesador(timeout=30, gentle=30)
+
+        def _no_debe_llamarse(text, interrumpida=False):  # noqa: ARG001
+            raise AssertionError("la muletilla no puede tocar el orquestador")
+
+        p._run_turn = _no_debe_llamarse
+        await _meter(p, BotStoppedSpeakingFrame())     # el agente hizo la pregunta
+        p._escalera._gentle_emitido = True             # noqa: SLF001 — gentle ya sonó
+
+        await _meter(p, _transcripcion("Ehh..."))
+        assert p._tarea_turno is None                  # noqa: SLF001
+        assert p._watchdog is not None                 # noqa: SLF001 — sigue vigilando
+        assert not any(isinstance(f, TTSSpeakFrame) for f in p.empujados), (
+            "le habló encima a quien estaba pensando"
+        )
+        # La escalera no se reseteó: el gentle NO vuelve a estar disponible.
+        assert p._escalera._gentle_emitido is True     # noqa: SLF001
+
+        # Cuando por fin habla, su turno se procesa con normalidad.
+        p._run_turn = lambda text, interrumpida=False: _respuesta()
+        await _meter(p, _transcripcion("me duele como un cuatro"))
+        await p._tarea_turno                           # noqa: SLF001
+        assert any(isinstance(f, TTSSpeakFrame) for f in p.empujados)
+
+    asyncio.run(escenario())
+
+
+def test_la_muletilla_no_interrumpe_al_agente():
+    """Un "a ver..." de backchannel mientras el agente habla no corta el TTS."""
+    import asyncio
+
+    from pipecat.frames.frames import BotStartedSpeakingFrame
+
+    async def escenario():
+        p = _procesador()
+
+        async def _no_debe_interrumpir():
+            raise AssertionError("la muletilla interrumpió al agente")
+
+        p.broadcast_interruption = _no_debe_interrumpir
+        await _meter(p, BotStartedSpeakingFrame())
+        await _meter(p, _transcripcion("a ver..."))
+        assert p._tarea_turno is None                  # noqa: SLF001
+
+    asyncio.run(escenario())
+
+
 # --- contexto: un turno fallido no borra la conversación -------------------------
 
 

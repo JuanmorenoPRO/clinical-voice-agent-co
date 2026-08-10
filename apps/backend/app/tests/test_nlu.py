@@ -948,3 +948,139 @@ def test_la_despedida_pura_sigue_siendo_despedida():
 def test_la_muletilla_de_confirmacion_no_reabre_la_despedida():
     # "todo claro, ¿no?" es una despedida con muletilla, no una consulta.
     assert intent.classify("todo claro, ¿no?") == "despedida"
+
+
+# --- aclaraciones: preguntar qué es un término no es reportarlo -----------------
+# Bug real: el agente preguntó por la fiebre, el paciente preguntó "que es
+# calentura" (Whisper no pone los signos), el turno cayó en el default
+# `respuesta` y el léxico anotó `fever=True` del término preguntado. Doble daño:
+# no se respondió la duda Y quedó un síntoma falso.
+
+_PREGUNTA_FIEBRE = "¿Ha tenido fiebre o calentura estos días?"
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "que es calentura",
+        "¿Qué es calentura?",
+        "que significa supuración",
+        "a que se refiere con movilidad",
+        "cómo es eso de la secreción",
+        "no sé qué es eso",
+        "sí, pero que es calentura",
+        "no entiendo esa palabra",
+        "no le entiendo la pregunta",
+    ],
+)
+def test_pide_aclaracion(texto):
+    assert intent.pide_aclaracion(texto) is True
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Topicalizador colombiano: habla del término, no pregunta por él.
+        "Lo que es la fiebre, sí la he tenido",
+        # Eco de la pregunta del agente.
+        "que es lo que le digo, me duele poquito",
+        "cuando me muevo me duele",
+        "no entiendo por qué me duele tanto",
+        "Un 4, apenas se nota",
+        "[silencio]",
+    ],
+)
+def test_pide_aclaracion_no_falsos_positivos(texto):
+    assert intent.pide_aclaracion(texto) is False
+
+
+def test_la_aclaracion_no_extrae_el_termino():
+    sym = lexicon.extract("que es calentura", "fiebre", question=_PREGUNTA_FIEBRE)
+    assert sym.fever is None
+    assert sym.temperature_measured is None
+
+
+def test_la_aclaracion_mixta_no_afirma_lo_que_no_se_entendio():
+    # El "sí" pelado no puede anotar la fiebre cuando el resto del turno
+    # pregunta qué es la calentura: no se afirma lo que no se entiende.
+    sym = lexicon.extract("sí, pero que es calentura", "fiebre",
+                          question=_PREGUNTA_FIEBRE)
+    assert sym.fever is None
+
+
+def test_el_topicalizador_sigue_reportando():
+    sym = lexicon.extract("Lo que es la fiebre, sí la he tenido", "fiebre",
+                          question=_PREGUNTA_FIEBRE)
+    assert sym.fever is True
+
+
+def test_la_aclaracion_en_primera_persona_se_conserva():
+    # "no sé qué es eso que ME está saliendo" reporta una secreción real: el
+    # recorte definicional respeta la misma guarda de primera persona que los
+    # fragmentos con "?" — perder eso sería el falso negativo catastrófico.
+    d = lexicon.parte_declarativa("no sé qué es eso que me está saliendo de la herida")
+    assert "herida" in d
+    assert "saliendo" in d
+
+
+def test_la_aclaracion_impersonal_se_recorta():
+    assert "calentura" not in lexicon.parte_declarativa("que es calentura")
+
+
+def test_las_banderas_sobreviven_a_la_aclaracion():
+    # La lectura conservadora no se toca: la bandera se lee del turno entero.
+    sym = lexicon.extract("que es calentura, y estoy botando mucha sangre",
+                          "fiebre", question=_PREGUNTA_FIEBRE)
+    assert sym.heavy_bleeding is True
+    assert sym.fever is None
+
+
+# --- muletillas: "ehh..." es pensar, no fallar en responder ---------------------
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "Ehh...",
+        "mmm",
+        "este...",
+        "eh, este, como se llama...",
+        "a ver...",
+        "espéreme un momentico",
+        "pues...",
+        "o sea...",
+        "déjeme pensar",
+        "um",
+    ],
+)
+def test_es_muletilla_pensando(texto):
+    assert intent.es_muletilla_pensando(texto) is True
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Traen contenido o son respuestas legítimas: siguen su curso normal.
+        "eh, sí",
+        "bueno",
+        "ajá",
+        "ya",
+        "no",
+        "eh... un 4",
+        "este dolor no se me quita",
+        "pues me duele bastante",
+        "espere que le pregunto a mi hija",
+        "[silencio]",
+        "asdkjhaskjdh",
+    ],
+)
+def test_no_es_muletilla_si_trae_contenido(texto):
+    assert intent.es_muletilla_pensando(texto) is False
+
+
+def test_la_calibracion_de_classify_no_se_movio():
+    # Los detectores nuevos viven FUERA de `classify`: "eh" sigue siendo
+    # ininteligible y "que es calentura" sigue cayendo en `respuesta` (la
+    # reclasificación a pregunta_clinica la hace el orquestador, no esto).
+    assert intent.classify("eh") == "ininteligible"
+    assert intent.classify("que es calentura") == "respuesta"

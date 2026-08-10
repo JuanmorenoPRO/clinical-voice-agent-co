@@ -396,6 +396,12 @@ NO_ENTENDI = "Perdone, no le escuché bien. ¿Me lo repite?"
 # paciente se queda hablando con un teléfono mudo y no sabe si lo oyeron.
 FALLO_TECNICO = "Disculpe, tuve un problema de mi lado. ¿Me lo puede repetir?"
 
+# El paciente va por "ehh..." / "este...": está pensando. "¿Me lo repite?"
+# aquí es la respuesta equivocada — no ha terminado de decir nada. Solo aplica
+# al modo texto: en voz la muletilla no llega a ser turno (ver
+# `voice/pipeline.py`), que es donde de verdad se le deja pensar en paz.
+PENSANDO = "Tranquilo, tómese su tiempo."
+
 # Trámites: horarios, costos, EPS, transporte, citas. No los responde el corpus
 # clínico y no son de esta llamada, pero callarlos tampoco vale: `intent ==
 # pregunta_administrativa` no tenía rama propia y caía en el `else` genérico, así
@@ -609,8 +615,8 @@ def cierre(nombre: str | None, escalado: bool) -> str:
 # un turno normal cuesta 0 ms.
 def textos_cacheables() -> list[str]:
     fijos = [APERTURA, PREGUNTA_ABIERTA, META_REPETIR, META_PROGRESO, SOCIAL,
-             FUERA_DE_MISION, RECHAZO, NO_ENTENDI, FALLO_TECNICO, TERCERO,
-             ADMINISTRATIVA, CIERRE_SIN_RESPUESTA]
+             FUERA_DE_MISION, RECHAZO, NO_ENTENDI, FALLO_TECNICO, PENSANDO,
+             TERCERO, ADMINISTRATIVA, CIERRE_SIN_RESPUESTA]
     for banco in (PREGUNTAS, REPREGUNTAS):
         for opciones in banco.values():
             fijos.extend(opciones)

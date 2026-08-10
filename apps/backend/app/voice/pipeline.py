@@ -604,6 +604,17 @@ class ClinicalProcessor(FrameProcessor):
                 logger.info(f"[voz] ruido mientras el agente habla, se ignora: {text!r}")
                 self._armar_vigilancia()
                 return
+            if intent_nlu.es_muletilla_pensando(text):
+                # "Ehh...", "este...": el paciente está PENSANDO, no fallando
+                # en responder. No es un turno: no baja al orquestador (que le
+                # contestaría "¿me lo repite?" encima y gastaría repregunta) y
+                # NO resetea la escalera — el episodio de silencio sigue vivo,
+                # así que si la pausa se alarga lo próximo que suena es la
+                # frase suave ("tómese su tiempo"), no un sondeo. Cuando por
+                # fin hable, su transcripción llega como turno normal.
+                logger.info(f"[voz] muletilla, el paciente sigue pensando: {text!r}")
+                self._armar_vigilancia()
+                return
             logger.info(f"[voz] paciente: {text}")
             self._cancelar_vigilancia()
             self._escalera.reset()        # turno real: episodio de silencio nuevo

@@ -679,6 +679,47 @@ _PRIMERA_PERSONA = re.compile(
     r"\b(me|mi|mis|yo|tengo|siento|estoy|ando|he|mio|mia|conmigo|noto|veo|llevo)\b"
 )
 
+# Pregunta definicional SIN signos, que es como la entrega Whisper: "que es
+# calentura", "no se que es eso". `_FRAGMENTO_PREGUNTA` exige el `?` literal y
+# no la ve, así que "calentura" seguía en la parte declarativa y `_FIEBRE_SI`
+# anotaba fiebre de una pregunta. Opera sobre texto YA normalizado (sin
+# tildes). Mismo criterio de duplicación que `_FRAGMENTO_PREGUNTA`: no se
+# importa de `intent` para que el núcleo determinista no dependa del
+# clasificador. Guardas del primer alternante: "lo que es la fiebre, si la he
+# tenido" (topicalizador) y "que es lo que le digo" (eco) no son preguntas.
+_FRAGMENTO_DEFINICIONAL = re.compile(
+    r"(?<!lo\s)\b(que\s+es\s+(?!lo\b)|que\s+significa|que\s+quiere\s+decir"
+    r"|a\s+que\s+se\s+refiere|como\s+es\s+eso\s+de|no\s+se\s+que\s+es)"
+    r"[^.!?,;]{0,60}"
+)
+
+# Palabras del propio patrón definicional y deícticos, que no cuentan como el
+# TÉRMINO preguntado a la hora de decidir si la aclaración es sobre la pregunta.
+_VACIAS_ACLARACION = frozenset({
+    "que", "significa", "quiere", "decir", "refiere", "como", "eso", "esa",
+    "ese", "esto", "esta", "este", "cuando", "para", "pero", "entonces",
+})
+
+
+def _aclara_el_termino(t: str, question: str | None) -> bool:
+    """¿El turno pregunta por un término de la PROPIA pregunta del guion?
+
+    Es la guarda del caso mixto ("sí, pero qué es calentura"): recortado el
+    fragmento definicional queda "sí, pero", y el bloque polar anotaría el
+    hallazgo desde ese "sí" — incoherente, porque no se afirma lo que no se
+    entiende. Solo aplica si alguna palabra de contenido del fragmento aparece
+    en la pregunta; "qué es eso que suena" en mitad de otra cosa no bloquea.
+    """
+    if not question:
+        return False
+    m = _FRAGMENTO_DEFINICIONAL.search(t)
+    if not m:
+        return False
+    q = set(normalize(question).split())
+    contenido = [w for w in m.group(0).split()
+                 if len(w) >= 4 and w not in _VACIAS_ACLARACION]
+    return any(w in q for w in contenido)
+
 
 def parte_declarativa(text: str) -> str:
     """El turno sin sus preguntas IMPERSONALES, ya normalizado.
@@ -708,7 +749,16 @@ def parte_declarativa(text: str) -> str:
         frag = normalize(m.group(0))
         return m.group(0) if _PRIMERA_PERSONA.search(frag) else " "
 
-    return normalize(_FRAGMENTO_PREGUNTA.sub(_quitar, text))
+    d = normalize(_FRAGMENTO_PREGUNTA.sub(_quitar, text))
+
+    # Segunda pasada, sobre el texto ya normalizado: la pregunta definicional
+    # llega de Whisper SIN signos ("que es calentura") y la primera pasada no
+    # la ve. Misma guarda de primera persona y por el mismo motivo: "no se que
+    # es eso que me esta saliendo de la herida" reporta una secreción real.
+    def _quitar_norm(m: re.Match[str]) -> str:
+        return m.group(0) if _PRIMERA_PERSONA.search(m.group(0)) else " "
+
+    return _FRAGMENTO_DEFINICIONAL.sub(_quitar_norm, d)
 
 
 def extract(text: str, slot: str | None = None, *,
@@ -785,10 +835,17 @@ def extract(text: str, slot: str | None = None, *,
     # más elíptico: el patrón autosuficiente, la respuesta corta a ESTA pregunta,
     # y la afirmación genérica de normalidad ("todo bien" significa lo que se
     # acaba de preguntar).
+    # Aclaración sobre un término de la propia pregunta ("sí, pero qué es
+    # calentura"): las respuestas cortas y el sí/no pelado de ESTE slot no se
+    # leen — no se afirma lo que no se entiende. Las banderas, la temperatura y
+    # los patrones autosuficientes siguen leyéndose del turno entero.
+    aclara = _aclara_el_termino(t, question)
+
     if slot in _CATEGORICOS:
         campo, patrones = _CATEGORICOS[slot]
         if not _primera_coincidencia(sym, campo, patrones, d):
-            if not _primera_coincidencia(sym, campo, _CORTAS.get(slot, []), d):
+            cortas = [] if aclara else _CORTAS.get(slot, [])
+            if not _primera_coincidencia(sym, campo, cortas, d):
                 if _afirmado(_NORMAL_GENERICO, d):
                     setattr(sym, campo, "normal")
                     sym.sources[campo] = "lexicon"
@@ -829,7 +886,7 @@ def extract(text: str, slot: str | None = None, *,
     # no al hallazgo. Ahí el slot sigue abierto para que el guion reformule en
     # cerrada (ver `script.seguimiento_pendiente`).
     polar = polaridad.de(question)
-    if polar is not None and not _resolvio_algo(sym):
+    if polar is not None and not aclara and not _resolvio_algo(sym):
         campo, si, no = polar
         estorba = habla_de_medir(t) if campo == "fever" else False
         if (getattr(sym, campo) is None and not estorba
