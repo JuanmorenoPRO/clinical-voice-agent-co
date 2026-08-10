@@ -75,10 +75,20 @@ _MULETILLA = re.compile(
 
 # Meta-conversación sobre la llamada. Tiene respuesta determinista (repetir la
 # pregunta, decir cuánto falta): no toca el RAG ni el LLM.
+#
+# Los tres últimos alternantes son el ECO de la pregunta del agente: "¿qué me
+# preguntaba?", "¿me preguntaba por la herida o qué era?". Es el uso MÁS común
+# del verbo en el corpus (7 turnos) y hasta ahora caía en `pregunta_clinica` por
+# el `[¿?]` de `_PREGUNTA` — o sea, disparaba el RAG para algo que se contesta
+# repitiendo la pregunta. Se distingue de la duda anunciada (familia E de
+# `_PREGUNTA_SIN_SIGNOS`) por la posición del "que": aquí va DELANTE del verbo,
+# allí detrás ("me preguntaba que si puedo tomar...").
 _META = re.compile(
     r"me\s+repite|no\s+(le\s+)?(entendi|escuche|oi)|(puede|podria)\s+repetir"
     r"|ya\s+(casi\s+)?terminamos|cuanto\s+(falta|mas)|cuantas\s+preguntas"
-    r"|como\s+asi|que\s+dijo|mas\s+despacio|no\s+se\s+le\s+escucha",
+    r"|como\s+asi|que\s+dijo|mas\s+despacio|no\s+se\s+le\s+escucha"
+    r"|\bque\s+(?:me\s+)?preguntaba\b|\bme\s+preguntaba\s+(?:por|de|lo)\b"
+    r"|\bque\s+(?:me\s+)?(?:pregunto|pregunta)\s+(?:de|por)\b",
     re.I,
 )
 
@@ -210,7 +220,7 @@ def _cola_interrogativa(t: str) -> bool:
 # y ahí el RAG no se consulta nunca (ver el guard de `orchestrator.py`). Como
 # Whisper no devuelve signos, ése es el caso normal en voz, no el raro.
 #
-# Cuatro familias, elegidas midiendo una a una cuántas preguntas recuperan y
+# Cinco familias, elegidas midiendo una a una cuántas preguntas recuperan y
 # cuántas respuestas rompen. Las otras tres que aparecen en el corpus —"eso ya es
 # fiebre", "¿ya acabamos?", "¿fue el lunes o el martes?"— hoy rompen tantas
 # respuestas como preguntas recuperan y se quedan fuera a propósito: necesitan un
@@ -237,7 +247,28 @@ _PREGUNTA_SIN_SIGNOS = re.compile(
     #    donde ninguna de las dos ramas ancladas podía verlo. El lookbehind deja
     #    fuera el relativo libre: "lo que puedo comer me cae mal" no pregunta nada.
     rf"|(?<!lo\s)\b{_WH}\b(?:\s+\w+){{0,3}}?\s+{_MODAL_PERMISO}\b"
-    rf"\s+(?:\w+\s+){{0,2}}\w+(?:ar|er|ir)(?:me|se|lo|la|le)?\b",
+    rf"\s+(?:\w+\s+){{0,2}}\w+(?:ar|er|ir)(?:me|se|lo|la|le)?\b"
+    # E. el marco metadiscursivo: el paciente ANUNCIA la pregunta antes de
+    #    hacerla. "5 me preguntaba si puedo tomar acetaminofén" (llamada real) no
+    #    lo veía ninguna rama: el "5" rompe el ancla al inicio del turno, "si" no
+    #    es palabra _WH y `preguntar` no estaba en la familia A. Cada alternante
+    #    lleva su guarda, todas medidas contra el corpus:
+    #    · el subordinante interrogativo detrás de "me preguntaba" ("que si..."
+    #      es el orden colombiano) deja el eco de la pregunta del agente —"¿qué
+    #      me preguntaba?"— en `_META`, que es su sitio;
+    #    · `(?<!no\s)` en la duda: "ya no tengo dudas" es conformidad, no
+    #      consulta ("no tengo MÁS dudas" ya lo gana `_DESPEDIDA`, antes);
+    #    · `(?<!usted\s)` en la volición: "¿usted quería preguntarme algo más de
+    #      la herida?" es el paciente devolviendo el turno. Y exigir el
+    #      subordinante deja fuera el completivo: "quiero saber QUE ya no me
+    #      duele" es un reporte.
+    r"|\bme\s+preguntaba\s+(?:que\s+)?(?:si|cuando|cuanto|cual|como)\b"
+    r"|(?<!no\s)\b(?:tengo|tenia|me\s+queda|me\s+quedo)\s+"
+    r"(?:una\s+|la\s+|esa\s+|otra\s+|esta\s+)?duda\b"
+    r"|(?<!usted\s)\b(?:quer[ií]a|quisiera|quiero|me\s+gustar[ií]a|necesito)\s+"
+    r"(?:sab|pregunt|consult)\w*\s+(?:le\s+|me\s+)?"
+    r"(?:si|cuando|cuanto|cual|como|donde|algo|una|otra)\b"
+    r"|\b(?:una|otra)\s+pregunt(?:a|ica)\b",
     re.I,
 )
 

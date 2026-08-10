@@ -195,6 +195,25 @@ def test_la_consulta_lleva_procedimiento_y_dia():
     assert build_query("¿me puedo bañar?") == "¿me puedo bañar?"
 
 
+def test_embeddings_caidos_declaran_el_limite_no_revientan(sesion_limpia, tmp_path, monkeypatch):
+    """Ollama caído se degrada a abstención; antes subía un 500 al paciente."""
+    from app.rag import ingest, retrieve
+
+    ruta = _escribir(tmp_path, "zafiro.md", CANARIO)
+    ingest.ingest_file(sesion_limpia, ruta, "zafiro.md", procedure="Apendicectomía")
+
+    def _sin_ollama(_texto):
+        raise ConnectionError("Failed to connect to Ollama")
+
+    monkeypatch.setattr(retrieve, "embed_query", _sin_ollama)
+
+    r = retrieve.retrieve(sesion_limpia, "¿Cuándo es el control Zafiro?",
+                          procedure="Apendicectomía")
+    assert r.has_evidence is False
+    assert r.confidence == 0.0
+    assert "enfermería" in r.answer.lower()
+
+
 def test_contrato_de_ragresult():
     r = RagResult(answer="x", confidence=0.9)
     assert r.has_evidence is True and r.sources == []

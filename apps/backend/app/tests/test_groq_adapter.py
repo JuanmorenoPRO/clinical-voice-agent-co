@@ -9,6 +9,7 @@ hay `GROQ_API_KEY`, para que la suite corra en CI sin credenciales.
 from __future__ import annotations
 
 import asyncio
+import os
 
 import pytest
 
@@ -27,6 +28,18 @@ def _groq_disponible() -> bool:
 
 
 pytestmark = pytest.mark.skipif(not _groq_disponible(), reason="Falta GROQ_API_KEY")
+
+# Sondas de calibración: miden si el modelo ACIERTA, no si el contrato se cumple.
+# Se observaron fallando y volviendo a pasar sin que cambiara una línea de código
+# —un 70B cambia de criterio entre ejecuciones—, y un test que parpadea no dice
+# nada: o se ignora, o se deja de confiar en toda la suite. Se dejan porque son
+# útiles para calibrar prompts a mano, pero fuera del camino por defecto. Lo que
+# esos prompts garantizan de forma determinista sí está cubierto sin modelo:
+# `_nombres_propios_presentes`, `grounded_in_evidence` y las banderas del léxico.
+juicio_del_modelo = pytest.mark.skipif(
+    os.getenv("TEST_JUICIO_MODELO") != "1",
+    reason="Sonda de criterio del LLM: activar con TEST_JUICIO_MODELO=1",
+)
 
 PREGUNTAS = {
     "dolor": "¿Cómo ha estado el dolor, en una escala del 0 al 10?",
@@ -105,6 +118,7 @@ def test_lo_formulaico_no_gasta_el_modelo(adapter):
     assert ext.usage.tokens_out == 0, "no debería haber llamado al modelo"
 
 
+@juicio_del_modelo
 def test_el_modelo_cubre_la_parafrasis(adapter):
     """Paráfrasis que no está en el léxico: aquí sí trabaja el modelo."""
     ext = run(
@@ -230,6 +244,7 @@ def test_la_bandera_roja_no_depende_de_groq():
     assert r.symptoms.sources["breathing_difficulty"] == "lexicon"
 
 
+@juicio_del_modelo
 def test_filtro_de_dominio_clasifica_la_pregunta(adapter):
     evidencia = "El baño diario se permite desde las 48 horas. Seque bien la herida."
     dentro = run(

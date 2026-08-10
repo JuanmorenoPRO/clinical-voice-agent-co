@@ -17,31 +17,41 @@ nota del reto permite usar el sucesor vigente de ese mismo proveedor.
 [Groq](https://console.groq.com) (un minuto, sin tarjeta). Es la única credencial.
 
 ```bash
-# 1. Modelos embeddings (1.2 GB). El LLM vive en Groq; bge-m3 corre local.
+# 1. Servicio de embeddings. `pull` no deja el demonio arrancado, y tras un
+#    reinicio nada lo vuelve a levantar: sin él, el RAG no puede embeber la
+#    consulta y el agente se abstiene en vez de citar evidencia.
+ollama serve &
+
+# 2. Modelo de embeddings (1.2 GB). El LLM vive en Groq; bge-m3 corre local.
 ollama pull bge-m3 &
 
-# 2. Código y dependencias
+# 3. Código y dependencias
 git clone https://github.com/JuanmorenoPRO/clinical_assistant && cd clinical_assistant
 python3.12 -m venv .venv && .venv/bin/pip install -r apps/backend/requirements.txt \
                                                   -r apps/backend/requirements-voice.txt
 
-# 3. Credencial
+# 4. Credencial
 cp .env.example .env        # pega tu GROQ_API_KEY
 
-# 4. Índice del corpus clínico preconstruido (63 MB, ~5 s)
+# 5. Índice del corpus clínico preconstruido (63 MB, ~5 s)
 .venv/bin/python scripts/fetch_index.py
 .venv/bin/python scripts/init_db.py
 
-# 5. Arrancar
+# 6. Arrancar
 .venv/bin/python -m uvicorn app.main:app --app-dir apps/backend --port 8000
 ```
 
 Abre <http://localhost:8000/docs>. Comprueba que todo está en pie:
 
 ```bash
-curl localhost:8000/health          # {"status":"ok","llm_provider":"groq",…}
+curl localhost:8000/health          # {"status":"ok",…,"embeddings_ready":true}
 curl localhost:8000/voice/status    # {"ready":true}
+curl localhost:11434/api/tags       # Ollama en pie; debe listar bge-m3
 ```
+
+Si `/health` responde `"status":"degraded"`, Ollama no está corriendo: el agente
+sigue haciendo el tamizaje, pero se abstiene en vez de citar evidencia. Arréglalo
+con `ollama serve &`.
 
 **Por qué no hay Docker:** en macOS, Docker Desktop no reenvía los puertos UDP de
 WebRTC, así que la voz —que es lo que evalúa G4— no funciona con el backend en un
@@ -260,14 +270,18 @@ la marcha— están en [`docs/spikes-7-agosto.md`](docs/spikes-7-agosto.md).
 cd apps/backend && ../../.venv/bin/python -m pytest app/tests -q
 ```
 
-739 tests (los de voz se saltan si no están instaladas sus dependencias). Los del
-motor de decisión, el léxico y el guion —más de 400— corren sin modelo, sin red y
-sin base de datos, en menos de un segundo:
+766 tests. Los del motor de decisión, el léxico y el guion —452— corren sin modelo,
+sin red y sin base de datos, en un cuarto de segundo:
 
 ```bash
 cd apps/backend && ../../.venv/bin/python -m pytest app/tests/test_decision.py \
                      app/tests/test_nlu.py app/tests/test_script.py -q
 ```
+
+Dos tests quedan fuera del camino por defecto: son sondas del *criterio* del modelo
+—si acierta una paráfrasis, si descarta una pregunta ajena— y un 70B cambia de
+opinión entre ejecuciones. Se activan con `TEST_JUICIO_MODELO=1`. Lo que esos
+prompts garantizan de forma determinista sí está cubierto sin modelo.
 
 ### Evaluación sobre los 160 casos del dataset
 

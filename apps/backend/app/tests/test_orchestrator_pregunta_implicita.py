@@ -71,9 +71,14 @@ def test_la_pregunta_sin_signo_en_mitad_del_turno_se_escucha(session):
     turno = session.query(Turn).filter(Turn.conversation_id == r.conversation_id
                                        ).order_by(Turn.created_at).all()[-1]
     assert turno.intent == "pregunta_clinica"
-    # Sin corpus RAG en este test, lo correcto es abstenerse — pero abstenerse es
-    # haber oído la pregunta, que es justo lo que no pasaba.
-    assert "no tengo informaci" in r.response.lower()
+    # La diarrea es un síntoma con peso clínico (`nlu/otros_sintomas.py`), así que
+    # esta pregunta ya no va al RAG: pedir si lo propio "es normal" es pedir un
+    # juicio clínico sobre el caso, que el corpus no responde y el agente no hace.
+    # Sale por `phrasing.SINTOMA_CONSULTADO` y se deriva a enfermería. Derivar
+    # —igual que abstenerse— es haber OÍDO la pregunta, que es lo que no pasaba;
+    # por eso el test mira eso y no una frase literal.
+    assert "enfermer" in r.response.lower(), r.response
+    assert "diarrea" in r.symptoms.other
 
 
 def test_la_abstencion_no_encadena_una_segunda_transicion(session):
@@ -132,4 +137,4 @@ def test_texto_de_con_acumulado_antepone_el_reflejo():
     texto = _texto_de(accion, semilla="s", recientes=[], nombre=None,
                       preocupante=False, acumulado=acumulado, del_turno=acumulado,
                       slot_respondido="dolor")
-    assert "Un 4, ahí en la mitad." in texto
+    assert "Un 4, más o menos." in texto
