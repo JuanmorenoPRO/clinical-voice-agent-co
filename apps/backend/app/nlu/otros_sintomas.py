@@ -86,6 +86,58 @@ _TABLA: list[tuple[str, str, str, re.Pattern[str]]] = [
         r"|no\s+(he\s+podido|puedo)\s+(obrar|hacer\s+del\s+cuerpo|ir\s+al\s+bano)"
         r"|estrenid\w+|no\s+he\s+obrado|no\s+puedo\s+expulsar\s+gases"
     )),
+    # Alarma explícita en la guía de cuidado en casa de apendicectomía ("diarrea
+    # de más de 3 días") y en la guía ERAS de cirugía de colon. Se perdía entera:
+    # el paciente la reportaba, el RAG contestaba bien con la guía clínica, pero
+    # nada quedaba anotado como hallazgo — se contestaba la pregunta sin dejar
+    # rastro clínico.
+    ("diarrea", "diarrea", SENAL, re.compile(
+        r"diarre\w*|deposicion\w*\s+(liquid\w*|aguad\w*|suelt\w*)"
+        r"|obrando\s+(aguad\w*|suelt\w*)|del\s+cuerpo\s+(liquid\w*|aguad\w*)"
+        r"|estomago\s+suelto"
+    )),
+    # Ictericia (piel u ojos amarillos): alarma específica de colecistectomía
+    # ("PLAN DE CUIDADO COLECISTECTOMIA.pdf" p.4) — señal de lesión o fuga de vía
+    # biliar. No la cubre nada más en el sistema.
+    ("ictericia", "piel u ojos amarillos", SENAL, re.compile(
+        r"amarill\w*.{0,15}(piel|ojos?|cara)|(piel|ojos?)\s+.{0,15}amarill\w*"
+        r"|ictericia|me\s+puse\s+amarill\w+|se\s+me\s+pusieron\s+(los\s+ojos\s+)?amarill\w+"
+    )),
+    # Apertura o separación de los puntos: el slot categórico `wound` de
+    # lexicon.py no tiene bucket para esto (sus tres patrones son purulenta,
+    # eritema leve y normal), así que hoy cae en `wound=None` sin que nada la
+    # recoja. Alarma explícita en la guía de apendicectomía.
+    ("dehiscencia", "la herida se abrió", SENAL, re.compile(
+        r"se\s+(me\s+)?abrio\s+la\s+herida|la\s+herida\s+se\s+(abrio|separo)"
+        r"|se\s+(me\s+)?(salieron|soltaron|reventaron)\s+los\s+puntos"
+        r"|se\s+separaron\s+(los\s+)?(bordes|puntos)|dehiscencia"
+    )),
+    # Sangre en las heces: alarma explícita en la guía ERAS de cirugía de colon
+    # ("bright red blood from your anus"). No se solapa con `heavy_bleeding` de
+    # `lexicon._BANDERAS` (EMERGENCIA/123) porque esa bandera exige lenguaje de
+    # sangrado abundante genérico ("sangrando mucho", "hemorragia"), no lenguaje
+    # de sangre en las heces. Se deja como SENAL y no como regla roja nueva a
+    # propósito: no hay casos de este tipo en las 160 trayectorias calibradas,
+    # así que una regla roja aquí sería una escalada sin validar contra el
+    # dataset — el mismo principio que ya sigue el resto de esta tabla (ver
+    # encabezado del módulo).
+    ("sangrado_rectal", "sangre en las heces", SENAL, re.compile(
+        r"sangre\s+(en\s+)?(las\s+)?heces|sangre\s+al\s+(obrar|defecar)"
+        r"|sangro\s+(al\s+)?(obrar|defecar)|heces\s+con\s+sangre|popo\s+con\s+sangre"
+        r"|sangre\s+(por\s+el\s+)?(ano|recto)"
+    )),
+    # Entumecimiento u hormigueo en la pierna operada: lesión nerviosa
+    # post-artroplastia (guía de cadera Sutter/PAMF p.16, "Ayuda inmediata").
+    # Riesgo de falso positivo más alto que el resto de la tabla — "se me durmió
+    # la pierna de estar sentado" es benigno y frecuente y este patrón no lo
+    # distingue del hallazgo real. Se acepta el trade-off: un falso positivo
+    # cuesta una llamada de seguimiento, y la alternativa es no detectar nunca
+    # la lesión nerviosa real.
+    ("entumecimiento", "entumecimiento u hormigueo en la pierna", SENAL, re.compile(
+        r"entumecid\w*.{0,15}(pierna|pie|rodilla|cadera)"
+        r"|adormecid\w*.{0,15}(pierna|pie|rodilla|cadera)"
+        r"|hormigueo\s+.{0,10}(pierna|pie)|se\s+me\s+durmio\s+(la\s+)?(pierna|pie)"
+    )),
 
     # --- menciones -----------------------------------------------------------
     ("cansancio", "cansancio", MENCION, re.compile(
@@ -103,6 +155,13 @@ _TABLA: list[tuple[str, str, str, re.Pattern[str]]] = [
     )),
     ("malestar", "malestar general", MENCION, re.compile(
         r"\bmaluc\w+\b|me\s+siento\s+mal\b|no\s+me\s+siento\s+bien"
+    )),
+    # Dolor referido al hombro tras laparoscopia (colecistectomía y
+    # apendicectomía): esperado y benigno según ambas guías, se resuelve solo en
+    # 1-2 días. Va como MENCION a propósito — no debe sumar al score amarillo,
+    # solo que el agente lo reconozca en voz alta en vez de ignorarlo.
+    ("hombro", "dolor en el hombro", MENCION, re.compile(
+        r"dolor\s+(en\s+)?(el\s+)?hombro|me\s+duele\s+el\s+hombro|hombro\s+.{0,10}duele"
     )),
 ]
 

@@ -393,6 +393,12 @@ def test_pedir_una_dosis_no_cuenta_como_inyeccion():
         ("no he podido orinar", "dificultad para orinar"),
         ("estoy mamado", "cansancio"),
         ("me siento maluco", "malestar general"),
+        ("tengo diarrea", "diarrea"),
+        ("se me puso la piel amarilla", "piel u ojos amarillos"),
+        ("se me abrió la herida", "la herida se abrió"),
+        ("me duele el hombro", "dolor en el hombro"),
+        ("hay sangre en las heces", "sangre en las heces"),
+        ("se me durmió la pierna", "entumecimiento u hormigueo en la pierna"),
     ],
 )
 def test_recoge_sintomas_fuera_de_catalogo(texto, esperado):
@@ -400,13 +406,16 @@ def test_recoge_sintomas_fuera_de_catalogo(texto, esperado):
 
 
 def test_lo_que_no_es_sintoma_no_se_inventa():
-    for texto in ("todo bien", "el dolor está en un 3", "no he tenido fiebre"):
+    for texto in (
+        "todo bien", "el dolor está en un 3", "no he tenido fiebre",
+        "no he tenido diarrea", "sin sangre en las heces", "no tengo ictericia",
+    ):
         assert lexicon.extract(texto).other == []
 
 
 def test_solo_las_senales_pesan_en_el_triaje():
-    """El cansancio se anota pero no escala; la visión borrosa sí es señal."""
-    assert otros_sintomas.senales(["cansancio", "ánimo bajo"]) == []
+    """El cansancio y el hombro se anotan pero no escalan; la visión borrosa sí es señal."""
+    assert otros_sintomas.senales(["cansancio", "ánimo bajo", "dolor en el hombro"]) == []
     assert otros_sintomas.senales(["visión borrosa"]) == ["visión borrosa"]
 
 
