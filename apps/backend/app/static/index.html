@@ -496,6 +496,11 @@ $("#vIniciar").onclick = async () => {
         autoGainControl: true,
       },
     });
+    // Pedirlas no garantiza tenerlas: Safari y Firefox ignoran algunas sin
+    // avisar. Se registra lo que el navegador HONRÓ para que "el agente se
+    // responde solo" o "no me oye" sea diagnosticable desde la consola.
+    console.info("[voz] constraints efectivas del micrófono:",
+                 stream.getAudioTracks()[0].getSettings());
     pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
     // Un solo canal de audio, bidireccional (sendrecv): manda el micrófono Y
     // recibe la voz del agente sobre el MISMO canal. El backend de Pipecat

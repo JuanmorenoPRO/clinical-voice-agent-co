@@ -108,6 +108,13 @@ class Settings(BaseSettings):
     # Detección de fin de turno. 0.7 s protege al paciente mayor de ser cortado a
     # media frase; es la palanca dominante del presupuesto de latencia.
     vad_stop_secs: float = 0.7
+    # Segundo tramo del endpointing: corre DESPUÉS del stop del VAD (el fin de
+    # turno efectivo es la suma de los dos). Subirlo tolera pausas más largas a
+    # mitad de frase — "me duele... ...la herida" — al precio de retrasar TODAS
+    # las respuestas del agente en la misma cantidad. Las muletillas puras
+    # ("ehh...") ya no cierran el turno por otra vía (ver `voice/pipeline.py`),
+    # así que esta palanca es para pacientes de habla lenta, no para la duda.
+    user_speech_timeout: float = 0.2
 
     # Umbrales con los que el VAD decide que ALGUIEN está hablando. Silero exige
     # los dos a la vez (`vad_analyzer.py`: `confidence >= X and volume >= Y`), así
@@ -164,6 +171,16 @@ class Settings(BaseSettings):
     # de 2-3 palabras que con el umbral normal (4) pasarían de largo cortarían
     # al agente. "sí sí tuve fiebre" sigue pasando (bajo solapamiento).
     barge_in_min_palabras_eco: int = 2
+
+    # --- Filtro de ruido en el servidor (opt-in) ---
+    # "rnnoise" activa el `RNNoiseFilter` de Pipecat sobre el audio de entrada,
+    # ANTES del VAD. Apagado por defecto y a propósito: el navegador ya aplica
+    # noiseSuppression/echoCancellation (ver `static/index.html`), duplicar la
+    # supresión cuesta CPU por frame y RNNoise puede atenuar la voz débil de un
+    # paciente mayor — exactamente lo que este pipeline protege. Activarlo por
+    # despliegue cuando el entorno sea ruidoso de verdad (requiere
+    # `pipecat-ai[rnnoise]`).
+    noise_filter: str = ""
 
     # --- RAG: umbral de "no tengo evidencia suficiente" (ADR-005) ---
     rag_top_k: int = 4

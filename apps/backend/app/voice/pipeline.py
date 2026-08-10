@@ -699,12 +699,25 @@ async def run_bot(webrtc_connection, patient_id: str | None = None) -> None:
     """Arma y ejecuta el pipeline de voz para una conexión WebRTC del navegador."""
     s = get_settings()
 
+    # Filtro de ruido del servidor, opt-in (`NOISE_FILTER=rnnoise`). Import
+    # perezoso: `pyrnnoise` es una dependencia opcional (`pipecat-ai[rnnoise]`)
+    # y quien no activa el flag no debe pagarla ni tenerla instalada.
+    audio_in_filter = None
+    if s.noise_filter == "rnnoise":
+        from pipecat.audio.filters.rnnoise_filter import RNNoiseFilter
+
+        audio_in_filter = RNNoiseFilter()
+        logger.info("[voz] filtro de ruido RNNoise ACTIVO sobre el audio de entrada")
+
     transport = SmallWebRTCTransport(
         webrtc_connection=webrtc_connection,
         params=TransportParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
             audio_out_10ms_chunks=2,
+            # A diferencia de `vad_analyzer`, este campo SÍ existe en
+            # `TransportParams` (base_transport.py) y se aplica antes del VAD.
+            audio_in_filter=audio_in_filter,
         ),
     )
 
@@ -737,7 +750,7 @@ async def run_bot(webrtc_connection, patient_id: str | None = None) -> None:
     # esto es lo primero que hay que poder mirar sin adivinar qué había en `.env`.
     logger.info(
         f"[voz] VAD confidence={s.vad_confidence} min_volume={s.vad_min_volume} "
-        f"stop_secs={s.vad_stop_secs} · escalera de silencios "
+        f"stop_secs={s.vad_stop_secs}+{s.user_speech_timeout} · escalera de silencios "
         f"{s.silence_initial_s:.0f}s+{s.silence_gentle_s:.0f}s+{s.silence_repeat_s:.0f}s "
         f"· barge_in={'vad' if s.barge_in_vad else ('confirmado' if s.barge_in_enabled else 'off')}"
     )
@@ -771,7 +784,8 @@ async def run_bot(webrtc_connection, patient_id: str | None = None) -> None:
     turnos = UserTurnProcessor(
         user_turn_strategies=UserTurnStrategies(
             start=[VADUserTurnStartStrategy(enable_interruptions=s.barge_in_vad)],
-            stop=[SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=0.2)],
+            stop=[SpeechTimeoutUserTurnStopStrategy(
+                user_speech_timeout=s.user_speech_timeout)],
         ),
     )
 

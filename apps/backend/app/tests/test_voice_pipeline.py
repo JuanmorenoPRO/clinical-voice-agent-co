@@ -96,7 +96,8 @@ def test_el_pipeline_se_arma_con_la_configuracion_real():
     turnos = UserTurnProcessor(
         user_turn_strategies=UserTurnStrategies(
             start=[VADUserTurnStartStrategy(enable_interruptions=s.barge_in_vad)],
-            stop=[SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=0.2)],
+            stop=[SpeechTimeoutUserTurnStopStrategy(
+                user_speech_timeout=s.user_speech_timeout)],
         ),
     )
     tts = _build_tts(s)
