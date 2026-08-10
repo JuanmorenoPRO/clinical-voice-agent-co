@@ -129,13 +129,14 @@ Los 700 ms del VAD son la mitad del presupuesto y son una decisión, no una
 limitación: bajarlo a 0,4 s recortaría un tercio a costa de cortar a quien hace
 pausas, y hablamos de pacientes de hasta 82 años recién operados.
 
-**Costo por llamada.** El LLM y el TTS corren en local, así que lo único que se
-paga de verdad es el reconocimiento de voz de Groq: **USD 0,00026 por llamada**.
+**Costo por llamada.** El TTS corre en local y el LLM va por la cuota gratuita de
+Groq, así que lo único que se paga de verdad es el reconocimiento de voz:
+**USD 0,00026 por llamada**.
 
 Extrapolado a precios de API de producción serían USD 0,021, y el reparto es
 revelador: USD 0,00008 el LLM y **USD 0,0207 el TTS**. Es decir, servir esta
 solución por API costaría 250 veces más en sintetizar la voz que en razonar. Eso es
-lo que hace que correr Kokoro en local sea una decisión económica y no solo
+lo que hace que correr el TTS en local sea una decisión económica y no solo
 técnica. El cálculo completo con sus referencias de precio está en
 [`docs/metricas.md`](docs/metricas.md), regenerable con `report_metrics.py`.
 
@@ -259,8 +260,14 @@ la marcha— están en [`docs/spikes-7-agosto.md`](docs/spikes-7-agosto.md).
 cd apps/backend && ../../.venv/bin/python -m pytest app/tests -q
 ```
 
-140 tests. Los del motor de decisión y los del léxico corren sin modelo, sin red y
-sin base de datos, en menos de un segundo.
+739 tests (los de voz se saltan si no están instaladas sus dependencias). Los del
+motor de decisión, el léxico y el guion —más de 400— corren sin modelo, sin red y
+sin base de datos, en menos de un segundo:
+
+```bash
+cd apps/backend && ../../.venv/bin/python -m pytest app/tests/test_decision.py \
+                     app/tests/test_nlu.py app/tests/test_script.py -q
+```
 
 ### Evaluación sobre los 160 casos del dataset
 
