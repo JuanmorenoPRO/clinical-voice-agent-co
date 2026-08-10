@@ -23,6 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from ..nlu import otros_sintomas
 from ..schemas import EscalationAction, RiskLevel, Symptoms
 
 
@@ -82,7 +83,7 @@ def _incapacitating_mobility(s: Symptoms, t: dict) -> bool:
 # --- Estrato AMARILLO ---------------------------------------------------------
 
 def yellow_signals(s: Symptoms, t: dict) -> list[str]:
-    """Las cinco señales que suman al score. Pública: el resumen las enumera."""
+    """Las señales que suman al score. Pública: el resumen las enumera."""
     y = t["amarillo"]
     fired = []
     if s.pain_level is not None and s.pain_level >= y["pain_nrs"]:
@@ -95,6 +96,11 @@ def yellow_signals(s: Symptoms, t: dict) -> list[str]:
         fired.append("inapetencia")
     if s.sleep == "muy_alterado":
         fired.append("sueno_alterado")
+    # Lo que el paciente contó fuera de los seis slots y tiene peso clínico
+    # (visión borrosa, mareo, pantorrilla hinchada…). Suma al score aditivo como
+    # una señal más: dos juntas ya disparan `vigilancia_multiples_signos`. No se
+    # les da criticidad propia — ver el encabezado de nlu/otros_sintomas.py.
+    fired.extend(otros_sintomas.senales(s.other))
     return fired
 
 

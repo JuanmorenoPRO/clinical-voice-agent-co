@@ -26,6 +26,11 @@ _ESCALAS: dict[str, list[str]] = {
 _BANDERAS = ("heavy_bleeding", "breathing_difficulty", "chest_pain",
              "loss_of_consciousness", "seizure", "altered_mental_status")
 
+# slot del guion -> campo de Symptoms. Copia local de `script.SLOT_FIELD` para
+# no crear un ciclo de imports (mismo criterio que `phrasing._CAMPO_DE_SLOT`).
+_CAMPO_DE_SLOT = {"dolor": "pain_level", "fiebre": "fever", "movilidad": "mobility",
+                  "herida": "wound", "apetito": "appetite", "sueno": "sleep"}
+
 
 def merge_symptoms(base: Symptoms, nuevo: Symptoms) -> Symptoms:
     """Combina dos lecturas. `base` tiene prioridad en caso de empate."""
@@ -61,6 +66,14 @@ def merge_symptoms(base: Symptoms, nuevo: Symptoms) -> Symptoms:
     elif out.fever is None and nuevo.fever is not None:
         out.fever = nuevo.fever
 
+    # No es un hallazgo clínico sino estado de la conversación —dice si hay que
+    # perseguir la cifra—, así que aquí manda lo último que dijo el paciente y no
+    # la lectura más grave: "me la tomé" y luego "no, no tengo termómetro" es una
+    # corrección, no una minimización. El riesgo lo siguen llevando `fever` y
+    # `temperature_c`, que sí son monótonos.
+    if nuevo.temperature_measured is not None:
+        out.temperature_measured = nuevo.temperature_measured
+
     # Medicación inefectiva es la lectura conservadora: agrava el cuadro de dolor.
     if nuevo.medication_effective is False:
         out.medication_effective = False
@@ -75,5 +88,16 @@ def merge_symptoms(base: Symptoms, nuevo: Symptoms) -> Symptoms:
     for texto in nuevo.other:
         if texto not in out.other:
             out.other.append(texto)
+
+    # UNKNOWN explícito: unión de los slots sin respuesta, RESTANDO los que ya
+    # tienen valor en el resultado. Un slot marcado UNKNOWN por silencio o por
+    # repreguntas agotadas deja de serlo si el paciente lo contesta después —
+    # la respuesta tardía gana, igual que en el resto de esta fusión (y en la
+    # dirección segura: quitar un UNKNOWN exige un dato real, nunca al revés).
+    vistos = dict.fromkeys([*out.unanswered, *nuevo.unanswered])
+    out.unanswered = [
+        s for s in vistos
+        if (campo := _CAMPO_DE_SLOT.get(s)) is None or getattr(out, campo) is None
+    ]
 
     return out

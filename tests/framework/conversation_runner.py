@@ -67,6 +67,7 @@ class InProcessRunner:
     def run(self, scenario: Scenario) -> Transcript:
         # Import diferido: mantiene el framework importable sin el backend/DB
         # disponibles (p.ej. para los unit tests de evaluadores).
+        from app.agent import phrasing
         from app.db import SessionLocal
         from app.voice.conversation import process_turn
 
@@ -74,7 +75,9 @@ class InProcessRunner:
         session = SessionLocal()
         conversation_id: str | None = None
         turns: list[TurnRecord] = []
+        risk_al_cierre: str | None = None
         try:
+            termino = False
             for msg in patient.messages():
                 resp = process_turn(
                     session,
@@ -84,11 +87,33 @@ class InProcessRunner:
                 )
                 conversation_id = resp.conversation_id
                 turns.append(_turn_record(msg, resp))
+                termino = resp.call_ended
+                if termino:
+                    break
+            # Al paciente guionizado se le acaban los mensajes; en producción eso
+            # es el paciente colgando, y entonces sí corre la política de
+            # incertidumbre (`engine.evaluate(final=True)`). Sin cerrar aquí, una
+            # llamada que no se pudo evaluar se medía como NORMAL y el arnés
+            # reportaba un falso negativo que el sistema real no comete.
+            #
+            # Y también cuando el AGENTE cuelga (`call_ended`): ahí el orquestador
+            # ya cerró la conversación por su cuenta, pero el arnés no llegaba a
+            # leer el resultado y perdía el mismo escalamiento. Se ve en el
+            # escenario del paciente que deja de contestar: los turnos se quedan
+            # en ALTO y el CRÍTICO de `no_se_pudo_evaluar` era invisible.
+            # `close_conversation` es idempotente —solo regenera el resumen—, así
+            # que llamarlo en los dos casos es seguro.
+            if conversation_id:
+                from app.summary.service import close_conversation
+
+                risk_al_cierre = close_conversation(
+                    session, conversation_id).get("risk_level")
         finally:
             session.close()
 
         assert conversation_id is not None, "El escenario no produjo ningún turno"
-        return Transcript(conversation_id=conversation_id, turns=turns)
+        return Transcript(conversation_id=conversation_id, turns=turns,
+                          apertura=phrasing.APERTURA, risk_al_cierre=risk_al_cierre)
 
 
 class HttpRunner:
@@ -109,6 +134,10 @@ class HttpRunner:
         conversation_id: str | None = None
         turns: list[TurnRecord] = []
         with httpx.Client(base_url=self.base_url, timeout=120.0) as client:
+            # Este runner no importa `app` a propósito, así que la apertura se
+            # pide por HTTP. `GET /conversation/apertura` existe exactamente para
+            # esto (ver routers/conversation.py).
+            apertura = client.get("/conversation/apertura").json()["text"]
             for msg in patient.messages():
                 payload = {
                     "text": msg,
@@ -122,7 +151,8 @@ class HttpRunner:
                 turns.append(_turn_record_from_json(msg, data))
 
         assert conversation_id is not None, "El escenario no produjo ningún turno"
-        return Transcript(conversation_id=conversation_id, turns=turns)
+        return Transcript(conversation_id=conversation_id, turns=turns,
+                          apertura=apertura)
 
 
 class VoiceRunner:  # pragma: no cover - marcador de diseño para el 7 de agosto

@@ -23,14 +23,14 @@ chromadb==1.5.9
 pymupdf==1.28.2          # parseo de PDF conservando nº de página (RF-05)
 PyYAML==6.0.3            # umbrales del motor de decisión
 
-# LLM: llama3.2:3b vía Ollama — compuerta G3 (ADR-010).
-# De los cuatro modelos permitidos, Gemini 1.5 Flash está retirado y Llama 3.1 70B
-# fue decomisionado de Groq; ver docs/spikes-7-agosto.md.
-ollama==0.6.2
-
-# STT: Groq Whisper. G3 restringe el modelo que razona, no el de reconocimiento
-# de voz, así que usarlo no compromete la compuerta.
+# LLM: sucesor vigente de Llama en Groq — compuerta G3 (ADR-010).
+# Groq decomisionó Llama 3.1 70B y apaga llama-3.3-70b-versatile el 16-ago-2026;
+# ver docs/spikes-7-agosto.md. El SDK de Groq ya se usa para STT.
 groq==1.6.0
+
+# Alternative local: llama3.2:3b vía Ollama (ollama==0.6.2). También sirve
+# bge-m3 para los embeddings (ADR-011), que corren local.
+ollama==0.6.2
 
 # Tests
 pytest==9.1.1

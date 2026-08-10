@@ -182,6 +182,12 @@ def _scenario(r: ScenarioResult) -> str:
 
     # Conversación como chat.
     out.append('<div class="chat">')
+    # La llamada la abre el agente (ver report.py).
+    if r.transcript.apertura:
+        out.append(
+            f'<div class="bubble agent"><div class="who">🤖 Agente '
+            f'<span>apertura</span></div>{_e(r.transcript.apertura)}</div>'
+        )
     for t in r.transcript.turns:
         out.append(f'<div class="bubble patient"><div class="who">🧑 Paciente</div>{_e(t.patient_text)}</div>')
         marker = " · ⚠️ CRÍTICO" if t.critical_override else ""

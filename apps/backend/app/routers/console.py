@@ -4,13 +4,27 @@ Las alertas se consultan por polling desde el frontend (sin WebSocket, ADR §3.6
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..db import get_session
 from ..models import Alert, Conversation, Patient, Summary, Turn
 
 router = APIRouter(prefix="/console", tags=["console"])
+
+# Valores admitidos en los filtros de la consola. Se declaran como `Literal` para
+# que FastAPI los valide y los documente solo: son el mismo vocabulario cerrado
+# que `Alert.status` y `Alert.risk_level` en models.py.
+ESTADO_ALERTA = Literal["pending", "attended"]
+NIVEL_ALERTA = Literal["ALTO", "CRÍTICO"]
+
+
+def _pacientes_por_id(session: Session) -> dict[str, Patient]:
+    """Índice de pacientes para resolver nombres sin un SELECT por fila."""
+    return {p.id: p for p in session.query(Patient).all()}
 
 
 @router.get("/patients")
@@ -20,12 +34,52 @@ def patients(session: Session = Depends(get_session)) -> list[dict]:
 
 
 @router.get("/alerts")
-def alerts(session: Session = Depends(get_session)) -> list[dict]:
-    rows = session.query(Alert).order_by(Alert.created_at.desc()).all()
-    return [
+def alerts(
+    status: ESTADO_ALERTA | None = Query(
+        None, description="pending|attended. Sin valor: todas."
+    ),
+    risk_level: NIVEL_ALERTA | None = Query(None, description="ALTO|CRÍTICO"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    session: Session = Depends(get_session),
+) -> dict:
+    """Alertas más recientes primero, filtrables y paginadas.
+
+    `status` y `risk_level` son `Literal`, así que un valor fuera del conjunto lo
+    rechaza FastAPI con 422. Es deliberado: un filtro con una errata que se ignora
+    en silencio devuelve una lista que parece filtrada y no lo está, y en una
+    consola de alertas eso es peor que un error.
+    """
+    q = session.query(Alert)
+    if status is not None:
+        q = q.filter(Alert.status == status)
+    if risk_level is not None:
+        q = q.filter(Alert.risk_level == risk_level)
+
+    total = q.with_entities(func.count(Alert.id)).scalar() or 0
+
+    # El desempate por `id` no significa nada —es un UUID—: existe para que el
+    # orden sea DETERMINISTA. Varias alertas de la misma llamada se crean dentro
+    # del mismo segundo (`paciente_no_responde` y `no_se_pudo_evaluar` lo hacen),
+    # y con `created_at` como única clave el motor puede devolverlas en distinto
+    # orden entre dos consultas: al paginar, una fila saldría dos veces y otra
+    # ninguna.
+    rows = (
+        q.order_by(Alert.created_at.desc(), Alert.id.desc())
+        .limit(limit)
+        .offset(offset)
+        .all()
+    )
+    pacientes = _pacientes_por_id(session)
+    items = [
         {
             "id": a.id,
             "conversation_id": a.conversation_id,
+            # De quién es la alerta. `patient_id` ya estaba en el modelo pero no
+            # salía por la API, así que la consola listaba alertas sin dueño.
+            "patient_id": a.patient_id,
+            "patient": pacientes[a.patient_id].name if a.patient_id in pacientes else None,
+            "surgery": pacientes[a.patient_id].surgery if a.patient_id in pacientes else None,
             "risk_level": a.risk_level,
             "triggered_rules": a.triggered_rules,
             "symptoms": a.symptoms,
@@ -35,6 +89,9 @@ def alerts(session: Session = Depends(get_session)) -> list[dict]:
         }
         for a in rows
     ]
+    # `total` es el conteo YA filtrado, no el global: es lo que sostiene el
+    # "mostrando 50 de 213" de la consola y lo que decide si queda algo por traer.
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.post("/alerts/{alert_id}/attend")
@@ -47,13 +104,29 @@ def attend_alert(alert_id: str, session: Session = Depends(get_session)) -> dict
     return {"id": alert_id, "status": alert.status}
 
 
+# No hay endpoint para borrar una alerta, ni siquiera lógico. Una alerta se
+# atiende, no se hace desaparecer: en una consola clínica, quitar de la vista algo
+# que el motor de decisión consideró digno de alarma es exactamente el error que no
+# se puede permitir. Ver el comentario de `Alert.status` en models.py.
+
+
 @router.get("/conversations")
 def conversations(session: Session = Depends(get_session)) -> list[dict]:
     rows = session.query(Conversation).order_by(Conversation.started_at.desc()).all()
+    pacientes = _pacientes_por_id(session)
+    conteos = dict(
+        session.query(Turn.conversation_id, func.count(Turn.id))
+        .group_by(Turn.conversation_id)
+        .all()
+    )
     return [
         {
             "id": c.id,
             "patient_id": c.patient_id,
+            # Sin el nombre y la fecha, el desplegable de Trazas es una lista de
+            # UUID truncados: inservible en cuanto hay más de una llamada.
+            "patient": pacientes[c.patient_id].name if c.patient_id in pacientes else None,
+            "n_turns": conteos.get(c.id, 0),
             "status": c.status,
             "started_at": c.started_at.isoformat(),
             "ended_at": c.ended_at.isoformat() if c.ended_at else None,
@@ -76,14 +149,21 @@ def conversation_detail(conversation_id: str, session: Session = Depends(get_ses
     summary = (
         session.query(Summary).filter(Summary.conversation_id == conversation_id).first()
     )
+    patient = session.get(Patient, conv.patient_id) if conv.patient_id else None
     return {
         "id": conv.id,
         "status": conv.status,
+        "patient_id": conv.patient_id,
+        "patient": patient.name if patient else None,
+        "surgery": patient.surgery if patient else None,
+        "started_at": conv.started_at.isoformat(),
+        "ended_at": conv.ended_at.isoformat() if conv.ended_at else None,
         # Traza completa por turno (RF-05): pregunta -> chunks -> confianza ->
         # reglas -> respuesta -> override crítico.
         "turns": [
             {
                 "id": t.id,
+                "created_at": t.created_at.isoformat(),
                 "patient_utterance": t.patient_utterance,
                 "extracted_symptoms": t.extracted_symptoms,
                 "retrieved_chunks": t.retrieved_chunks,
@@ -93,6 +173,7 @@ def conversation_detail(conversation_id: str, session: Session = Depends(get_ses
                 "critical_override": t.critical_override,
                 "final_response": t.final_response,
                 "latency_ms": t.latency_ms,
+                "intent": t.intent,
             }
             for t in turns
         ],

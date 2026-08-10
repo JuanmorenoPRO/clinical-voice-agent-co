@@ -93,7 +93,7 @@ def retrieve(
     con `scripts/calibrate_rag.py`, preguntas ajenas al corpus puntúan más alto
     (0.868) que legítimas (0.795), porque todo el corpus es texto médico
     postoperatorio y el coseno mide cercanía temática. Quien decide si la evidencia
-    responde es `OllamaAdapter.evidencia_responde`, que se llama desde el
+    responde es `OllamaAdapter.pregunta_es_del_dominio`, que se llama desde el
     orquestador. Aquí solo se recupera.
     """
     s = get_settings()

@@ -71,8 +71,10 @@ _SYSTEM_REPLY = """Respondes UNA pregunta de un paciente usando EXCLUSIVAMENTE l
 que se te entrega.
 - Maximo 2 frases, espanol colombiano hablado, calido, sin tecnicismos.
 - Trata al paciente de USTED, nunca de tu.
-- Si el paciente suena asustado o angustiado por lo que pregunta, valide ese
-  sentimiento en pocas palabras antes de darle la respuesta clinica.
+- Si el paciente DICE que esta asustado o angustiado, valide ese sentimiento en
+  pocas palabras antes de darle la respuesta clinica. Si no lo ha dicho, no se
+  lo atribuya: "usted suena asustado" a alguien que solo hizo una pregunta suena
+  a formulario, no a alguien que escucha.
 - NUNCA abras con una muletilla generica de empatia ("entiendo", "entiendo su
   preocupacion", "lamento que este pasando por esto", "gracias por contarme"):
   un modelo pequeno cae en ellas y suenan a formulario, no a alguien que escucha.
@@ -84,6 +86,9 @@ que se te entrega.
 - NO hagas preguntas: el sistema anade la siguiente pregunta despues de tu respuesta.
 """
 
+# La abstención canónica, palabra por palabra la que pide `_SYSTEM_REPLY`. Sin
+# espacio final: el orquestador la concatena con la transición y la siguiente
+# pregunta, y el sobrante salía como un doble espacio en la traza.
 ABSTENCION = (
     "Sobre eso no tengo información en los documentos del hospital. "
 )
@@ -93,9 +98,38 @@ _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 # El modelo parafrasea la frase de abstención en vez de copiarla literal ("No tengo
 # información sobre eso..."), así que compararla por igualdad no sirve. Se detecta
 # por su contenido, porque de ello depende no citar una fuente al abstenerse.
+# Ojo con "no sé" frente al "se" impersonal. El patrón original era
+# `no\s+(lo\s+)?s[eé]\s`, que casa con "no SE recomiendan bañarse", "no SE
+# aplique cremas", "no SE preocupe... — es decir, con respuestas correctas y bien
+# ancladas. El efecto era silencioso y caro: el orquestador las tomaba por
+# abstenciones, les quitaba las fuentes (`evidence = None`) y les pegaba la
+# transición de abstención, así que una respuesta buena quedaba sin cita —justo
+# lo que la rúbrica califica— y encima sonaba incoherente.
+# Ahora el "no sé" tiene que cerrar cláusula o ir seguido de un interrogativo.
+# La media abstención es el caso peligroso y el que faltaba. Medido en una
+# llamada real, ante una pregunta sobre la cesárea de un paciente con
+# apendicectomía en la ficha, el 3B respondió: "se menciona en el documento que
+# si nota algún cambio en la incisión debe llamar a la oficina. Sin embargo, no
+# hay información específica sobre los síntomas postoperatorios relacionados con
+# la cesárea." Ninguno de los patrones de arriba casa con eso, así que el
+# orquestador la tomó por una respuesta buena y le adjuntó las cuatro citas de
+# apendicectomía: una afirmación fuera de tema CON fuente, que es exactamente lo
+# que estas guardas existen para impedir.
 _ES_ABSTENCION = re.compile(
-    r"no\s+tengo\s+(esa\s+)?informaci[oó]n|no\s+(lo\s+)?s[eé]\s|no\s+aparece\s+en\s+"
-    r"(los\s+)?documentos|no\s+figura\s+en\s+(la\s+)?(evidencia|documentos)",
+    r"no\s+tengo\s+(esa\s+)?informaci[oó]n"
+    r"|no\s+aparece\s+en\s+(los\s+)?documentos"
+    r"|no\s+figura\s+en\s+(la\s+)?(evidencia|documentos)"
+    r"|no\s+(hay|tengo|encuentro)\s+informaci[oó]n"
+    # Solo las formas que hablan del DOCUMENTO. Se dejan fuera "no se indica" y
+    # "no se recomienda": son instrucciones clínicas legítimas y bien ancladas
+    # ("no se indica aplicar cremas en la herida"), y tomarlas por abstención les
+    # arrancaría la cita — el mismo fallo silencioso que ya costó el patrón de
+    # "no sé" descrito arriba.
+    r"|no\s+se\s+menciona\b|no\s+(lo\s+)?especifica\b"
+    r"|no\s+dice\s+nada\s+(sobre|de|al\s+respecto)"
+    r"|\bno\s+lo\s+s[eé]\b"
+    r"|\bno\s+s[eé]\s*[.,;!?]"
+    r"|\bno\s+s[eé]\s+(si|qu[eé]|cu[aá]ndo|c[oó]mo|d[oó]nde|cu[aá]l|nada|decirle)\b",
     re.I,
 )
 
@@ -108,6 +142,28 @@ _TUTEO: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bdebes\b", re.I), "debe"),
     (re.compile(r"\bnecesitas\b", re.I), "necesita"),
     (re.compile(r"\bsientes\b", re.I), "siente"),
+    # Medido: el 3B mezcla registros dentro de la misma frase ("Entiendo que
+    # estés ansioso por saber cuándo puede bañarse"). Estas son las formas que
+    # aparecieron de verdad y que la tabla original no cubría.
+    (re.compile(r"\best[eá]s\b", re.I), "está"),
+    (re.compile(r"\bquieres\b", re.I), "quiere"),
+    (re.compile(r"\bsabes\b", re.I), "sabe"),
+    (re.compile(r"\bhaces\b", re.I), "hace"),
+    (re.compile(r"\bvas\b", re.I), "va"),
+    (re.compile(r"\bpuedas\b", re.I), "pueda"),
+    (re.compile(r"\btengas\b", re.I), "tenga"),
+    (re.compile(r"\bsigues\b", re.I), "sigue"),
+    (re.compile(r"\bhayas\b", re.I), "haya"),
+    (re.compile(r"\bseas\b", re.I), "sea"),
+    (re.compile(r"\bvayas\b", re.I), "vaya"),
+    (re.compile(r"\bsientas\b", re.I), "sienta"),
+    (re.compile(r"\bnotes\b", re.I), "note"),
+    # Imperativo negativo, que es la forma en que vienen escritas las
+    # instrucciones postoperatorias del corpus ("no los toques", "no te mojes").
+    # Conjunto cerrado a propósito: generalizar "-es → -e" destrozaría sustantivos.
+    (re.compile(r"\b(toqu|dej|us|apliqu|lav|moj|levant|hag|pong|quit|tom|frot|rasqu"
+                r"|asegur|evit|cambi|retir|cubr|sec|revis|consult|llam|camin|descans|descubr)es\b",
+                re.I), r"\1e"),
     (re.compile(r"\bte\b", re.I), "se"),
     (re.compile(r"\btu\b", re.I), "su"),
     (re.compile(r"\btus\b", re.I), "sus"),
@@ -134,6 +190,110 @@ def a_usted(texto: str) -> str:
             lambda m: _con_mayuscula_de(m.group(0), m.expand(reemplazo)), texto
         )
     return texto
+
+
+# El prompt ya prohíbe abrir con una muletilla de empatía y tratar de tú, y el 3B
+# lo ignora igual. Medido ante "¿cuándo me puedo bañar?": "Amigo, parece que se
+# siente un poco nervioso. Entiendo que estés ansioso por saber...". Tres cosas
+# mal en dos frases: el vocativo informal en una llamada del hospital, y sobre
+# todo un estado emocional INVENTADO —el paciente no dijo estar nervioso—, que
+# es lo que hace que suene a formulario en vez de a alguien que escucha.
+_APERTURA_POSTIZA = re.compile(
+    r"^\s*(amig[oa]|herman[oa]|parce|mij[oa]|querid[oa]|estimad[oa]"
+    # "Lo siento," / "Lamento mucho," delante de la emoción inventada: el modelo
+    # las encadena ("Lo siento, parece que está asustado") y con el ancla `^` la
+    # segunda pieza ya no casaba.
+    r"|lo\s+siento|lamento\s+mucho|disculpe)\s*[,.]?\s*",
+    re.I,
+)
+_EMOCION_INVENTADA = re.compile(
+    r"^\s*("
+    r"(parece\s+que|veo\s+que|noto\s+que|entiendo\s+que|s[eé]\s+que"
+    r"|comprendo\s+que|lamento\s+que|imagino\s+que|debe\s+de\s+ser)\b"
+    # La misma emoción inventada sin el "que" delante: "Usted suena un poco
+    # asustado", "se le nota preocupado". Medido con el 70B, y es la forma que
+    # el patrón anterior dejaba pasar entera. La otra ruta ya la rechaza
+    # (`composer._EMOCION_ATRIBUIDA`); aquí, donde no hay aduana que devuelva el
+    # turno a las plantillas, se recorta.
+    r"|(usted\s+)?(parece|suena|se\s+(le\s+)?nota|lo\s+noto|la\s+noto)\s+"
+    r"(un\s+poco\s+|algo\s+|muy\s+|bastante\s+)?"
+    r"(preocupad|ansios|asustad|angustiad|nervios|estresad|frustrad|impacient)"
+    r")[^.!?]*[.!?]\s*",
+    re.I,
+)
+
+
+# Palabra funcional corta repetida de forma contigua: "a que se se indique",
+# "de de la herida". Es un tropiezo típico del 3B al redactar y en voz se oye
+# como un tartamudeo. Se limita a esta lista cerrada en vez de colapsar cualquier
+# palabra repetida, porque el español sí admite algunas ("que que" en
+# subordinadas, "no no" enfático) y un colapso general destrozaría más de lo que
+# arregla.
+_PALABRA_REPETIDA = re.compile(
+    r"\b(se|de|la|el|los|las|un|una|y|a|en|con|por|su|le|lo|me|te|al|del)"
+    r"(\s+\1)+\b",
+    re.I,
+)
+
+
+def sin_tartamudeo(texto: str) -> str:
+    return _PALABRA_REPETIDA.sub(r"\1", texto)
+
+
+def sin_frase_cortada(texto: str) -> str:
+    """Descarta la última frase si el límite de tokens la dejó a medias.
+
+    El límite de generación corta donde toque, y en voz eso se oye como que la
+    llamada se cayó ("...si descubres alguna herida nueva en"). Más vale una
+    frase completa que dos con la segunda partida.
+
+    Nunca se devuelve texto sin cerrar. La versión anterior sí lo hacía cuando no
+    había ningún `.!?` en todo el texto, y ese era justamente el caso del
+    truncamiento por tokens: la respuesta salía al paciente partida a media frase
+    ("...lo que sugiere que"). Ahora, sin ninguna frase cerrada: si hay una coma
+    pasada la mitad se corta ahí —una cláusula completa—; si el texto termina en
+    palabra funcional ("...a que") no hay nada que rescatar y se devuelve vacío,
+    para que el llamador se abstenga o caiga a plantillas; en el resto solo
+    faltaba el punto.
+    """
+    limpio = texto.rstrip()
+    if not limpio or limpio[-1] in ".!?":
+        return limpio
+    corte = max(limpio.rfind("."), limpio.rfind("!"), limpio.rfind("?"))
+    if corte > 0:
+        return limpio[: corte + 1]
+    coma = limpio.rfind(",")
+    if coma > len(limpio) // 2:
+        return limpio[:coma] + "."
+    if _TERMINA_EN_FUNCIONAL.search(limpio):
+        return ""
+    return limpio + "."
+
+
+# Palabras que no cierran una frase en español: si el texto truncado termina en
+# una de estas, lo que sigue era imprescindible y no se puede "cerrar" con un
+# punto ("Debe esperar a que." no es una frase).
+_TERMINA_EN_FUNCIONAL = re.compile(
+    r"\b(que|de|del|a|al|en|la|el|los|las|un|una|unos|unas|y|o|con|sin|para"
+    r"|por|si|cuando|como|se|su|sus|le|lo|les|mas|muy|no|es|son|esta|estan"
+    r"|hasta|desde|entre|sobre|tras|ni|pero|porque|aunque|donde|quien|cual)$",
+    re.I,
+)
+
+
+def sin_muletillas(texto: str) -> str:
+    """Quita el vocativo informal y la apertura de empatía postiza.
+
+    Se aplica en bucle porque el modelo las encadena ("Amigo, parece que...
+    Entiendo que...").
+    """
+    anterior = None
+    while anterior != texto:
+        anterior = texto
+        texto = _APERTURA_POSTIZA.sub("", texto)
+        texto = _EMOCION_INVENTADA.sub("", texto)
+    texto = texto.strip()
+    return texto[0].upper() + texto[1:] if texto else texto
 
 
 def es_abstencion(texto: str) -> bool:
@@ -167,20 +327,58 @@ def _recortar(evidence: str) -> str:
 # rechazaba tambien los nombres propios que SI estaban. Un 3B no sabe verificar
 # presencia de un termino; eso lo hace `_nombres_propios_presentes` con codigo.
 # Aqui se le deja solo lo que si sabe hacer: juzgar si el texto viene al tema.
-_SYSTEM_PERTINENCIA = """Decides si un texto sirve para responder una pregunta de un \
-paciente operado. Respondes solo el JSON del esquema.
+# Clasifica la PREGUNTA, no la evidencia. La versión anterior le pedía al 3B un
+# juicio de entailment sobre ~3.600 caracteres ("¿este texto responde esto?") y
+# eso no está a su alcance: medido con `scripts/calibrate_rag.py`, rechazaba los 4
+# fragmentos de las tres preguntas legítimas que fallaban, y en cambio aceptaba
+# "¿cuál es el horario de visitas?" —la única que había que rechazar—. Clasificar
+# una pregunta de 20 tokens sí sabe: 21/25 -> 24/25, con 10/10 en las ajenas.
+#
+# El orden importa: "cuidado" se declara como VALOR POR DEFECTO y "otro" se acota
+# a cuatro casos concretos. Con la redacción inversa —"otro" detallado, "cuidado"
+# como lista— el modelo se iba a "otro" y caía a 7/15. Un 3B se inclina hacia la
+# opción que suena más restrictiva; hay que decirle explícitamente cuál manda.
+_SYSTEM_PERTINENCIA = """Clasificas la PREGUNTA de un paciente recien operado. No la respondes.
 
-"si" = el texto habla del tema de la pregunta y aporta algo util, aunque sea parcial
-       o con otras palabras. Ejemplo: pregunta "cuando me puedo banar" y el texto
-       dice "bano diario desde las 48 horas" -> si.
-"no" = el texto trata de un asunto distinto al de la pregunta. Ejemplo: pregunta
-       "cual es el horario de visitas" o "cuanto cuesta la consulta" y el texto
-       habla de cuidados de la herida -> no."""
+Por defecto la respuesta es "cuidado": el paciente llama por su recuperacion, asi
+que casi todo lo que pregunta es sobre ella. Cuenta como "cuidado" cualquier
+pregunta sobre su cuerpo, su herida, su cirugia o su vuelta a la vida normal:
+banarse, comer, caminar, subir escaleras, hacer ejercicio, volver al trabajo,
+dormir, dolor, fiebre, puntos, cicatriz, hinchazon, coagulos, drenajes, bolsas,
+rehabilitacion, medicinas, y cuando llamar al medico.
 
+Solo responde "otro" si la pregunta es claramente de otra cosa:
+- tramites, dinero o logistica del hospital (horarios, precios, EPS, transporte)
+- una enfermedad o procedimiento que NO es su cirugia
+- un protocolo, escala o programa con nombre propio
+- algo que no tiene que ver con salud
+
+Ejemplos:
+"¿cuando me puedo banar?" -> cuidado
+"¿que debo comer despues de la cirugia?" -> cuidado
+"¿cuando puedo volver a trabajar?" -> cuidado
+"¿puedo subir escaleras?" -> cuidado
+"¿como cuido la bolsa de colostomia?" -> cuidado
+"¿como prevenir coagulos?" -> cuidado
+"¿por que me duele el hombro?" -> cuidado
+"¿cuando debo llamar al medico por fiebre?" -> cuidado
+"¿cuanto cuesta la consulta?" -> otro
+"¿cual es el horario de visitas?" -> otro
+"¿me cubre la EPS el transporte?" -> otro
+"¿como se trata la diabetes tipo 1?" -> otro
+"¿que dice el protocolo Esmeralda?" -> otro
+"¿que marca de carro me recomienda?" -> otro"""
+
+# La clave es "c" y no "r" por un motivo medido, no estético: con `"r"` o
+# `"clase"` llama3.2:3b responde "otro" a TODAS las preguntas, incluidas las que
+# acaba de ver como ejemplo de "cuidado". Con `"c"`, 24/25. El nombre de la clave
+# entra en el contexto y arrastra al modelo — con un 3B, detalles de superficie
+# como este pesan tanto como la instrucción, y por eso este filtro tiene su
+# regresión en `scripts/calibrate_rag.py`: cualquier retoque hay que re-medirlo.
 _SCHEMA_PERTINENCIA = {
     "type": "object",
-    "required": ["r"],
-    "properties": {"r": {"type": "string", "enum": ["si", "no"]}},
+    "required": ["c"],
+    "properties": {"c": {"type": "string", "enum": ["cuidado", "otro"]}},
 }
 
 
@@ -267,7 +465,7 @@ class OllamaAdapter:
         paráfrasis rara que no está en ninguna lista.
         """
         intent = intent_rules.classify(utterance)
-        base = lexicon.extract(utterance, slot)
+        base = lexicon.extract(utterance, slot, question=question)
 
         # Sin slot que rellenar, o con el léxico ya resolviéndolo, no se gasta el
         # modelo: esta es la "ruta rápida" de 0 llamadas al LLM del presupuesto de
@@ -392,9 +590,9 @@ class OllamaAdapter:
             tokens_in=resp.get("prompt_eval_count") or 0,
             tokens_out=resp.get("eval_count") or 0,
         )
-        return a_usted(texto or ABSTENCION), usage
+        return sin_frase_cortada(sin_tartamudeo(sin_muletillas(a_usted(texto or ABSTENCION)))), usage
 
-    async def evidencia_responde(self, *, question: str, evidence: str) -> bool:
+    async def pregunta_es_del_dominio(self, *, question: str, evidence: str) -> bool:
         """¿La evidencia recuperada responde esta pregunta?
 
         Hace falta porque la similitud vectorial no lo dice: medido con
@@ -423,24 +621,37 @@ class OllamaAdapter:
                     model=self._model,
                     messages=[
                         {"role": "system", "content": _SYSTEM_PERTINENCIA},
-                        {
-                            "role": "user",
-                            "content": f"PREGUNTA: {question}\n\nFRAGMENTO:\n{_recortar(evidence)}",
-                        },
+                        # Solo la pregunta: la evidencia ya no entra. Eso baja el
+                        # input de ~900 tokens a ~20 y es lo que hace que el
+                        # filtro acierte (ver `_SYSTEM_PERTINENCIA`).
+                        {"role": "user", "content": f"Pregunta: <<<{question}>>>"},
                     ],
                     format=_SCHEMA_PERTINENCIA,
-                    options={"temperature": 0, "num_predict": 12, "num_ctx": 2048},
+                    # 16 y no 12: con el prompt largo el JSON se truncaba y el
+                    # parseo reventaba, degradando a "no" cada llamada.
+                    options={"temperature": 0, "num_predict": 16, "num_ctx": 2048},
                     keep_alive=self._keep_alive,
                 ),
                 timeout=self._timeout * 2,
             )
-            return json.loads(resp["message"]["content"]).get("r") == "si"
+            return json.loads(resp["message"]["content"]).get("c") == "cuidado"
         except Exception as exc:  # noqa: BLE001
             log.warning(
                 "pertinencia degradada (%s): se asume que no responde",
                 type(exc).__name__,
             )
             return False
+
+    async def compose_reply(self, *, ctx) -> tuple[str, LLMUsage] | None:
+        """El 3B local NO redacta: devuelve None y el turno sale por plantillas.
+
+        No es un stub pendiente, es la decisión medida que motivó las plantillas
+        (ver `agent/phrasing.py`): ante "me duele un berraco", `llama3.2:3b`
+        generó como acuse la palabra "agudo". La redacción libre con historial
+        es para el 70B de Groq; aquí las plantillas ganan en las tres
+        dimensiones (calidad, latencia, pre-síntesis de audio).
+        """
+        return None
 
     async def summarize(self, *, system_prompt: str, user_prompt: str) -> str:
         resp = await self._client.chat(
@@ -491,39 +702,120 @@ _DOLOR_ROJO = 8
 # escalaría a CRÍTICO; no se exige para valores por debajo del umbral rojo,
 # donde equivocarse pesa menos y restringir de más le quitaría al modelo el
 # trabajo que sí sabe hacer (mapear una paráfrasis real que no está en el léxico).
-_MENCIONA_DOLOR = re.compile(r"dolor|duel")
+# Cubre también las paráfrasis de dolor que no llevan la raíz, porque la guarda
+# se aplica ahora a CUALQUIER valor del modelo, no solo a los ≥8 (ver
+# `_to_symptoms`). Sin esta ampliación se perdería "no aguanto" o "me está
+# matando", que es justo el trabajo que solo el modelo sabe hacer.
+_MENCIONA_DOLOR = re.compile(
+    r"dolor|duel|adolori|aguant|molest|punza|puntada|arde|ardor|quema"
+    r"|matando|insoportable|escala|del\s+(uno|cero)\s+al|de\s+10|/10"
+    r"|\b(un|como\s+un)\s+(10|[0-9])\b"
+)
+
+# Generalización de `_MENCIONA_DOLOR` al resto de slots que pueden escalar a
+# CRÍTICO desde un solo valor. Medido contra llama3.2:3b el 8-ago:
+#
+#   slot=herida  pregunta="¿La ve del color normal de la piel, o más roja...?"
+#   paciente="veo borroso"   ->  wound = secrecion_purulenta   -> CRÍTICO
+#
+# El modelo se engancha con el "ve/color/roja" de la PREGUNTA —que también entra
+# en su contexto— y, obligado por el enum a elegir algo, elige el valor más grave.
+# `_es_un_solo_token` no lo frenaba porque "veo borroso" son dos palabras: el
+# número de palabras nunca fue la señal correcta, la señal es si el paciente
+# habló del slot o no.
+#
+# El vocabulario es deliberadamente generoso —raíces, no palabras completas—
+# porque el coste de los dos errores es asimétrico: filtrar de más le quita al
+# modelo la paráfrasis que solo él resuelve ("me toca agarrarme de todo para
+# llegar al baño" → `incapacitante_nueva`), y eso sería un falso negativo. Solo
+# se aplica a valores que escalan por sí solos; todo lo demás pasa sin filtro.
+_MENCIONA_SLOT: dict[str, re.Pattern[str]] = {
+    "herida": re.compile(
+        r"herida|punto|sutura|cicatri|aposito|gasa|venda|curacion|pus|materia"
+        r"|supur|secrecion|mancha|liquido|sangr|roja?\b|rojit|hinchad|inflamad"
+        r"|huele|olor|sale|bota|costra|piel|borde|operacion|operad|cortad"
+    ),
+    "movilidad": re.compile(
+        r"camin|andar|levant|parar\b|pararme|pie\b|pies\b|mover|movi|muevo"
+        r"|cama|silla|bano|escalera|agarr|apoy|sostener|solo\b|sola\b|ayuda"
+        r"|cansa|fuerza|pierna|rodilla|arrastr|cojear|cojeo|salir|sentar"
+    ),
+    "dolor": _MENCIONA_DOLOR,
+    "fiebre": lexicon._MENCION_TERMICA,
+    "apetito": re.compile(
+        r"com(o|er|ida|iendo|i)\b|comid|apetito|hambre|provoca|bocado|desayun"
+        r"|almuerz|cena|bandeja|probado|trag|gana\w*\s+de\s+comer|alimenta"
+    ),
+    "sueno": re.compile(
+        r"duerm|dormi|sueno|descans|noche|despert|desvel|ojo\b|insomni|acost"
+        r"|madrugada|pesadilla|siesta|trasnoch"
+    ),
+}
+
+# Un turno interrogativo NO es una respuesta. Medido: con la pregunta previa
+# "¿Ha sentido calentura o escalofríos?" en su contexto, el 3B contestó `si` a
+# "¿Cuándo me puedo bañar?" — se enganchó con la pregunta del agente, igual que
+# hacía con "veo borroso" → secrecion_purulenta. Cuando el paciente pregunta en
+# vez de contestar, su valor solo se acepta si de verdad habló del slot.
+_ES_PREGUNTA = re.compile(r"\?|^(cuando|como|que|cual|donde|por\s?que|puedo|debo)\b")
 
 
-def _es_un_solo_token(utterance: str) -> bool:
-    core = utterance.strip()
-    return bool(core) and " " not in core
+def _menciona_el_slot(slot: str, utterance: str) -> bool:
+    """¿La frase del paciente habla del slot que se está preguntando?
+
+    Devuelve True cuando no hay vocabulario definido para el slot: la guarda es
+    una excepción para los valores que escalan solos, no la regla general.
+    """
+    patron = _MENCIONA_SLOT.get(slot)
+    return patron is None or bool(patron.search(lexicon.normalize(utterance)))
 
 
 def _to_symptoms(data: dict, slot: str, utterance: str) -> Symptoms:
     """Traduce el JSON de campo corto al contrato Pydantic.
 
     Medido: incluso con el ejemplo de ruido en `_SYSTEM_EXTRACT`, llama3.2:3b
-    sigue alucinando `mobility=incapacitante_nueva` para tokens sueltos como
-    "fewf" o "unufwef" — texto que ni el léxico ni ninguna regla fonotáctica
-    de `intent.py` reconocen, pero que el modelo igual "resuelve" al valor
-    más grave del enum porque el esquema lo obliga a elegir algo. El único
-    valor por slot que dispara CRÍTICO desde una sola palabra sin apoyo
-    léxico (`_SEVERIDAD_CRITICA_LLM`) no puede depender de esa conjetura
-    cuando la respuesta del paciente es un solo token sin espacios: una
-    frase real que describe esa severidad ("me toca agarrarme de todo para
-    llegar al baño") sí tiene varias palabras, así que esta guarda no le
-    quita al modelo el trabajo que solo él sabe hacer (ver
-    `test_el_modelo_cubre_la_parafrasis_que_el_lexico_no_tiene`).
+    sigue alucinando el valor más grave del enum ("fewf" → `incapacitante_nueva`,
+    "veo borroso" → `secrecion_purulenta`) porque el esquema lo obliga a elegir
+    algo y no siempre encuentra el camino a `no_dice`. Los valores que disparan
+    CRÍTICO por sí solos (`_SEVERIDAD_CRITICA_LLM`, `dolor ≥ 8`) no pueden
+    depender de esa conjetura: se exige que el paciente haya hablado del slot
+    (`_MENCIONA_SLOT`). El resto de valores pasa sin filtro, que es donde el
+    modelo hace el trabajo que solo él sabe hacer — mapear una paráfrasis que no
+    está en el léxico (ver `test_el_modelo_cubre_la_parafrasis_que_el_lexico_no_tiene`).
     """
     sym = Symptoms()
     raw = data.get(SLOT_KEY)
     if not raw or raw == "no_dice":
         return sym
 
+    # El paciente preguntó en vez de contestar: lo que el modelo "extraiga" de ahí
+    # sale de la pregunta del agente, no del paciente.
+    #
+    # La comprobación de "¿habló del slot?" se hace sobre la PARTE DECLARATIVA, no
+    # sobre el turno entero. Medido: ante "¿Qué temperatura se considera fiebre?"
+    # el 3B devolvía `si`, y como la frase contiene la palabra "fiebre",
+    # `_menciona_el_slot` daba True sobre el turno completo y la guarda no
+    # llegaba a dispararse — una pregunta SOBRE la fiebre menciona la fiebre.
+    # `parte_declarativa` recorta las preguntas impersonales y conserva las que
+    # reportan en primera persona, así que "¿es normal que me esté saliendo pus?"
+    # sigue pasando (ver `nlu/lexicon.py`).
+    norm = lexicon.normalize(utterance)
+    if _ES_PREGUNTA.search(norm) and not _menciona_el_slot(
+        slot, lexicon.parte_declarativa(utterance)
+    ):
+        log.warning("valor del LLM descartado: el turno es una pregunta, no una "
+                    "respuesta sobre %s (%r)", slot, utterance[:80])
+        return sym
+
     field, _ = SLOT_FIELDS[slot]
     if slot == "dolor":
         valor = int(raw)
-        if valor >= _DOLOR_ROJO and not _MENCIONA_DOLOR.search(lexicon.normalize(utterance)):
+        # La guarda se aplica a CUALQUIER valor, no solo a los que escalan.
+        # Medido: ante "Y la herida se ve rojita" —con la pregunta de dolor en su
+        # contexto— el 3B devolvió 7. No escalaba por sí solo, pero `merge_symptoms`
+        # toma el máximo, así que ese 7 inventado tapaba el "un 4" real que el
+        # paciente daba dos turnos después, y además el agente lo decía en voz alta.
+        if not _MENCIONA_DOLOR.search(lexicon.normalize(utterance)):
             log.warning(
                 "dolor=%d del LLM descartado: la frase no menciona dolor (%r)",
                 valor, utterance[:80],
@@ -531,12 +823,26 @@ def _to_symptoms(data: dict, slot: str, utterance: str) -> Symptoms:
             return sym
         sym.pain_level = valor
     elif slot == "fiebre":
-        if raw in ("si", "no"):
-            sym.fever = raw == "si"
-        else:
+        if raw not in ("si", "no"):
             return sym
+        # "Sí me la tomé" contesta al acto de medir, no al hallazgo. Medido: el 3B
+        # devolvía `si` para "si la he tomado", y con `fever=True` el slot quedaba
+        # resuelto y la cifra —la única que dispara `fiebre_38`— no se pedía
+        # nunca. Si la frase habla del termómetro y no nombra la fiebre, el "sí"
+        # no es del síntoma: se deja `fever` en None para que el guion persiga el
+        # número (script.seguimiento_pendiente).
+        norm = lexicon.normalize(utterance)
+        if raw == "si" and lexicon.habla_de_medir(norm) and not lexicon.habla_de_fiebre(norm):
+            log.warning("fever=si del LLM descartado: la frase habla de medir (%r)",
+                        utterance[:80])
+            return sym
+        sym.fever = raw == "si"
     else:
-        if _SEVERIDAD_CRITICA_LLM.get(field) == raw and _es_un_solo_token(utterance):
+        if _SEVERIDAD_CRITICA_LLM.get(field) == raw and not _menciona_el_slot(slot, utterance):
+            log.warning(
+                "%s=%r del LLM descartado: la frase no habla de %s (%r)",
+                field, raw, slot, utterance[:80],
+            )
             return sym
         setattr(sym, field, raw)
     sym.sources[field] = "llm"

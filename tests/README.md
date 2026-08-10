@@ -168,7 +168,7 @@ Requiere PostgreSQL+pgvector (docker compose) y las claves en `.env`:
 docker compose up --build -d
 docker compose exec backend python seed.py     # base de conocimiento para RAG
 
-export LLM_PROVIDER=ollama                      # agente real: llama3.2:3b (el único que compite, G3)
+export LLM_PROVIDER=groq                        # agente real: sucesor vigente de Llama en Groq (G3)
 export EVAL_JUDGE=anthropic                     # juez independiente: Claude (no es el agente)
 python tests/runner.py                          # todos los escenarios
 python tests/runner.py --category red green     # subconjunto
@@ -195,7 +195,7 @@ python tests/runner.py --judge heuristic         # juez por keywords
 ```
 Valida que todo el flujo corre (riesgo/escalación/memoria deterministas). Con `mock`
 la respuesta del agente es enlatada, así que los puntajes de empatía son placeholders
-hasta correr con `ollama`.
+hasta correr con `groq`/`ollama`.
 
 ## Configuración (variables de entorno)
 
@@ -205,10 +205,10 @@ hasta correr con `ollama`.
 | `EVAL_JUDGE` | `anthropic`, `heuristic` | `anthropic` | juez de los evaluadores semánticos |
 | `EVAL_MODEL` | id de modelo | (usa `ANTHROPIC_MODEL`) | modelo del juez |
 | `EVAL_BASE_URL` | url | `http://localhost:8000` | backend para `http` runner |
-| `LLM_PROVIDER` | `ollama`, `mock` | `ollama` | proveedor del **agente** (config del backend, `app/llm/factory.py`). `anthropic` NO es una opción válida aquí — el agente que compite corre en `llama3.2:3b` local (compuerta G3); usarlo lanza `ValueError`. |
+| `LLM_PROVIDER` | `groq`, `ollama`, `mock` | `groq` | proveedor del **agente** (config del backend, `app/llm/factory.py`). `groq` = sucesor vigente de Llama en Groq; `ollama` = modelo local; `mock` = determinista para CI. Probar otro valor lanza `ValueError`. |
 
 `EVAL_JUDGE` y `LLM_PROVIDER` son independientes: el primero califica, el segundo es
-lo que se califica. Usar `EVAL_JUDGE=anthropic` con `LLM_PROVIDER=ollama` es la
+lo que se califica. Usar `EVAL_JUDGE=anthropic` con `LLM_PROVIDER=groq` es la
 combinación correcta para una corrida real — un juez fuerte evaluando al agente que
 de verdad se presenta. Evaluar con `LLM_PROVIDER` en un proveedor que no sea el
 agente real (si alguna vez existe otro) daría resultados que no predicen la sesión

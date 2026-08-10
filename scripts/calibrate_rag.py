@@ -75,14 +75,14 @@ def main() -> int:
                              raw_question=pregunta)
             scores_oro.append((r.confidence, pregunta, r.sources[0].document if r.sources else "—"))
             decisiones_oro.append(r.has_evidence and asyncio.run(
-                get_llm().evidencia_responde(question=pregunta, evidence=r.answer)))
+                get_llm().pregunta_es_del_dominio(question=pregunta, evidence=r.answer)))
         for pregunta, proc in FUERA:
             r = rag.retrieve(session, build_query(pregunta, procedure=proc), procedure=proc,
                              raw_question=pregunta)
             scores_fuera.append((r.confidence, pregunta,
                                  r.sources[0].document if r.sources else "—"))
             decisiones_fuera.append(r.has_evidence and asyncio.run(
-                get_llm().evidencia_responde(question=pregunta, evidence=r.answer)))
+                get_llm().pregunta_es_del_dominio(question=pregunta, evidence=r.answer)))
 
     print("Preguntas CON respuesta en el corpus (queremos confianza alta):")
     for s, q, d in sorted(scores_oro, reverse=True):

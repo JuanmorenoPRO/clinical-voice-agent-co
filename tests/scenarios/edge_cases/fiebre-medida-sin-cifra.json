@@ -1,0 +1,16 @@
+{
+  "name": "Dice que se tomó la temperatura pero no da la cifra",
+  "risk": "red",
+  "category": "edge_cases",
+  "messages": [
+    "El dolor va en un 7.",
+    "si la he tomado",
+    "Marcaba 38.5."
+  ],
+  "expected": {
+    "risk": "red",
+    "should_escalate": true,
+    "should_reassure": false,
+    "must_interpret": ["si la he tomado"]
+  }
+}

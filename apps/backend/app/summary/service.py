@@ -11,12 +11,25 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from ..agent.script import CallState
 from ..decision import engine
 from ..models import Alert, Conversation, Patient, Summary, Turn
 from ..nlu.merge import merge_symptoms
 from ..schemas import RiskLevel, Symptoms
 
 _ORDER: dict[str, int] = {"NORMAL": 0, "ALTO": 1, "CRÍTICO": 2}
+_COLOR: dict[str, str] = {"NORMAL": "verde", "ALTO": "amarillo", "CRÍTICO": "rojo"}
+_ACTION_ORDER: dict[str, int] = {
+    "ninguna": 0, "seguimiento": 1, "enfermeria_prioritaria": 2, "emergencia_123": 3,
+}
+# Lo mínimo que hay que hacer con una llamada que terminó en cada nivel. Sirve de
+# suelo cuando `max_level` supera a `decision_final`: eso pasa cuando el nivel lo
+# subió algo que no vive en `Symptoms` —una regla sintética de un turno, como
+# `paciente_no_responde`—, y sin este suelo el resumen diría "CRÍTICO" y "ninguna"
+# en la misma frase.
+_ACTION_MINIMA: dict[str, str] = {
+    "NORMAL": "ninguna", "ALTO": "seguimiento", "CRÍTICO": "enfermeria_prioritaria",
+}
 _RECOMMENDATION: dict[str, str] = {
     "NORMAL": "Seguimiento de rutina; sin señales de alarma en esta llamada.",
     "ALTO": "Contactar al paciente en las próximas horas; revisar síntomas reportados.",
@@ -66,13 +79,28 @@ def build_summary(session: Session, conversation_id: str) -> dict:
     symptoms: dict = {}
     cited: dict[str, list[int]] = {}
     acumulado = Symptoms()
+    # Las decisiones tomadas, turno a turno. Sale de la misma traza que ya se
+    # recorre aquí: no cuesta ninguna consulta extra y es lo que convierte el
+    # resumen en algo auditable —qué se entendió, qué regla saltó y en qué
+    # momento— en vez de un veredicto final sin historia detrás.
+    decisions: list[dict] = []
 
-    for turn in turns:
+    for i, turn in enumerate(turns, start=1):
         if _ORDER[turn.risk_level] > _ORDER[max_level]:
             max_level = turn.risk_level  # type: ignore[assignment]
         for rule in turn.triggered_rules:
             if rule not in triggered:
                 triggered.append(rule)
+        decisions.append({
+            "turn": i,
+            "at": _as_utc(turn.created_at).isoformat(),
+            "intent": turn.intent,
+            "phase": (turn.agent_state or {}).get("phase"),
+            "risk_level": turn.risk_level,
+            "triggered_rules": list(turn.triggered_rules or []),
+            "critical_override": turn.critical_override,
+            "latency_ms": turn.latency_ms,
+        })
         acumulado = merge_symptoms(acumulado, Symptoms.model_validate(turn.extracted_symptoms or {}))
         # Última mención de cada síntoma gana.
         for k, v in (turn.extracted_symptoms or {}).items():
@@ -108,17 +136,43 @@ def build_summary(session: Session, conversation_id: str) -> dict:
         # aware asumiendo UTC, que es lo único que este código escribe.
         duration_s = int((_as_utc(conv.ended_at) - _as_utc(conv.started_at)).total_seconds())
 
+    # Slots que el paciente nunca contestó: los que el guion dio por perdidos
+    # (`CallState.sin_responder`, en el `agent_state` del último turno) MÁS los
+    # marcados UNKNOWN en la traza (`Symptoms.unanswered`, que cubre el cierre
+    # por silencio o por desconexión con el guion a medias — antes invisibles).
+    # `acumulado.unanswered` ya viene filtrado por la fusión: un slot contestado
+    # tarde deja de ser UNKNOWN.
+    sin_responder = CallState.from_dict(turns[-1].agent_state).sin_responder if turns else []
+    sin_responder = sorted(set(sin_responder) | set(acumulado.unanswered))
+
     data = {
+        "conversation_id": conversation_id,
+        "patient_id": conv.patient_id,
         "patient": patient.name if patient else None,
         "surgery": patient.surgery if patient else None,
+        # Día y hora de la llamada. Estaban en la tabla pero no en el resumen, así
+        # que el informe no decía CUÁNDO había pasado nada de lo que describía.
+        "started_at": _as_utc(conv.started_at).isoformat() if conv.started_at else None,
+        "ended_at": _as_utc(conv.ended_at).isoformat() if conv.ended_at else None,
         "duration_seconds": duration_s,
         "n_turns": len(turns),
         "symptoms": symptoms,
+        "unanswered_slots": sin_responder,
         "cited_documents": [
             {"document": doc, "pages": sorted(pages)} for doc, pages in cited.items()
         ],
         "risk_level": max_level,
+        # El vocabulario del dataset y el siguiente paso concreto. Se calculaban
+        # ya en `decision_final` y se tiraban: `recommendation` es texto para leer,
+        # esto es el dato con el que se enruta al paciente. Se anclan a `max_level`
+        # —no a `decision_final`— porque es `max_level` el que manda en el resumen.
+        "triage_color": _COLOR[max_level],
+        "escalation_action": max(
+            decision_final.escalation_action, _ACTION_MINIMA[max_level],
+            key=lambda a: _ACTION_ORDER[a],
+        ),
         "triggered_rules": triggered,
+        "decisions": decisions,
         "recommendation": _RECOMMENDATION[max_level],
     }
 

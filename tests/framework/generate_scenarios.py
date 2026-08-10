@@ -322,6 +322,21 @@ def edge_cases() -> list[dict]:
         ("Cuelga a medias con una señal ya presente", "yellow",
          [_SALUDO, "El dolor está en un 5.", "Camino normal, sin problema.", "La herida se ve normal.",
           "Perdón, me tengo que ir ya, me están llamando."]),
+        # El paciente suelta el teléfono. `[silencio]` es el marcador que ya usa
+        # la capa 2 del dataset y el que el reloj de inactividad del pipeline de
+        # voz inyecta a los 5 s (ver app/voice/pipeline.py). Tres seguidos agotan
+        # la escalera de `app/agent/script.py::MAX_SILENCIOS` y cuelgan.
+        #
+        # `red` y no `yellow`: la alerta propia de este caso es ALTA, pero al
+        # cerrar una llamada casi vacía la política de incertidumbre
+        # (`engine.evaluate(final=True)`) añade `no_se_pudo_evaluar` → CRÍTICO, y
+        # `Transcript.max_risk` cuenta el cierre. No se exige aquí el guion de
+        # seguridad, y el evaluador ya lo contempla: la criticidad no apareció
+        # con el paciente en la línea, así que no hay a quién recitárselo — lo que
+        # tiene que existir es la alerta. La ALTA concreta ("paciente_no_responde")
+        # la verifica `app/tests/test_silencio.py`, que sí puede mirar la tabla.
+        ("Paciente deja de contestar", "red",
+         [_SALUDO, "[silencio]", "[silencio]", "[silencio]"]),
     ]
     out = []
     for name, risk, msgs in items:

@@ -134,7 +134,12 @@ class Alert(Base):
     triggered_rules: Mapped[list] = mapped_column(JSON, default=list)
     symptoms: Mapped[dict] = mapped_column(JSON, default=dict)
     transcript: Mapped[str] = mapped_column(Text, default="")
-    status: Mapped[str] = mapped_column(String, default="pending")  # pending|attended
+    # pending|attended. Una alerta no se borra —ni lógica ni físicamente—: qué se
+    # alertó y quién lo cerró es justo lo que un sistema clínico no puede perder, y
+    # además la deduplicación consulta TODAS las filas de la conversación
+    # (`orchestrator._crear_alerta_si_procede` y su espejo en `summary/service.py`),
+    # así que una fila que desapareciera haría que la misma regla volviera a saltar.
+    status: Mapped[str] = mapped_column(String, default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

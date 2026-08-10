@@ -18,7 +18,7 @@ from typing import Literal
 Intent = Literal[
     "respuesta", "pregunta_clinica", "pregunta_administrativa",
     "fuera_de_mision", "rechazo", "tercero", "ininteligible",
-    "meta", "social",
+    "meta", "social", "saludo", "despedida", "silencio",
 ]
 
 
@@ -63,7 +63,7 @@ _ADMIN = re.compile(
     re.I,
 )
 
-# Los marcadores de pregunta se sacaron del análisis de los 1.687 turnos reales de
+# Los marcadores de pregunta se sacaron del análisis de los 2.071 turnos reales de
 # paciente del dataset. Una versión más laxa marcaba el 42% de los turnos como
 # pregunta clínica —"es normal después de la operación" y "cuando me muevo" son
 # afirmaciones, no preguntas— y eso habría disparado el RAG en casi cada turno.
@@ -97,19 +97,278 @@ _SOCIAL = re.compile(
 # Pregunta clínica de verdad: pide una valoración o una instrucción de cuidado.
 # `me preocup` lleva guarda de negación: "nada que me preocupe" es tranquilidad,
 # no consulta, y sin la guarda marcaba como pregunta media capa limpia del dataset.
+#
+# Las dos alternativas de "cuándo puedo" existen porque Whisper transcribe sin
+# signos de interrogación: "cuando podria volver a jugar futbol" llegaba sin `¿?`
+# ni arranque de la lista cerrada, caía en `respuesta` y el paciente recibía la
+# siguiente pregunta del guion en vez de una respuesta — medido en una llamada
+# real donde lo preguntó tres veces seguidas. Exigen el verbo de posibilidad
+# detrás ("cuando puedo/podré/podría...") a propósito: "cuando me muevo me duele"
+# es una afirmación, y un "cuando" suelto marcaba media capa limpia del dataset.
+# Verbos de actividad postoperatoria típicos de "¿puedo volver a...?": elegidos
+# a propósito para NO solapar con el vocabulario de los seis slots (caminar,
+# dormir, comer, moverse), que es justo lo que un "puedo" sin ancla podría
+# confundir con la respuesta de movilidad/sueño/apetito en vez de una pregunta.
+_ACTIVIDAD_POSTOP = (
+    r"hacer\s+ejercicio|hacer\s+deporte|trotar|correr|nadar|manejar|conducir"
+    r"|trabajar|viajar|volar|levantar\s+peso|cargar\s+peso"
+    r"|tener\s+relaciones|hacer\s+fuerza|cocinar|bailar|jugar"
+    r"|banarme|ducharme"
+)
+# Las mismas actividades en gerundio, para el conector "seguir": "debo seguir
+# HACIENDO ejercicio o es malo" llegó en una llamada real y caía en `respuesta`
+# porque la rama de abajo solo veía el infinitivo. Mismo criterio de exclusión
+# que la lista de arriba: sin "caminando/durmiendo/comiendo/moviendome", que
+# son vocabulario de los slots — "sí, puedo seguir caminando sin problema" es
+# la respuesta de movilidad, no una consulta.
+_ACTIVIDAD_POSTOP_GERUNDIO = (
+    r"haciendo\s+ejercicio|haciendo\s+deporte|trotando|corriendo|nadando"
+    r"|manejando|conduciendo|trabajando|viajando|volando"
+    r"|levantando\s+peso|cargando\s+peso|teniendo\s+relaciones"
+    r"|haciendo\s+fuerza|cocinando|bailando|jugando|banandome|duchandome"
+)
+
+# Arranque interrogativo de frase, compartido entre la primera rama de
+# `_PREGUNTA` (anclada al inicio del TURNO) y `_cola_interrogativa` (anclada al
+# inicio de la ÚLTIMA frase). "tengo que" lleva lookahead: "tengo que
+# colgar/irme" es una despedida, no una consulta, y desde que la pregunta tiene
+# precedencia sobre la despedida (ver `classify`) confundirlas mandaba la
+# despedida al RAG.
+#
+# `sera` es un parámetro porque el "será" pelado solo es fiable al inicio del
+# turno (así está calibrado): en mitad del habla es epistémico — "será como un
+# 4, pero es soportable" es una respuesta del dataset que la heurística de cola
+# marcaba como pregunta. En la cola se exige "será que".
+def _arranque_pregunta(sera: str) -> str:
+    return (
+        r"(puedo|debo"
+        r"|tengo que (?!colgar|irme|salir|cortar|dejarl[oa]|terminar|contestar otra)"
+        rf"|{sera}|hasta cuando|cada cuanto|que hago"
+        r"|que pasa si|en\s+cuantos?\s+(dias?|semanas?|meses?|tiempo)"
+        r"|a\s+los\s+cuantos?\s+dias?|que\s+tan\s+pronto|como\s+hago)\b"
+    )
+
+
+_ARRANQUE_PREGUNTA = _arranque_pregunta(r"sera")
+
 _PREGUNTA = re.compile(
     r"[¿?]"
-    r"|^\s*(puedo|debo|tengo que|sera|hasta cuando|cada cuanto|que hago|que pasa si)\b"
+    rf"|^\s*(y\s+)?{_ARRANQUE_PREGUNTA}"
+    r"|\b(cuando|hasta\s+cuando|en\s+cuantos?\s+(?:dias?|semanas?|meses?|tiempo)"
+    r"|a\s+los\s+cuantos?\s+dias?|que\s+tan\s+pronto)"
+    r"\s+(me\s+|se\s+)?(puedo|puede|podre|podria|voy\s+a\s+poder|vuelvo|volveria)\b"
     r"|\b(eso|esto|sera)\s+(es|esta)\s+(normal|bien|grave|peligroso)"
-    r"|(?<!nada que )(?<!no me )\bme\s+(tengo\s+que\s+)?preocup",
+    r"|(?<!nada que )(?<!no me )\bme\s+(tengo\s+que\s+)?preocup"
+    # Sin ancla al inicio del turno, a diferencia de la primera rama de arriba:
+    # medido en una llamada real, "Un 4. Con ese dolor puedo volver a hacer
+    # ejercicio." caía en `respuesta` porque el "puedo" no era la primera
+    # palabra del turno completo (esa rama exige `^`) y no había "¿?" (Whisper
+    # no los pone). El doble lookbehind de negación replica el de
+    # `_AUTOMEDICACION`: "no puedo trabajar" es una respuesta, no una consulta.
+    rf"|(?<!no\s)(?<!no\sme\s)\b(puedo|podre|podria|debo)\s+(volver\s+a\s+|seguir\s+)?"
+    rf"({_ACTIVIDAD_POSTOP}|{_ACTIVIDAD_POSTOP_GERUNDIO})\b",
     re.I,
 )
 
+# La última frase del turno arranca como pregunta. Es el patrón real de estas
+# llamadas: el paciente contesta primero y pregunta AL FINAL — "No, la veo
+# bien. Me duele a veces cuando hago ejercicio. Debo seguir haciendo ejercicio
+# o es malo." La primera rama de `_PREGUNTA` no lo ve porque su ancla es el
+# inicio del turno completo. Solo se consulta cuando no hubo fragmentos con `?`
+# (ver `classify`).
+_FRASE_SPLIT = re.compile(r"[.!?;]+")
+_ARRANQUE_FRASE = re.compile(
+    rf"^\W*(y\s+|pero\s+|entonces\s+|o\s+)?{_arranque_pregunta(r'sera\s+que')}",
+    re.I)
+# Guarda de los verbos de slot: "Puedo caminar bien." como última frase es la
+# respuesta de movilidad, no una consulta. Un "puedo/debo" pegado a vocabulario
+# de los seis slots no dispara la heurística; la pregunta genuina sobre esas
+# actividades llega con "cuándo puedo..." o "¿...?", que ya cubren otras ramas.
+_VERBO_SLOT = re.compile(
+    r"^\W*(y\s+|pero\s+|entonces\s+|o\s+)?(puedo|debo)\s+(seguir\s+)?"
+    r"(caminar|caminando|dormir|durmiendo|comer|comiendo"
+    r"|moverme|moviendome|levantarme|levantandome|pararme|parandome)\b",
+    re.I,
+)
+
+
+def _cola_interrogativa(t: str) -> bool:
+    frases = [f.strip() for f in _FRASE_SPLIT.split(t) if f.strip()]
+    if not frases:
+        return False
+    ultima = frases[-1]
+    if _VERBO_SLOT.match(ultima):
+        return False
+    return bool(_ARRANQUE_FRASE.match(ultima))
+
+
+# --- la pregunta que no arranca la frase --------------------------------------
+# `_cola_interrogativa` sólo ve la pregunta cuando abre la ÚLTIMA frase, y
+# `_PREGUNTA` cuando abre el turno. Fuera de esas dos posiciones, una pregunta sin
+# `¿?` es invisible. Medido sobre los 2.071 turnos del dataset: al quitarles los
+# signos, 433 preguntas clínicas —dos de cada tres— caen al default `respuesta`,
+# y ahí el RAG no se consulta nunca (ver el guard de `orchestrator.py`). Como
+# Whisper no devuelve signos, ése es el caso normal en voz, no el raro.
+#
+# Cuatro familias, elegidas midiendo una a una cuántas preguntas recuperan y
+# cuántas respuestas rompen. Las otras tres que aparecen en el corpus —"eso ya es
+# fiebre", "¿ya acabamos?", "¿fue el lunes o el martes?"— hoy rompen tantas
+# respuestas como preguntas recuperan y se quedan fuera a propósito: necesitan un
+# diseño propio, no un alternante más aquí.
+_WH = r"(?:qu[eé]|cu[aá]l(?:es)?|c[oó]mo|cu[aá]nt[oa]s?|d[oó]nde)"
+# Modal de PERMISO, y esto es lo que hace fina la discriminación de la familia D:
+# "no sé qué PUEDO TOMAR" pregunta, "no sé cuánto me MARCÓ el termómetro" es una
+# respuesta —el paciente no tiene el dato— y sin el modal no casa ninguna.
+_MODAL_PERMISO = (r"(?:puedo|podr[ií]a|podr[ée]|debo|deber[ií]a|tengo\s+que"
+                  r"|me\s+toca|hay\s+que|se\s+puede)")
+
+_PREGUNTA_SIN_SIGNOS = re.compile(
+    # A. le pide al agente una opinión o un dato que él tendría: "usted cree que
+    #    eso es importante", "usted sabe si la herida se demora en sanar". Es la
+    #    familia más numerosa del corpus con diferencia.
+    r"\b(?:usted\s+)?(?:cree|sabe|piensa|opina|considera|recomienda)\s+(?:que|si)\b"
+    # C. el miedo dicho como pregunta retórica: "no será que debería comer menos".
+    r"|\bno\s+(?:ser[ií]a|sera)\s+que\b|\bno\s+vaya\s+a\s+ser\b"
+    # G. petición explícita de información.
+    r"|\bme\s+(?:puede|podr[ií]a)\s+(?:decir|confirmar|explicar|aclarar)\b"
+    # D. interrogativa directa o indirecta en cualquier posición del turno: wh +
+    #    modal de permiso + infinitivo. El caso reportado ("solo la diarrea que
+    #    puedo tomar para la diarrea") vive aquí, pegado a un sustantivo, que es
+    #    donde ninguna de las dos ramas ancladas podía verlo. El lookbehind deja
+    #    fuera el relativo libre: "lo que puedo comer me cae mal" no pregunta nada.
+    rf"|(?<!lo\s)\b{_WH}\b(?:\s+\w+){{0,3}}?\s+{_MODAL_PERMISO}\b"
+    rf"\s+(?:\w+\s+){{0,2}}\w+(?:ar|er|ir)(?:me|se|lo|la|le)?\b",
+    re.I,
+)
+
+# Lo que precede al patrón y lo convierte en afirmación. Dos cosas distintas:
+# discurso referido ("me dijeron que puedo caminar") y factivo ("ya sé que tengo
+# que cuidarme", "uno ya sabe que eso es normal").
+#
+# Deliberadamente NO cubre el "no sé" pelado, aunque sea la tentación obvia: "no
+# sé qué puedo tomar" es una pregunta indirecta de verdad —la del turno 12 de la
+# llamada reportada— y bloquearla perdería justo el caso que motivó todo esto.
+# Los "no sé" que sí son respuesta ("no sé cuánto me marcó", "no sé qué decirle")
+# no llevan modal de permiso, así que no casan con la familia D y no hacen falta
+# aquí.
+_ANTES_AFIRMATIVO = re.compile(
+    r"\b(dij(?:o|eron)|dicen|dice|explic\w+|recomend\w+|mand\w+|indic\w+"
+    r"|sab[ií]a)\s+(?:me\s+)?$"
+    r"|\b(uno\s+)?ya\s+(lo\s+)?(s[eé]\s+)?$",
+    re.I,
+)
+
+
+def _pregunta_sin_signos(t: str) -> bool:
+    """¿El turno pregunta algo aunque la transcripción no traiga `¿?`?
+
+    Sobre texto ya normalizado. Sólo lo consulta `classify` cuando el turno no
+    tiene ningún signo de interrogación en ninguna parte, y como última rama: así
+    ningún turno que hoy se clasifica bien puede cambiar de intención.
+    """
+    # La cortesía y la meta-conversación mandan: "usted cree que va a llover" casa
+    # con la familia A y no es una consulta clínica. Ambas ramas ya existen en
+    # `classify`, pero sólo se consultan sobre los fragmentos con `¿?`.
+    if _SOCIAL.search(t) or _META.search(t):
+        return False
+    for m in _PREGUNTA_SIN_SIGNOS.finditer(t):
+        if _ANTES_AFIRMATIVO.search(t[:m.start()].rstrip() + " "):
+            continue
+        return True
+    return False
+
+
+# Negarse a seguir. Antes incluía "adiós/chao/hasta luego", que no es lo mismo:
+# despedirse al final de una llamada bien llevada es cooperar, no rechazar, y
+# ahora es la señal de que se puede colgar (ver `despedida`).
 _RECHAZO = re.compile(
     r"\bno\s+(quiero|voy a)\s+(hablar|contestar|seguir)"
-    r"|dejeme\s+en\s+paz|no\s+me\s+moleste|cuelgue|adios|chao|hasta\s+luego"
-    r"|no\s+tengo\s+tiempo",
+    r"|dejeme\s+en\s+paz|no\s+me\s+moleste|cuelgue\s+ya|no\s+tengo\s+tiempo"
+    r"|no\s+me\s+llame\s+mas",
     re.I,
+)
+
+# Negación simple de "¿algo más?": la respuesta natural a una pregunta de cierre.
+# No es una despedida formal —"no, nada" no casa con `_DESPEDIDA` a menos que
+# traiga "más"— pero en fase de CONFIRMACIÓN significa exactamente lo mismo:
+# el paciente no tiene más temas y la llamada puede cerrar. Medido en una llamada
+# real: "No, no, está muy bien. Muchas gracias." recibió otra pregunta de cierre,
+# y la siguiente negación otra más, en bucle.
+#
+# Por tokens y no por regex: las negaciones se repiten y se combinan de formas
+# que un patrón lineal no aguanta ("no no, así está bien, muchas gracias"). El
+# turno cuenta si TODAS sus palabras son de negación/conformidad/cortesía y al
+# menos una es de negación o conformidad — "muchas gracias" a secas no cierra
+# nada, y cualquier palabra fuera de la lista ("no me duele") lo devuelve al
+# flujo normal.
+_TOKENS_CIERRE = frozenset({
+    "no", "nada", "mas", "gracias", "muchas", "listo", "lista", "bueno", "buena",
+    "bien", "esta", "estamos", "asi", "todo", "muy", "ok", "okey", "vale",
+    "perfecto", "de", "acuerdo", "amable", "senor", "senora", "senorita",
+    "doctor", "doctora", "eso", "es", "ya", "quedamos", "claro", "entendido",
+})
+_TOKENS_CONFORMIDAD = frozenset({
+    "no", "nada", "listo", "lista", "bien", "perfecto", "vale", "ok", "okey",
+    "claro", "entendido", "quedamos", "acuerdo",
+})
+
+
+def niega_mas_temas(text: str) -> bool:
+    """¿El turno es una negación simple de "¿algo más?" ("no, nada, gracias")?
+
+    Solo tiene sentido consultarlo en fase de CONFIRMACIÓN/ESCALAMIENTO, donde la
+    última pregunta del agente fue de cierre: ahí un "no" pelado significa "no
+    tengo más temas". En pleno tamizaje un "no" es la respuesta al síntoma y este
+    detector no debe usarse.
+    """
+    palabras = re.findall(r"[a-zñ]+", _norm(text))
+    if not palabras or len(palabras) > 10:
+        return False
+    if not all(p in _TOKENS_CIERRE for p in palabras):
+        return False
+    return bool(_TOKENS_CONFORMIDAD.intersection(palabras))
+
+
+def contiene_despedida(text: str) -> bool:
+    """¿El turno trae una fórmula de despedida, aunque traiga más cosas?
+
+    A diferencia de `classify` —que ante despedida + pregunta clínica prioriza la
+    pregunta—, esto reporta el hecho: el orquestador lo usa para responder la
+    pregunta Y confirmar el cierre en el mismo turno, en vez de perder una de las
+    dos cosas.
+    """
+    return bool(_DESPEDIDA.search(_norm(text)))
+
+
+# Despedirse o dar por terminada la conversación. Es lo que el agente espera en
+# fase de CONFIRMACIÓN para colgar: la llamada no acaba cuando el sistema termina
+# su lista, acaba cuando el paciente entendió y se despide.
+_DESPEDIDA = re.compile(
+    r"\badios\b|\bchao\b|hasta\s+luego|nos\s+vemos|que\s+(este|le\s+vaya)\s+bien"
+    r"|gracias,?\s+(hasta|adios|chao)|listo\s+entonces|ya\s+quedamos"
+    r"|eso\s+es\s+todo|no\s+tengo\s+mas\s+(dudas|preguntas)"
+    r"|(nada|ninguna)\s+mas\b|no,?\s+nada\s+mas|todo\s+claro|quedo\s+claro"
+    r"|ya\s+entendi|entendido\s+gracias|puede\s+colgar",
+    re.I,
+)
+
+# Saludo puro: el turno no dice nada más. "Buenas, el dolor va en un 3" NO entra
+# aquí —el léxico tiene que sacar el 3—, por eso se ancla a toda la cadena.
+# Medido: sin esto, "Hola, buenas." se clasificaba como `respuesta`, no aportaba
+# dato y se comía uno de los dos reintentos del slot de dolor; el agente le
+# contestaba a un saludo con la reformulación cerrada del dolor.
+# Sin "si", "claro" ni "gracias" sueltos: un "sí" pelado es una RESPUESTA legítima
+# a "¿ha tenido fiebre?", y clasificarlo como saludo perdería el dato. "Sí, dígame"
+# sí entra, porque el "dígame" lo desambigua.
+_SALUDO_PIEZA = (
+    r"(?:hola+|buenas|buenos\s+dias|buenas\s+(?:tardes|noches)|alo+|si,?\s+digame"
+    r"|a\s+la\s+orden|con\s+quien\s+hablo|quien\s+habla|digame|que\s+mas"
+    r"|doctor\w*|doctora|senor\w*|senora|senorita|muy\s+amable)"
+)
+# Se encadenan: "Hola, buenas.", "Buenas, doctora", "Aló, sí dígame". Una sola
+# pieza no basta.
+_SALUDO = re.compile(
+    rf"^\W*{_SALUDO_PIEZA}(?:[\s,]+{_SALUDO_PIEZA})*[\s.,!¡¿?]*$", re.I
 )
 
 _TERCERO = re.compile(
@@ -118,6 +377,13 @@ _TERCERO = re.compile(
     r"|(dice|cuenta)\s+que\s+(le|se)|lo\s+he\s+visto|la\s+he\s+visto",
     re.I,
 )
+
+# El paciente no dice NADA. Es distinto de `ininteligible` —donde algo llegó pero
+# no se entendió— y por eso tiene intención propia: no se responde "¿me lo
+# repite?" a quien no ha hablado, se comprueba si sigue en línea. El marcador
+# `[silencio]` es el que ya usa `tests/dataset/dialogs.jsonl` (capa 2) y el que el
+# pipeline de voz inyecta cuando vence el temporizador de inactividad.
+_SILENCIO = re.compile(r"^\W*\[?\s*silencio\s*\]?\W*$", re.I)
 
 # Silencios y audio degradado, tal como aparecen en la capa 2 del dataset.
 _ININTELIGIBLE = re.compile(r"^\W*$|\[inaudible\]|^\.{2,}$|^(eh+|mm+|este\.{2,})\W*$", re.I)
@@ -185,6 +451,11 @@ def classify(text: str) -> Intent:
     clasificarse como ataque, no como pregunta clínica.
     """
     raw = text.strip()
+    # Va antes que `_ININTELIGIBLE`: "[silencio]" no casa con él (solo cubre
+    # vacíos y "[inaudible]"), así que hasta ahora se colaba como `respuesta` y
+    # llegaba al LLM, que no tenía nada que extraer de la palabra "silencio".
+    if _SILENCIO.match(raw):
+        return "silencio"
     if not raw or _ININTELIGIBLE.match(raw) or _es_ruido_transcripcion(raw):
         return "ininteligible"
 
@@ -196,6 +467,17 @@ def classify(text: str) -> Intent:
         return "tercero"
     if _RECHAZO.search(t):
         return "rechazo"
+    # El saludo puro va antes que todo lo demás porque el patrón exige que el
+    # turno no diga nada más; si trae contenido clínico ya no casa y sigue.
+    if _SALUDO.match(t):
+        return "saludo"
+    # La despedida cede ante una pregunta clínica en el mismo turno: "eso es
+    # todo, pero ¿cuándo me quitan los puntos?" es una pregunta que hay que
+    # responder, no una despedida que la entierra. Antes ganaba `despedida` por
+    # orden de evaluación y la pregunta se perdía sin respuesta. El orquestador
+    # puede saber que además se despidió con `contiene_despedida`.
+    if _DESPEDIDA.search(t) and not _pregunta_clinica_en(raw, t):
+        return "despedida"
     if _ADMIN.search(t):
         return "pregunta_administrativa"
 
@@ -210,14 +492,158 @@ def classify(text: str) -> Intent:
             return "meta"
         if _SOCIAL.search(f):
             return "social"
-        if _PREGUNTA.search(frag):
+        # Sobre el fragmento normalizado: "¿Cuándo podré...?" lleva tilde y los
+        # patrones del regex van sin ella.
+        if _PREGUNTA.search(f):
             return "pregunta_clinica"
 
-    if not fragmentos and _PREGUNTA.search(raw):
+    if not fragmentos and _PREGUNTA.search(t):
         return "pregunta_clinica"
     if _META.search(t):
         return "meta"
+    # Última red antes del default: la pregunta pegada AL FINAL del turno, sin
+    # signos (Whisper no los pone). Después de `_META` a propósito — "¿me lo
+    # repite?" también es la última frase y ya tiene respuesta determinista.
+    if not fragmentos and _cola_interrogativa(t):
+        return "pregunta_clinica"
+    # Y la que no arranca ninguna frase, que es la mayoría. Va la ÚLTIMA, después
+    # de meta y de las dos ramas ancladas, para que todas conserven su precedencia.
+    if not fragmentos and _pregunta_sin_signos(t):
+        return "pregunta_clinica"
     return "respuesta"
+
+
+def _pregunta_clinica_en(raw: str, t: str) -> bool:
+    """¿El turno trae una pregunta clínica de verdad (no muletilla, no meta/social)?
+
+    Réplica del análisis de fragmentos de `classify`, para decidir la precedencia
+    despedida/pregunta sin duplicar la clasificación completa.
+    """
+    fragmentos = _FRAGMENTO.findall(raw)
+    for frag in fragmentos:
+        f = _norm(frag)
+        if _MULETILLA.match(f.strip("¿? ")):
+            continue
+        if _META.search(f) or _SOCIAL.search(f):
+            continue
+        if _PREGUNTA.search(f):
+            return True
+    return bool(not fragmentos and _PREGUNTA.search(t))
+
+
+# Declaración o pregunta indirecta de automedicación ("voy a tomar/me voy a
+# tomar/pienso tomar[me]/me puedo tomar/puedo tomar X", "quisiera/quiero saber
+# si..."), sin forma de pregunta directa: no matchea `_PREGUNTA` (sin "¿/?" ni
+# verbo de posibilidad al inicio de la frase). Solo se consulta en la ventana
+# posterior a un guion crítico (ver `orchestrator.py`), donde una mención así
+# merece verificarse contra el RAG antes de despedirse. Medido en una llamada
+# real: "me puedo tomar" y "si quisiera saber si..." son la forma MÁS común de
+# preguntar algo así en voz, más común que "voy a tomar", y la primera versión
+# de este detector no las cubría — el RAG nunca se consultaba.
+#
+# Doble lookbehind para la negación ("no puedo tomar nada" / "no me puedo
+# tomar nada"): uno solo no bastaba, porque "me" se cuela entre "no" y
+# "puedo" y el lookbehind de tres caracteres ya no ve el "no".
+_AUTOMEDICACION = re.compile(
+    r"(?<!no\s)(?<!no\sme\s)"
+    r"\b(voy\s+a|me\s+voy\s+a|pienso|quiero|puedo|me\s+puedo)\s+tomar(me)?\b"
+    r"|\bme\s+tom(o|ar[ée]|ar[íi]a)\b"
+    r"|\bquisiera\s+saber\b|\bquiero\s+saber\b|\bpuedo\s+saber\b",
+    re.I,
+)
+
+
+def menciona_automedicacion(text: str) -> bool:
+    """¿El paciente anuncia que va a tomarse algo por su cuenta, o pregunta
+    indirectamente si puede/debe hacerlo?
+
+    No es parte de `classify()` a propósito: `_PREGUNTA` está calibrada contra
+    los 2.071 turnos reales del dataset (ver comentario más arriba) y ampliarla
+    arriesga esa calibración. Este detector vive aparte y solo lo consulta el
+    orquestador en la ventana posterior a un guion crítico.
+    """
+    return bool(_AUTOMEDICACION.search(_norm(text)))
+
+
+# Pregunta definicional/aclaratoria sin signos de interrogación, que es como la
+# entrega Whisper: "que es calentura", "que significa supuracion", "no se que es
+# eso". Caía en el default `respuesta` (la rama sin "¿?" de `_PREGUNTA` solo
+# cubre verbos de posibilidad) y el léxico encima extraía el TÉRMINO preguntado
+# como síntoma reportado: el paciente preguntaba qué es calentura y quedaba
+# anotado `fever=True`. Guardas del primer alternante: "lo que es la fiebre, sí
+# la he tenido" (topicalizador) y "que es lo que le digo" (eco) NO son
+# aclaraciones.
+_ACLARACION = re.compile(
+    r"(?<!lo\s)\bque\s+es\s+(?!lo\s)"
+    r"|\bque\s+significa\b|\bque\s+quiere\s+decir\b"
+    r"|\ba\s+que\s+se\s+refiere\b|\bcomo\s+es\s+eso\s+de\b"
+    r"|\bno\s+se\s+que\s+es\b"
+    r"|\bno\s+(le\s+)?entiendo\s+(eso|esa\s+palabra|que\s+es|la\s+pregunta)\b",
+    re.I,
+)
+
+
+def pide_aclaracion(text: str) -> bool:
+    """¿El paciente pregunta qué significa algo (típicamente un término de la
+    pregunta del guion)?
+
+    Misma doctrina que `menciona_automedicacion`: NO es parte de `classify()`
+    porque `_PREGUNTA` está calibrada contra los 2.071 turnos del dataset. Este
+    detector vive aparte y el orquestador solo lo consulta para reclasificar un
+    `respuesta` a `pregunta_clinica`; los demás intents conservan su precedencia.
+    Casa también en el caso mixto ("sí, pero qué es calentura"): los síntomas
+    del resto del turno se extraen igual.
+    """
+    return bool(_ACLARACION.search(_norm(text)))
+
+
+# Turno compuesto SOLO de muletillas de duda: el paciente está PENSANDO, no
+# fallando en responder. Exclusiones deliberadas: "bueno" (respuesta legítima y
+# token de cierre en `niega_mas_temas`), "aja" (asentimiento), "ya" (respuesta).
+# "es que" entra: si Whisper corta "Es que—" a mitad de arranque, tratarlo como
+# pensando es lo deseado y el resto llega en el frame siguiente.
+_PENSANDO = re.compile(
+    r"^\W*((eh+|ee+|mm+|hm+|um+|uy|ay|este|esto|pues|o\s+sea|a\s+ver"
+    r"|como\s+se\s+llama|como\s+le\s+digo|es\s+que|dejeme\s+(pensar|ver)"
+    r"|espere(me)?|un\s+moment(o|ico))[\s.,;:…¡!¿?-]*)+$",
+    re.I,
+)
+
+
+def es_muletilla_pensando(text: str) -> bool:
+    """¿El turno es puro relleno de duda ("ehh...", "este...", "a ver...")?
+
+    No cambia `classify()` —"eh" sigue siendo `ininteligible` allí— porque la
+    reacción correcta no es del clasificador sino de quien lo consulta: la capa
+    de voz no crea turno (deja pensar y rearma el reloj de silencio) y el
+    orquestador, en modo texto, no gasta repregunta ni contesta "¿me lo
+    repite?" a quien no ha terminado de hablar. "Eh, sí, un 4" NO casa: trae
+    contenido, y sigue su curso normal.
+    """
+    return bool(_PENSANDO.match(_norm(text)))
+
+
+# El paciente reclama que su pregunta quedó sin responder: "no me respondiste
+# la pregunta del ejercicio". No es meta (repetir la pregunta del AGENTE sería
+# exactamente lo contrario de lo que pide) ni cae en ninguna otra rama — en una
+# llamada real el reclamo se ignoró y el guion siguió con el sueño.
+_RECLAMO_RESPUESTA = re.compile(
+    r"\bno\s+me\s+(respondi(o|ste)|ha(s)?\s+respondido|contest(o|aste)|ha(s)?\s+contestado)\b"
+    r"|\b(quedo|se\s+quedo|dejaste|dejo)\s+sin\s+(responder|contestar)\b"
+    r"|\bsin\s+responder(me)?\s+(la|mi)\s+pregunta\b",
+    re.I,
+)
+
+
+def reclama_respuesta(text: str) -> bool:
+    """¿El paciente reclama una respuesta que quedó pendiente?
+
+    Misma doctrina que `pide_aclaracion`: fuera de `classify()` (no toca la
+    calibración) y consultado solo por el orquestador, que reclasifica a
+    `pregunta_clinica` y enriquece la consulta del RAG con la pregunta original
+    del historial.
+    """
+    return bool(_RECLAMO_RESPUESTA.search(_norm(text)))
 
 
 def is_injection(text: str) -> bool:

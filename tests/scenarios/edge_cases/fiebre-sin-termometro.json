@@ -1,0 +1,16 @@
+{
+  "name": "Refiere calentura y no tiene termómetro",
+  "risk": "green",
+  "category": "edge_cases",
+  "messages": [
+    "El dolor está en un 2.",
+    "Me siento caliente.",
+    "No tengo termómetro en la casa.",
+    "Camino bien, la herida está seca.",
+    "Como normal y duermo bien."
+  ],
+  "expected": {
+    "should_reassure": false,
+    "must_interpret": ["No tengo termómetro"]
+  }
+}

@@ -29,12 +29,44 @@ def _ollama_vivo() -> bool:
 
 pytestmark = pytest.mark.skipif(not _ollama_vivo(), reason="Ollama no está levantado")
 
+@pytest.fixture(scope="module", autouse=True)
+def _modelo_local():
+    """Estos tests verifican el adaptador de Ollama contra el modelo LOCAL.
+
+    El `.env` puede apuntar al LLM de Groq (producción); aqui se fuerza el modelo
+    local y se limpia la cache de settings para que `OllamaAdapter()` no lea el
+    modelo de produccion.
+    """
+    import os
+
+    from app.config import get_settings
+
+    prev = {k: os.environ.get(k) for k in ("LLM_PROVIDER", "LLM_MODEL")}
+    os.environ["LLM_PROVIDER"] = "ollama"
+    os.environ["LLM_MODEL"] = "llama3.2:3b"
+    try:
+        get_settings.cache_clear()
+        yield
+    finally:
+        for k, v in prev.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        get_settings.cache_clear()
+
+
+
 PREGUNTAS = {
     "dolor": "¿Cómo ha estado el dolor, en una escala del 0 al 10?",
     "herida": "¿Cómo está la herida? ¿Hay enrojecimiento o secreción?",
     "apetito": "¿Cómo ha estado su apetito desde la cirugía?",
     "sueno": "¿Cómo ha dormido estos días?",
     "movilidad": "¿Ha tenido dificultad para moverse o caminar?",
+    # Una sola pregunta y sobre la sensación, no sobre el termómetro: encadenar
+    # las dos hacía que un "sí" fuera imposible de desambiguar (ver
+    # `test_decir_que_se_tomo_la_temperatura_no_es_decir_que_tiene_fiebre`).
+    "fiebre": "¿Ha tenido fiebre o calentura estos días?",
 }
 
 
@@ -240,3 +272,145 @@ def test_grounding_rechaza_cifras_ausentes_de_la_evidencia():
 
 def test_todos_los_slots_tienen_esquema():
     assert set(SLOT_FIELDS) == {"dolor", "fiebre", "movilidad", "herida", "apetito", "sueno"}
+
+
+@pytest.mark.parametrize(
+    "slot,pregunta,texto",
+    [
+        # Regresión de la llamada real: el 3B se engancha con el "ve / color /
+        # roja" de la PREGUNTA —que también entra en su contexto— y, obligado por
+        # el enum a elegir algo, devuelve el valor más grave. Medido 4/4 veces
+        # antes de la guarda. `_es_un_solo_token` no lo frenaba: son dos palabras.
+        ("herida", "¿La ve del color normal de la piel, o más roja de lo que estaba?",
+         "veo borroso"),
+        ("movilidad", "¿Puede levantarse de la cama solo, o necesita que alguien lo ayude?",
+         "veo borroso"),
+    ],
+)
+def test_no_se_escala_desde_una_frase_que_no_habla_del_slot(adapter, slot, pregunta, texto):
+    ext = run(adapter.extract(slot=slot, question=pregunta, utterance=texto))
+    campo = {"herida": "wound", "movilidad": "mobility"}[slot]
+    assert getattr(ext.symptoms, campo) is None, (
+        f"{texto!r} no habla de {slot} y no debería producir un valor que escala "
+        f"a CRÍTICO (salió {getattr(ext.symptoms, campo)!r})"
+    )
+
+
+def test_decir_que_se_tomo_la_temperatura_no_es_decir_que_tiene_fiebre(adapter):
+    """El falso negativo: con `fever=True` el slot se resolvía y la cifra no se pedía."""
+    for texto in ("si la he tomado", "sí me la tomé"):
+        ext = run(adapter.extract(
+            slot="fiebre", question=PREGUNTAS["fiebre"], utterance=texto))
+        assert ext.symptoms.fever is None, f"{texto!r} → fever={ext.symptoms.fever!r}"
+        assert ext.symptoms.temperature_measured is True
+
+
+def test_no_se_extrae_de_un_turno_que_es_pregunta():
+    """Medido: con "¿Ha sentido calentura o escalofríos?" en su contexto, el 3B
+    contestó `si` a "¿Cuándo me puedo bañar?" — se enganchó con la pregunta del
+    agente. Cuando el paciente pregunta, no está contestando."""
+    from app.llm.ollama_adapter import _to_symptoms
+    for pregunta in ("¿Cuándo me puedo bañar después de la cirugía?",
+                     "¿Puedo levantar peso ya?"):
+        assert _to_symptoms({"v": "si"}, "fiebre", pregunta).fever is None, pregunta
+    # Pero una respuesta real sobre el slot sí pasa, aunque lleve una pregunta pegada.
+    assert _to_symptoms({"v": "si"}, "fiebre", "sí, con calentura, ¿eso es malo?").fever is True
+
+
+def test_el_registro_se_corrige_y_la_empatia_postiza_se_quita():
+    """El prompt lo prohíbe y el 3B lo ignora igual; esto no depende de que obedezca."""
+    from app.llm.ollama_adapter import a_usted, sin_muletillas
+    salida = sin_muletillas(a_usted(
+        "Amigo, parece que se siente un poco nervioso. Entiendo que estés ansioso. "
+        "Puede ducharse al día siguiente y no los toques."
+    ))
+    assert salida.startswith("Puede ducharse")
+    for prohibido in ("Amigo", "parece que", "Entiendo que", "estés", "toques"):
+        assert prohibido not in salida, f"{prohibido!r} sobrevivió en {salida!r}"
+
+
+def test_una_respuesta_limpia_no_se_toca():
+    from app.llm.ollama_adapter import sin_muletillas
+    buena = "Puede ducharse desde las 48 horas, secando bien la herida después."
+    assert sin_muletillas(buena) == buena
+
+
+@pytest.mark.parametrize(
+    "texto,es_abst",
+    [
+        ("Sobre eso no tengo información en los documentos del hospital.", True),
+        ("No lo sé, se lo paso a enfermería.", True),
+        ("No sé si eso aplica a su caso.", True),
+        ("Eso no aparece en los documentos del hospital.", True),
+        # Regresión: el patrón viejo (`no\s+(lo\s+)?s[eé]\s`) casaba con el "se"
+        # impersonal. El orquestador tomaba estas respuestas —correctas y bien
+        # ancladas— por abstenciones, les quitaba las FUENTES y les pegaba la
+        # transición de abstención. Perder la cita es perder justo lo que la
+        # rúbrica califica en RAG y trazabilidad.
+        ("No, no se recomiendan bañarse hasta la cita de control.", False),
+        ("No se aplique cremas en la herida.", False),
+        ("La herida no se debe destapar.", False),
+        ("Puede ducharse desde las 48 horas.", False),
+    ],
+)
+def test_el_se_impersonal_no_es_una_abstencion(texto, es_abst):
+    from app.llm.ollama_adapter import es_abstencion
+    assert es_abstencion(texto) is es_abst, texto
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        ("Debe esperar a que se se indique por su médico.",
+         "Debe esperar a que se indique por su médico."),
+        ("Lave la la herida con agua y jabón.",
+         "Lave la herida con agua y jabón."),
+        # No toca lo que está bien.
+        ("Puede ducharse desde las 48 horas.", "Puede ducharse desde las 48 horas."),
+        ("Se lava con agua y jabón.", "Se lava con agua y jabón."),
+    ],
+)
+def test_la_palabra_repetida_se_colapsa(texto, esperado):
+    """El 3B tartamudea al redactar y en voz se oye como un tropiezo."""
+    from app.llm.ollama_adapter import sin_tartamudeo
+    assert sin_tartamudeo(texto) == esperado
+
+
+def test_el_filtro_de_dominio_clasifica_la_pregunta(adapter):
+    """Sustituye al juicio de entailment sobre la evidencia: 21/25 -> 24/25.
+
+    Lo que se protege aquí es el peor error de todos —responder algo ajeno al
+    corpus CITANDO un documento clínico—, que es el caso de "horario de visitas".
+    Referencia completa: `scripts/calibrate_rag.py`.
+    """
+    evidencia = "El baño diario se permite desde las 48 horas. Seque bien la herida."
+    del_dominio = run(adapter.pregunta_es_del_dominio(
+        question="¿Cuándo me puedo bañar después de la cirugía?", evidence=evidencia))
+    ajena = run(adapter.pregunta_es_del_dominio(
+        question="¿Cuál es el horario de visitas del hospital?", evidence=evidencia))
+    assert del_dominio is True
+    assert ajena is False
+
+
+@pytest.mark.parametrize(
+    "texto,esperado",
+    [
+        # `num_predict=80` corta donde toque; en voz una frase partida se oye como
+        # que la llamada se cayó.
+        ("Lave la herida a diario. Y si descubre alguna herida nueva en",
+         "Lave la herida a diario."),
+        ("Puede ducharse desde las 48 horas.", "Puede ducharse desde las 48 horas."),
+        # Sin ninguna frase cerrada NUNCA se devuelve texto a medias: partido en
+        # una palabra funcional no hay nada que rescatar (vacío → el llamador se
+        # abstiene o cae a plantillas)...
+        ("Debe esperar a que", ""),
+        # ...con una coma pasada la mitad se rescata la cláusula completa...
+        ("La guía recomienda esperar de 8 a 12 semanas, aunque eso depende de",
+         "La guía recomienda esperar de 8 a 12 semanas."),
+        # ...y si solo faltaba el punto, se pone.
+        ("Puede caminar apoyándose en el caminador", "Puede caminar apoyándose en el caminador."),
+    ],
+)
+def test_la_frase_cortada_se_descarta(texto, esperado):
+    from app.llm.ollama_adapter import sin_frase_cortada
+    assert sin_frase_cortada(texto) == esperado

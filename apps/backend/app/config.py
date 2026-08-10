@@ -35,19 +35,29 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/clinical.db"
 
     # --- LLM (ADR-002 / ADR-010) — compuerta G3 ---
-    # ollama -> llama3.2:3b, el modelo del agente. Está en la lista permitida.
-    # mock   -> extractor determinista, para tests sin Ollama levantado.
-    llm_provider: str = "ollama"
-    llm_model: str = "llama3.2:3b"
+    # groq  -> llama-3.3-70b-versatile (sucesor vigente de Llama 3.1 70B en Groq).
+    # ollama-> llama3.2:3b, el modelo local del agente. Está en la lista permitida.
+    # mock  -> extractor determinista, para tests sin Ollama levantado.
+    llm_provider: str = "groq"
+    llm_model: str = "llama-3.3-70b-versatile"
+    # Proveedor de la llamada de REDACCIÓN (compose_reply): quién escribe lo que
+    # el agente dice en voz alta, con el guion como restricción. Vacío = el mismo
+    # de `llm_provider`. Separado para poder comparar redactores sin tocar la
+    # extracción.
+    compose_provider: str = ""
     ollama_host: str = "http://localhost:11434"
     # Si el modelo tarda más que esto, el turno se completa con el léxico
-    # determinista y se marca degradado. Medido: la extracción va en ~325 ms.
+    # determinista y se marca degradado. Medido en Ollama: la extracción iba en
+    # ~325 ms; en Groq (hosted) el margen sobra.
     llm_timeout_s: float = 2.5
     # La respuesta anclada al RAG procesa evidencia y genera dos frases: es la
     # ruta lenta del sistema y necesita más margen que la extracción de un slot.
     llm_reply_timeout_s: float = 12.0
-    # Mantiene el modelo en RAM entre turnos. Sin esto, el primer turno tras una
-    # pausa cuesta ~24 s de recarga.
+    # Redacción del turno (compose_reply). Más corto que el de reply: si el
+    # redactor tarda, el turno cae a las plantillas deterministas y la llamada
+    # no se queda esperando. Groq responde en ~1 s; 6 s es el margen de un mal día.
+    llm_compose_timeout_s: float = 6.0
+    # Mantiene el modelo en RAM entre turnos (solo Ollama). Groq lo ignora.
     llm_keep_alive: str = "60m"
 
     # --- Embeddings (ADR-011): bge-m3 servido por el mismo Ollama ---
@@ -98,6 +108,79 @@ class Settings(BaseSettings):
     # Detección de fin de turno. 0.7 s protege al paciente mayor de ser cortado a
     # media frase; es la palanca dominante del presupuesto de latencia.
     vad_stop_secs: float = 0.7
+    # Segundo tramo del endpointing: corre DESPUÉS del stop del VAD (el fin de
+    # turno efectivo es la suma de los dos). Subirlo tolera pausas más largas a
+    # mitad de frase — "me duele... ...la herida" — al precio de retrasar TODAS
+    # las respuestas del agente en la misma cantidad. Las muletillas puras
+    # ("ehh...") ya no cierran el turno por otra vía (ver `voice/pipeline.py`),
+    # así que esta palanca es para pacientes de habla lenta, no para la duda.
+    user_speech_timeout: float = 0.2
+
+    # Umbrales con los que el VAD decide que ALGUIEN está hablando. Silero exige
+    # los dos a la vez (`vad_analyzer.py`: `confidence >= X and volume >= Y`), así
+    # que el más estricto manda. Estaban fijos en el código y ahora se configuran,
+    # porque son la primera palanca cuando el agente no oye al paciente.
+    #
+    # `vad_min_volume` es sonoridad EBU R128 normalizada a [0,1]. El valor por
+    # defecto de Pipecat es 0.6 y asume un micrófono cercano y bien nivelado; con
+    # el de un portátil, o con el paciente a medio metro, no se alcanza — y
+    # entonces no hay VAD, no hay STT (Groq transcribe por segmentos y DEPENDE del
+    # VAD), y la llamada entera se interpreta como silencio hasta colgar. Se baja
+    # a 0.3, que es el lado seguro: un falso positivo entra como `ininteligible`
+    # (ver `nlu/intent.py::_es_ruido_transcripcion`) y el agente pide que se
+    # repita; un falso negativo le cuelga a un paciente que sí estaba hablando.
+    vad_confidence: float = 0.7
+    vad_min_volume: float = 0.3
+
+    # --- Escalera de silencios (voice/silence.py) ---
+    # Cada tramo se cuenta desde que el agente TERMINA de hablar, y el reloj solo
+    # corre cuando no habla ninguno de los dos (ver `voice/pipeline.py`).
+    #
+    # La escalera completa con los defaults: 6 s de espera muda → frase suave
+    # ("tómese su tiempo", local, sin tocar el guion) → 6 s más → "¿sigue ahí?"
+    # con la pregunta repetida → 8 s entre sondeos → cierre al agotar
+    # `silence_max_attempts`. Un silencio nunca se anota como respuesta: el slot
+    # queda en None (UNKNOWN), jamás en False.
+    #
+    # Espera inicial + suave y no un timeout único: ocho segundos de vacío y
+    # repetir la pregunta vencía mientras un paciente mayor todavía estaba
+    # pensando; la frase suave le da permiso de pensar sin exigirle nada y sin
+    # acercar la llamada al cuelgue.
+    silence_initial_s: float = 6.0
+    # Tras la frase suave, cuánto se espera antes del primer "[silencio]" (el
+    # sondeo "¿sigue ahí?"). 0 desactiva la frase suave: el primer vencimiento
+    # va directo al sondeo, que es el comportamiento anterior.
+    silence_gentle_s: float = 6.0
+    # Entre sondeos/avisos sucesivos (el rol del antiguo `silence_timeout_s`).
+    silence_repeat_s: float = 8.0
+    # Sondeos sin respuesta antes de colgar (sondeo → aviso → cierre). Es el
+    # `MAX_SILENCIOS` de `agent/script.py`, ahora configurable.
+    silence_max_attempts: int = 3
+
+    # --- Barge-in: el paciente interrumpe al agente y el TTS se calla ---
+    # Modo por defecto: confirmado por transcripción. El agente se interrumpe
+    # cuando llega una transcripción del paciente que pasa el filtro anti-eco
+    # (`voice/pipeline.py::es_eco`). No es instantáneo (~1 s tras el fin del
+    # habla) pero es inmune al eco del propio TTS captado por el micrófono.
+    barge_in_enabled: bool = True
+    # Modo instantáneo: la interrupción la dispara el VAD (~0.2 s de voz). Solo
+    # con cancelación de eco fiable (AEC del navegador): sin ella, el agente oye
+    # su propio eco y se corta a sí mismo a media frase. Opt-in a propósito.
+    barge_in_vad: bool = False
+    # Mientras el agente habla, el filtro de eco se endurece: fragmentos de eco
+    # de 2-3 palabras que con el umbral normal (4) pasarían de largo cortarían
+    # al agente. "sí sí tuve fiebre" sigue pasando (bajo solapamiento).
+    barge_in_min_palabras_eco: int = 2
+
+    # --- Filtro de ruido en el servidor (opt-in) ---
+    # "rnnoise" activa el `RNNoiseFilter` de Pipecat sobre el audio de entrada,
+    # ANTES del VAD. Apagado por defecto y a propósito: el navegador ya aplica
+    # noiseSuppression/echoCancellation (ver `static/index.html`), duplicar la
+    # supresión cuesta CPU por frame y RNNoise puede atenuar la voz débil de un
+    # paciente mayor — exactamente lo que este pipeline protege. Activarlo por
+    # despliegue cuando el entorno sea ruidoso de verdad (requiere
+    # `pipecat-ai[rnnoise]`).
+    noise_filter: str = ""
 
     # --- RAG: umbral de "no tengo evidencia suficiente" (ADR-005) ---
     rag_top_k: int = 4
@@ -117,6 +200,9 @@ class Settings(BaseSettings):
 
     # --- Datos versionados fuera del código ---
     seed_dir: str = "data/seed"
+    # Prompts del redactor (RNF-05): viven como archivos versionados en /prompts,
+    # no hardcodeados, para poder iterarlos sin tocar código.
+    prompts_dir: str = "prompts"
 
 
 @lru_cache
@@ -127,6 +213,7 @@ def get_settings() -> Settings:
     s.chroma_dir = _abs(s.chroma_dir)
     s.piper_voices_dir = _abs(s.piper_voices_dir)
     s.seed_dir = _abs(s.seed_dir)
+    s.prompts_dir = _abs(s.prompts_dir)
     if s.database_url.startswith("sqlite:///./"):
         s.database_url = "sqlite:///" + _abs(
             s.database_url.removeprefix("sqlite:///./")

@@ -97,6 +97,22 @@ class Transcript(BaseModel):
 
     conversation_id: str
     turns: list[TurnRecord] = Field(default_factory=list)
+    # Lo que el agente dice ANTES de que el paciente hable. No es un `TurnRecord`
+    # porque no tiene texto del paciente y contarlo como turno falsearía los
+    # evaluadores de estilo. No se envía a `process_turn`: `CallState` ya arranca
+    # en TAMIZAJE dando por hecha la pregunta de dolor que la apertura lleva
+    # dentro (ver agent/script.py). Está aquí para que el informe muestre la
+    # conversación tal como suena, empezando por el agente — sin esto parecía que
+    # el paciente hablaba primero y que el agente le respondía con una
+    # reformulación salida de la nada.
+    apertura: str | None = None
+    # Riesgo tras aplicar la política de incertidumbre al cerrar
+    # (`engine.evaluate(final=True)`, vía `summary.close_conversation`). Va aparte
+    # porque no es un turno hablado: es la reevaluación de la llamada completa.
+    # Sin esto el arnés no medía el final real — al paciente guionizado se le
+    # acaban los mensajes, la llamada nunca se cerraba y una conversación que no
+    # se pudo evaluar se reportaba NORMAL en vez de escalada.
+    risk_al_cierre: str | None = None
 
     @property
     def final(self) -> TurnRecord:
@@ -112,7 +128,12 @@ class Transcript(BaseModel):
         """
         if not self.turns:
             return "NORMAL"
-        return max((t.risk_level for t in self.turns), key=lambda r: _RISK_ORDER.get(r, 0))
+        niveles = [t.risk_level for t in self.turns]
+        # El cierre cuenta: una llamada que se quedó a medias escala al colgar, y
+        # ese escalamiento es tan real como el de un turno.
+        if self.risk_al_cierre:
+            niveles.append(self.risk_al_cierre)
+        return max(niveles, key=lambda r: _RISK_ORDER.get(r, 0))
 
     @property
     def escalated(self) -> bool:
