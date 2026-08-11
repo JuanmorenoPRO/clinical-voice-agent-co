@@ -18,7 +18,7 @@ nota del reto permite usar el sucesor vigente de ese mismo proveedor.
 | **01** | Repositorio | Este repositorio. Se levanta con el [§ Arranque](#arranque) de aquí abajo |
 | **02** | Diagrama de arquitectura y flujo de decisión | [`docs/arquitectura.md`](docs/arquitectura.md) |
 | **03** | Informe final | [`INFORME.md`](INFORME.md) |
-| **04** | Video: demo y preguntas de cierre | [`docs/video/`](docs/video/) |
+| **04** | Video: demo y preguntas de cierre | [Ver en Drive](https://drive.google.com/file/d/1GCVi5ZZR75QMm16tJiz4r79IkLU49BbG/view?usp=drive_link) · ficha en [`docs/video/`](docs/video/) |
 
 ---
 
@@ -361,7 +361,7 @@ apps/backend/app/
   llm/          adaptadores de Groq y Ollama, esquemas de extracción restringida
   voice/        pipeline Pipecat (Groq STT → orquestador → Piper TTS)
 scripts/        construcción del índice, carga del dataset, métricas, spikes
-docs/           arquitectura, calibración del triaje, mediciones, guion del video
+docs/           arquitectura, calibración del triaje, mediciones
   img/          capturas que embebe el informe final
   video/        ficha y enlace del entregable 04
 reports/        evaluaciones sobre los 160 casos, corrida a corrida
