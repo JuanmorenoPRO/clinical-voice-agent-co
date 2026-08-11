@@ -28,23 +28,21 @@ nota del reto permite usar el sucesor vigente de ese mismo proveedor.
 [Groq](https://console.groq.com) (un minuto, sin tarjeta). Es la única credencial.
 
 ```bash
-# 1. Servicio de embeddings. `pull` no deja el demonio arrancado, y tras un
-#    reinicio nada lo vuelve a levantar: sin él, el RAG no puede embeber la
-#    consulta y el agente se abstiene en vez de citar evidencia.
+# 1. Demonio de Ollama, que sirve los embeddings. `pull` no lo deja arrancado.
 ollama serve &
 
 # 2. Modelo de embeddings (1.2 GB). El LLM vive en Groq; bge-m3 corre local.
-ollama pull bge-m3 &
+ollama pull bge-m3
 
 # 3. Código y dependencias
-git clone https://github.com/JuanmorenoPRO/clinical_assistant && cd clinical_assistant
+git clone https://github.com/JuanmorenoPRO/clinical-voice-agent-co && cd clinical-voice-agent-co
 python3.12 -m venv .venv && .venv/bin/pip install -r apps/backend/requirements.txt \
                                                   -r apps/backend/requirements-voice.txt
 
 # 4. Credencial
 cp .env.example .env        # pega tu GROQ_API_KEY
 
-# 5. Índice del corpus clínico preconstruido (63 MB, ~5 s)
+# 5. Índice del corpus clínico preconstruido (63 MB, ~5 s) y base de datos
 .venv/bin/python scripts/fetch_index.py
 .venv/bin/python scripts/init_db.py
 
@@ -105,7 +103,7 @@ decisión, y las seis preguntas se pueden pre-sintetizar en audio.
 
 ## Métricas medidas
 
-Generadas con `python scripts/report_metrics.py`, que las lee de las mismas filas
+Generadas con `.venv/bin/python scripts/report_metrics.py`, que las lee de las mismas filas
 de `turns` que se pueden inspeccionar en `GET /console/conversations/{id}`. **No se
 escriben a mano**, para que no puedan divergir de los logs.
 
@@ -229,9 +227,10 @@ La solución encadena cuatro filtros y solo uno es un modelo:
 | Juicio de pertinencia (LLM) | ~130 ms | Lo que es de otro tema |
 | Validación de cifras | 0 ms | Números que no están en la evidencia |
 
-Pasó de **0/10 preguntas inventadas rechazadas a 9/10**, conservando 12/15 de las
-legítimas. Los tres fallos restantes son abstenciones de más, que en clínica es el
-lado correcto donde equivocarse. El detalle está en
+Medido con `scripts/calibrate_rag.py` sobre las 25 preguntas: **responde 15/15 de
+las que el corpus sí contesta y rechaza 8/10 de las ajenas**. El que falla de forma
+estable es "¿cómo se hace una cesárea?", que el modelo lee como cirugía y deja
+pasar; llega igualmente a la validación de cifras. El detalle está en
 [`docs/calibracion-rag.md`](docs/calibracion-rag.md).
 
 ### Tres cosas que encontramos en el corpus
@@ -281,8 +280,8 @@ la marcha— están en [`docs/spikes-7-agosto.md`](docs/spikes-7-agosto.md).
 cd apps/backend && ../../.venv/bin/python -m pytest app/tests -q
 ```
 
-802 tests. Los del motor de decisión, el léxico y el guion —484— corren sin modelo,
-sin red y sin base de datos, en un cuarto de segundo:
+827 tests. Los del motor de decisión, el léxico y el guion —508— corren sin modelo,
+sin red y sin base de datos, en un tercio de segundo:
 
 ```bash
 cd apps/backend && ../../.venv/bin/python -m pytest app/tests/test_decision.py \

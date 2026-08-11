@@ -10,7 +10,7 @@
 #   ./scripts/publish_index.sh
 set -euo pipefail
 
-REPO="${INDEX_REPO:-JuanmorenoPRO/repo-indices}"
+REPO="${INDEX_REPO:-JuanmorenoPRO/clinical-voice-agent-co}"
 TAG="${INDEX_TAG:-chroma-bge-m3-v1}"
 SRC="${1:-dist/chroma}"
 ASSET="chroma-bge-m3.tar.gz"

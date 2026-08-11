@@ -26,7 +26,11 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-REPO = "JuanmorenoPRO/repo-indices"
+# El índice va como asset de un Release de ESTE repositorio, no dentro del árbol:
+# el tarball pesa 62 MB y commitearlo lo metería en el historial para siempre,
+# de modo que todo el que clonara se lo llevaría aunque nunca lo usara. Un asset
+# de Release admite hasta 2 GB y solo lo descarga quien ejecuta este script.
+REPO = "JuanmorenoPRO/clinical-voice-agent-co"
 TAG = "chroma-bge-m3-v1"
 ASSET = "chroma-bge-m3.tar.gz"
 URL = f"https://github.com/{REPO}/releases/download/{TAG}/{ASSET}"
