@@ -59,7 +59,7 @@ def test_la_distribucion_de_intenciones_no_se_movio(turnos):
     """El guardián del 42%: la versión laxa de `_PREGUNTA` marcaba casi la mitad
     de los turnos como consulta, y eso habría disparado el RAG en cada turno.
 
-    Hoy la tasa es del 31,4%. El tope es 40%: deja sitio para ensanchar la
+    Hoy la tasa es del 31,9%. El tope es 40%: deja sitio para ensanchar la
     detección a propósito —que es justo lo que se acaba de hacer— y sigue muy por
     debajo del régimen que la calibración original descartó.
     """
@@ -79,11 +79,11 @@ def test_la_pregunta_sobrevive_sin_signos_de_interrogacion(turnos):
     un turno en el que el paciente pregunta algo y el agente sigue con el guion
     sin consultar el RAG.
 
-    Eran 433 de 2.071. Con las cinco familias de `_pregunta_sin_signos` son 291
-    (eran 297 con cuatro; la familia E —la duda anunciada— recuperó seis más).
-    El tope de 310 da margen al corpus sin dejar que la cifra vuelva a subir; las
-    291 restantes son las familias que quedaron fuera a propósito (ver el
-    comentario de `_PREGUNTA_SIN_SIGNOS`).
+    Eran 433 de 2.071. Con las seis familias de `_pregunta_sin_signos` son 286
+    (297 con cuatro; la familia E —la duda anunciada— recuperó seis más, y la H
+    —la duda indirecta con "si"— otras cinco). El tope de 310 da margen al corpus
+    sin dejar que la cifra vuelva a subir; las 286 restantes son las familias que
+    quedaron fuera a propósito (ver el comentario de `_PREGUNTA_SIN_SIGNOS`).
     """
     perdidas = [
         t for t in turnos
@@ -105,9 +105,9 @@ def test_quitar_los_signos_no_inventa_preguntas(turnos):
     turnos donde la coletilla ES el signo. "eso es normal después de una
     operación, ¿no?" se clasifica como respuesta porque `_MULETILLA` descarta el
     fragmento "¿no?"; al quitar los signos no queda fragmento que descartar y
-    `_PREGUNTA` engancha con el resto de la frase. Medido antes y después del
-    cambio: 10 y 10 — ni las cuatro familias originales ni la quinta (la duda
-    anunciada) añaden uno solo.
+    `_PREGUNTA` engancha con el resto de la frase. Medido antes y después de cada
+    cambio: 10 y 10 — ni las cuatro familias originales, ni la quinta (la duda
+    anunciada), ni la sexta (la duda indirecta con "si") añaden uno solo.
     """
     inventadas = [
         t for t in turnos
