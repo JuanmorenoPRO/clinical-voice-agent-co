@@ -261,6 +261,55 @@ def test_filtro_de_dominio_clasifica_la_pregunta(adapter):
     assert fuera is False
 
 
+# --- el contrato de la llamada de pertinencia, sin red --------------------------
+# Bug real (llamada del 11/08): Groq respondía 400 `json_validate_failed` a TODAS
+# las llamadas del filtro y este caía en su rama de degradación, que es fail-open.
+# El filtro anti-alucinación llevaba desactivado quién sabe cuánto y nadie podía
+# verlo: la sonda de arriba lo habría cazado —`fuera` pasaba a True— pero está
+# detrás de TEST_JUICIO_MODELO. La causa eran dos decisiones que solo valen para
+# Ollama: volcarle el ESQUEMA en el prompt (`json_object` no restringe por
+# gramática, así que el 8B lo copiaba tal cual, 59 tokens) y `max_tokens=16`.
+# Esto fija las dos, sin red y sin gastar cuota.
+
+
+def _kwargs_de_pertinencia():
+    """Los kwargs con que el adaptador llamaría a Groq para juzgar pertinencia."""
+    capturado = {}
+
+    ad = GroqAdapter.__new__(GroqAdapter)
+    ad._model, ad._timeout, ad._reply_timeout = "llama-3.1-8b-instant", 5.0, 5.0  # noqa: SLF001
+    ad._api_key, ad._clients = "sk-test", {}  # noqa: SLF001
+
+    async def fake_chat(**kwargs):
+        capturado.update(kwargs)
+        return '{\n  "c": "cuidado"\n}', 20, 11
+
+    ad._chat = fake_chat  # noqa: SLF001
+    decision = run(ad.pregunta_es_del_dominio(
+        question="camino bien, no se si sea posible que vuelva al gimnasio?",
+        evidence="Evite levantar mas de 30 libras durante dos semanas.",
+    ))
+    return capturado, decision
+
+
+def test_la_pertinencia_pide_una_instancia_y_no_el_esquema():
+    kwargs, decision = _kwargs_de_pertinencia()
+    user = kwargs["messages"][-1]["content"]
+    assert '{"c": "cuidado"}' in user, "hay que pedir la instancia, no el esquema"
+    assert '"type": "object"' not in user, (
+        "volcar el esquema hace que el modelo lo copie en vez de instanciarlo"
+    )
+    assert decision is True, "una respuesta válida no debería degradarse"
+
+
+def test_la_pertinencia_deja_espacio_para_el_json_indentado():
+    """Groq devuelve `{\\n  "c": "cuidado"\\n}` — 11 tokens. Con 16 no cabía."""
+    kwargs, _ = _kwargs_de_pertinencia()
+    assert kwargs["max_tokens"] >= 32, (
+        f"max_tokens={kwargs['max_tokens']}: el JSON se trunca y Groq responde 400"
+    )
+
+
 # --- validación de grounding y parseo, sin modelo -----------------------------
 
 

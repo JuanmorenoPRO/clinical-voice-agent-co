@@ -1359,10 +1359,47 @@ def test_el_permiso_de_medicacion_no_atrapa_respuestas(texto):
         "no se si es normal que me duela todavia",
         "esta como rojita, no se si es normal o que",
         "no se si sera muy pronto para el gimnasio",
+        # La perífrasis impersonal, turno literal de la llamada del 11/08: la
+        # cópula va en subjuntivo y el verbo de la actividad CONJUGADO ("que
+        # vuelva"), así que la rama de permiso —que exige infinitivo— no la ve.
+        "camino bien, no se si sea posible que vuelva al gimnasio",
+        "no se si sea posible volver al gimnasio",
+        "no se si sea prudente hacer fuerza",
     ],
 )
 def test_la_duda_indirecta_con_si_se_reconoce(texto):
     assert intent.classify(texto) == "pregunta_clinica"
+
+
+# --- la posibilidad impersonal, sin anunciar la duda -----------------------------
+# "¿sería posible que vuelva al gimnasio?" pide permiso sin usar ningún modal en
+# primera persona: ni la familia F (que engancha por "puedo/podría") ni el arranque
+# interrogativo de `_PREGUNTA` la ven. Es la familia I.
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "seria posible que vuelva al gimnasio",
+        "es posible que pueda tomar acetaminofen",
+        "la herida esta bien, sera posible que vuelva a manejar",
+        "hay algun problema si camino mucho",
+    ],
+)
+def test_la_posibilidad_impersonal_se_reconoce(texto):
+    assert intent.classify(texto) == "pregunta_clinica"
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Uso epistémico con negación: se queja, no consulta. Guarda `(?<!no\\s)`.
+        "no es posible que me duela tanto",
+        "no es posible que ya vaya a estar bien",
+    ],
+)
+def test_la_posibilidad_impersonal_no_atrapa_respuestas(texto):
+    assert intent.classify(texto) != "pregunta_clinica"
 
 
 @pytest.mark.parametrize(
