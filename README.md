@@ -11,6 +11,17 @@ nota del reto permite usar el sucesor vigente de ese mismo proveedor.
 
 ---
 
+## Los cuatro entregables
+
+| # | Entregable | Dónde |
+|---|---|---|
+| **01** | Repositorio | Este repositorio. Se levanta con el [§ Arranque](#arranque) de aquí abajo |
+| **02** | Diagrama de arquitectura y flujo de decisión | [`docs/arquitectura.md`](docs/arquitectura.md) |
+| **03** | Informe final | [`INFORME.md`](INFORME.md) |
+| **04** | Video: demo y preguntas de cierre | [`docs/video/`](docs/video/) |
+
+---
+
 ## Arranque
 
 **Requisitos:** Python 3.12+, [Ollama](https://ollama.com), y una clave gratuita de
@@ -286,12 +297,15 @@ prompts garantizan de forma determinista sí está cubierto sin modelo.
 ### Evaluación sobre los 160 casos del dataset
 
 ```bash
-.venv/bin/python scripts/run_dataset_eval.py --capa capa1 --out reports
+COMPOSE_PROVIDER=mock .venv/bin/python scripts/run_dataset_eval.py --capa capa2 --out reports
 ```
 
 Reproduce las conversaciones del dataset a través del agente completo y escribe
 [`reports/dataset-eval.md`](reports/dataset-eval.md). Sale con **código 2 si hay un
 falso negativo en rojo**, que es la falla que la rúbrica considera catastrófica.
+`COMPOSE_PROVIDER=mock` deja al redactor fuera: solo cambia *cómo* se dice la frase,
+no lo que se entiende ni lo que se decide, y sin él cada turno gasta una llamada a
+Groq que no afecta a lo que se está midiendo.
 
 Es distinto del test del motor de decisión, y la diferencia es el punto: aquel
 alimenta las reglas con el cuadro clínico ya estructurado y mide solo la
@@ -299,40 +313,41 @@ calibración de los umbrales (95%); este mete la conversación cruda y mide la c
 entera. **Cuando un caso falla, comparar los dos dice si la culpa fue del extractor
 o de las reglas**, y por eso el informe incluye la exactitud por slot.
 
-Resultado sobre la capa limpia, con los 160 casos:
+Resultado sobre la **capa ruidosa** —la difícil: transcripciones con muletillas,
+cortes y errores de STT—, con los 160 casos:
 
 ```
   real \ predicho   verde  amarillo   rojo
-  verde                79       34       10
-  amarillo              1       13       11
+  verde                64       31       28
+  amarillo              1       12       12
   rojo                  0        1       11
 
-  exactitud 103/160 (64.4%)   ·   1 falso negativo en rojo
+  exactitud 87/160 (54.4%)   ·   2 falsos negativos, 1 de ellos en rojo
 ```
 
-**Ese 64% frente al 95% de las reglas es el dato honesto de este proyecto**, y la
+**Ese 54% frente al 95% de las reglas es el dato honesto de este proyecto**, y la
 distancia entre ambos se reparte en dos cosas.
 
 La primera es la extracción: entender un cuadro clínico hablando con alguien que no
-tiene vocabulario médico se acierta entre el 66% y el 75% según el slot. La segunda
-—y es la mayoría de los errores— es **sobre-escalamiento deliberado**: 44 casos
-verdes se clasificaron como amarillo o rojo, casi todos por la política de
-incertidumbre. Cuando el paciente no suelta la información, el sistema escala en vez
-de asumir que está bien. Se ve con claridad por estilo de paciente: con el
-colaborativo acierta el 81% y con el minimizador el 92%, pero con el evasivo cae al
-17%, y casi todo ese hundimiento son verdes escalados de más.
+tiene vocabulario médico, y con el audio degradado, se acierta entre el 59% y el 72%
+según el slot. La segunda —y es la mayoría de los errores— es **sobre-escalamiento
+deliberado**: 59 de los 123 casos verdes se clasificaron como amarillo o rojo, casi
+todos por la política de incertidumbre. Cuando el paciente no suelta la información,
+el sistema escala en vez de asumir que está bien. Se ve con claridad por estilo de
+paciente: con el minimizador acierta el 81% y con el colaborativo el 69%, pero con
+el evasivo cae al 17%, y casi todo ese hundimiento son verdes escalados de más.
 
-Es la asimetría que pide la rúbrica llevada a sus últimas consecuencias: 44
-seguimientos innecesarios a cambio de un solo falso negativo. Si el criterio fuera
-la exactitud, habría que aflojar la política; como el criterio es no dejar pasar una
-emergencia, se queda.
+Es la asimetría que pide la rúbrica llevada a sus últimas consecuencias: 59
+seguimientos innecesarios a cambio de un solo falso negativo en rojo. Si el criterio
+fuera la exactitud, habría que aflojar la política; como el criterio es no dejar
+pasar una emergencia, se queda.
 
 El contraste entre las dos evaluaciones ya pagó tres correcciones que ningún test
 escrito a mano habría sugerido: la cobertura del léxico en pretérito perfecto
 (*"he comido bien"*, no solo *"como bien"*), la extracción de slots que el paciente
-menciona sin que se los pregunten, y la regla de fiebre referida sin termómetro.
-Entre las tres subieron la exactitud del 58% al 64% y bajaron los falsos negativos
-en rojo de 2 a 1.
+menciona sin que se los pregunten, y la regla de fiebre referida sin termómetro. La
+progresión está guardada corrida a corrida en [`reports/`](reports/): 42,5 % en el
+`baseline`, 47,5 % tras el léxico, 48,8 % tras las otras dos.
 
 ---
 
@@ -344,15 +359,24 @@ apps/backend/app/
   nlu/          léxico colombiano, clasificación de intención, fusión por severidad
   decision/     reglas puras + umbrales calibrados contra el ground truth
   rag/          ChromaDB, embeddings, ingesta en caliente, recuperación con citas
-  llm/          adaptador de Ollama y esquemas de extracción restringida
+  llm/          adaptadores de Groq y Ollama, esquemas de extracción restringida
   voice/        pipeline Pipecat (Groq STT → orquestador → Piper TTS)
 scripts/        construcción del índice, carga del dataset, métricas, spikes
-docs/           calibración del triaje, mediciones, decisiones de arquitectura
+docs/           arquitectura, calibración del triaje, mediciones, guion del video
+  img/          capturas que embebe el informe final
+  video/        ficha y enlace del entregable 04
+reports/        evaluaciones sobre los 160 casos, corrida a corrida
+prompts/        los prompts del redactor, versionados fuera del código
+INFORME.md      informe final (entregable 03)
 ```
 
-Los diagramas de la arquitectura y del flujo de decisión —el entregable 02, con
-cada caja anotada con el archivo que la implementa— están en
-[`docs/arquitectura.md`](docs/arquitectura.md).
+**[`docs/arquitectura.md`](docs/arquitectura.md)** — el entregable 02: seis diagramas
+con cada caja anotada con el archivo que la implementa, desde la vista de conjunto
+hasta la cadena de abstención del RAG.
+
+**[`INFORME.md`](INFORME.md)** — el entregable 03: el modelo elegido y su porqué, la
+decisión técnica que explica el sistema, cómo se evaluaron y ajustaron los prompts, y
+los resultados medidos con sus límites.
 
 ## Licencia
 

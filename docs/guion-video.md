@@ -4,8 +4,9 @@ Documento de trabajo: el plan de grabación del demo, con lo que se enseña en p
 lo que se dice encima. Se deja en el repositorio como rastro del proceso.
 
 **Formato:** grabación de pantalla (demo) + las dos preguntas de cierre frente a cámara.
-**Duración objetivo:** ~9 min (6:30 de demo + 2:30 de cámara). Al final hay una versión
-comprimida de 5 min por si necesitas recortar.
+**Duración objetivo:** ~10 min (6:30 de demo + 3:20 de cámara: 1:45 la Pregunta 1 y 1:35 la
+Pregunta 2, cronometradas sobre el texto de abajo a 140 palabras por minuto). Al final hay
+una versión comprimida de 5 min por si necesitas recortar.
 
 **La regla que ordena todo el video:** el jurado califica *lo observable*. Cada afirmación
 que hagas debe verse en pantalla en los siguientes cinco segundos. Si no se puede mostrar,
@@ -197,13 +198,42 @@ cifra buena. Es exactamente la asimetría que la rúbrica declara como principio
 
 ---
 
-## Pregunta 1 — a cámara (6:30 – 8:00)
+## Pregunta 1 — a cámara (6:30 – 8:15)
 
 *«Si debes convencer a un cliente de que adopte el agente, ¿cómo presentarías el problema,
 por qué tu solución es la adecuada y qué valor diferencial ofrece frente a otras
 alternativas?»*
 
 **Estructura: problema → solución → las tres alternativas reales → el diferencial.**
+
+### Versión para el video (~1:45) — esta es la que se graba
+
+> «El problema no es que falte tecnología, es que falta tiempo de enfermería. Alguien debería
+> llamar al paciente al día siguiente de una cirugía; es donde se detecta a tiempo una
+> infección de herida, y es lo primero que se cae cuando el servicio está saturado. La
+> consecuencia no es un paciente insatisfecho: es un reingreso.
+>
+> El cliente tiene tres alternativas. No llamar, que es lo que pasa hoy. Una encuesta por
+> WhatsApp, que la contesta quien está bien y la ignora quien está mal — justo al revés de lo
+> que necesita. O un agente construido enteramente sobre un modelo frontera.
+>
+> Frente a las dos primeras, esto llama y conversa: oye "botando materia" y lo entiende como
+> secreción purulenta.
+>
+> Frente a la tercera concedo algo: **un agente 100 % LLM conversaría mejor que el mío.** Lo
+> que no tendría es lo que un hospital necesita comprar, y lo resumo así: **el modelo
+> interpreta, pero el código decide.** Puedo demostrar que una emergencia nunca se suprime
+> —tengo un test que apaga el modelo y la bandera roja sigue escalando—, puedo decir *por qué*
+> se alertó, con la regla y el documento citado, y puedo cambiar de modelo sin cambiar de
+> criterio clínico, porque los umbrales están en un archivo, no en un prompt.
+>
+> Cuesta 26 diezmilésimas de dólar por llamada, y el 57 % de los turnos ni siquiera llaman al
+> modelo. Lo caro de esto nunca fue la tecnología: es la hora de enfermería que libera.»
+
+### Versión larga — para la sustentación en vivo del 5 de septiembre
+
+Ahí el panel dicta qué probar y hay tiempo para desarrollar. Esta versión añade el argumento
+de la reproducibilidad y la traducción a lenguaje de cliente.
 
 > «El problema no es que falte tecnología, es que falta tiempo de enfermería. El seguimiento
 > postoperatorio es donde se detecta una infección de herida a tiempo, y es lo primero que se
@@ -212,28 +242,60 @@ alternativas?»*
 >
 > Un cliente hospitalario tiene tres alternativas. La primera es no llamar, que es lo que
 > pasa hoy. La segunda es una encuesta por SMS o WhatsApp, que la contesta quien está bien y
-> la ignora quien está mal, que es justo al revés de lo que necesitas. La tercera es un
-> chatbot genérico con un buen prompt.
+> la ignora quien está mal, que es justo al revés de lo que necesitas. La tercera —y es la
+> comparación seria— es **un agente construido enteramente sobre un modelo frontera**.
 >
 > Frente a las dos primeras, esto llama y conversa: escucha "botando materia" y lo entiende
-> como secreción purulenta. Frente a la tercera —que es la comparación seria— el diferencial
-> es uno solo y lo diría así: **el modelo interpreta, pero el código decide.** En un chatbot
-> con prompt, si el modelo se cae, se actualiza, o alguien le dice "olvida tus
-> instrucciones", la decisión clínica cambia. Aquí no puede: el tamizaje es una máquina de
-> estados y el escalamiento son reglas puras calibradas contra 160 trayectorias reales.
-> Tengo un test que apaga el modelo y comprueba que la bandera roja sigue escalando.
+> como secreción purulenta.
 >
-> Para un director médico eso se traduce en algo muy concreto: **puede auditar por qué se
-> alertó**. No "el modelo lo consideró grave", sino "la regla `herida_purulenta` se disparó,
-> aquí está el turno, aquí el documento citado con su página". Y cuando no sabe, dice que no
-> sabe y lo pasa a enfermería, en vez de inventarse una dosis.
+> Frente a la tercera empiezo concediendo: **un agente 100 % LLM conversaría mejor que el
+> mío.** Más natural, más flexible, sin las costuras de una máquina de estados. Lo que no
+> tendría es lo que un hospital necesita comprar. Y lo diría así: **el modelo interpreta,
+> pero el código decide.**
 >
-> El costo son 26 diezmilésimas de dólar por llamada. Lo caro de esto nunca fue la
-> tecnología: es la hora de enfermería que libera.»
+> Un agente que acierte el 95 % falla el otro 5 % de forma impredecible: el mismo paciente,
+> la misma frase, otro día, otra decisión. Yo puedo demostrar tres cosas que ese agente no
+> puede. Una: que una emergencia nunca se suprime — tengo un test que apaga el modelo y
+> comprueba que la bandera roja sigue escalando. Dos: **por qué se alertó**; no "el modelo lo
+> consideró grave", sino "la regla `herida_purulenta` se disparó, aquí está el turno, aquí el
+> documento citado con su página". Y tres: que la conducta no cambia sola. Groq apaga mi
+> modelo el 16 de agosto; yo cambio el modelo y el triaje es idéntico, porque los umbrales
+> están en un archivo. Cuando la decisión vive en el prompt, **cambiar de modelo es cambiar
+> de criterio clínico sin recalibrar nada**, y nadie se entera hasta que se entera mal.
+>
+> Para el cliente eso se traduce en tres frases muy concretas: cuando esto alerte de más o de
+> menos, usted puede saber por qué y yo lo corrijo esa misma tarde; si se cae el proveedor de
+> IA, el sistema sigue detectando la fiebre y la secreción en vez de quedarse mudo o decir que
+> todo va bien; y los umbrales son suyos, los revisa su comité sin tocar código ni reentrenar
+> nada.
+>
+> El costo son 26 diezmilésimas de dólar por llamada, y **el 57 % de los turnos ni siquiera
+> llaman al modelo**: la factura no se dispara al pasar de 200 llamadas al mes a 20.000. Lo
+> caro de esto nunca fue la tecnología: es la hora de enfermería que libera.»
+
+### Si te repreguntan — y te van a repreguntar
+
+**«Tu extracción acierta entre 59 % y 72 %. El cuello de botella es tu LLM: ponle uno mejor
+y ya.»** Concede el diagnóstico, es correcto:
+
+> «De acuerdo, y me interesa mucho: es mi cuello de botella y lo tengo medido slot por slot,
+> por eso es lo primero que atacaría. Lo que un modelo mejor no me da es la garantía de que la
+> bandera roja escale cuando ese modelo esté caído, lento o manipulado. Esa garantía no se
+> compra con parámetros, se compra con arquitectura.»
+
+**«¿Entonces tu arquitectura es siempre mejor?»** No, y decirlo suma:
+
+> «No. Si esto fuera un agente de reservas de vuelo, un 100 % LLM es claramente mejor y lo
+> habría hecho así. Cambié flexibilidad conversacional por decisiones que puedo demostrar. En
+> seguimiento postoperatorio, donde la falla catastrófica es no alertar cuando había que
+> alertar, la flexibilidad no es lo que compra el cliente.»
+
+**Lo que no hay que hacer:** defender el híbrido como superior en todo. La respuesta fuerte
+es la que nombra el intercambio y explica por qué en *este* dominio sale a favor.
 
 ---
 
-## Pregunta 2 — a cámara (8:00 – 9:30)
+## Pregunta 2 — a cámara (8:15 – 9:50)
 
 *«La decisión técnica más relevante: alternativas, por qué las descartaste, riesgos, y qué
 harías con dos semanas más.»*
