@@ -81,6 +81,29 @@ def test_la_pregunta_sin_signo_en_mitad_del_turno_se_escucha(session):
     assert "diarrea" in r.symptoms.other
 
 
+def test_la_duda_indirecta_con_si_se_escucha(session):
+    """Turno reportado: "Sí, ya me he podido levantarme y caminar, incluso no sé
+    si ya pueda volver al gimnasio."
+
+    La pregunta va detrás de una coma, sin signos y en subjuntivo, así que no la
+    veía ninguna rama: es la familia H de `_PREGUNTA_SIN_SIGNOS`. El agente
+    reflejaba la movilidad y seguía con el guion. Sin corpus RAG en este test la
+    respuesta es la abstención segura, que —como en los casos de arriba— es
+    haber OÍDO la pregunta.
+    """
+    r = process_turn(
+        session,
+        text="Sí, ya me he podido levantarme y caminar, incluso no sé si ya "
+             "pueda volver al gimnasio.",
+    )
+
+    turno = session.query(Turn).filter(Turn.conversation_id == r.conversation_id
+                                       ).order_by(Turn.created_at).all()[-1]
+    assert turno.intent == "pregunta_clinica"
+    assert "no tengo informaci" in r.response.lower(), r.response
+    assert r.call_ended is False
+
+
 def test_la_abstencion_no_encadena_una_segunda_transicion(session):
     """Bug real: "Sobre eso no tengo información...  Voy a continuar entonces
     con las preguntas de su seguimiento. Un 4, ahí en la mitad. ¿Ha tenido

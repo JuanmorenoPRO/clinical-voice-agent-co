@@ -220,7 +220,7 @@ def _cola_interrogativa(t: str) -> bool:
 # y ahí el RAG no se consulta nunca (ver el guard de `orchestrator.py`). Como
 # Whisper no devuelve signos, ése es el caso normal en voz, no el raro.
 #
-# Cinco familias, elegidas midiendo una a una cuántas preguntas recuperan y
+# Siete familias, elegidas midiendo una a una cuántas preguntas recuperan y
 # cuántas respuestas rompen. Las otras tres que aparecen en el corpus —"eso ya es
 # fiebre", "¿ya acabamos?", "¿fue el lunes o el martes?"— hoy rompen tantas
 # respuestas como preguntas recuperan y se quedan fuera a propósito: necesitan un
@@ -231,6 +231,14 @@ _WH = r"(?:qu[eé]|cu[aá]l(?:es)?|c[oó]mo|cu[aá]nt[oa]s?|d[oó]nde)"
 # respuesta —el paciente no tiene el dato— y sin el modal no casa ninguna.
 _MODAL_PERMISO = (r"(?:puedo|podr[ií]a|podr[ée]|debo|deber[ií]a|tengo\s+que"
                   r"|me\s+toca|hay\s+que|se\s+puede)")
+# El mismo modal más el SUBJUNTIVO, que detrás de "no sé si" es la forma normal del
+# español: "no sé si ya PUEDA volver al gimnasio", no "puedo". Vive aparte y NO se
+# fusiona con `_MODAL_PERMISO`, y esto está medido: al añadirle el subjuntivo a
+# aquél, la familia D —que no lleva guarda de negación— empieza a marcar como
+# consulta "nada que no pueda soportar", que es una respuesta de dolor del corpus.
+# Solo lo usa la familia H, cuyo arranque ("no sé si") ya excluye ese caso.
+_MODAL_SUBJUNTIVO = (r"(?:pued[oa]|pudiera|podr[ií]a|podr[ée]|deb[oa]|deber[ií]a"
+                     r"|tengo\s+que|me\s+toca|hay\s+que|se\s+puede)")
 
 _PREGUNTA_SIN_SIGNOS = re.compile(
     # A. le pide al agente una opinión o un dato que él tendría: "usted cree que
@@ -287,7 +295,44 @@ _PREGUNTA_SIN_SIGNOS = re.compile(
     r"|(?<!no\s)(?<!no\sme\s)\b(?:me\s+)?(?:puedo|podria|podre|deberia|debo)\s+"
     r"(?:ya\s+)?(?:tomar(?:me)?|aplicar(?:me|le)?|usar|poner(?:me|le)?"
     r"|mojar(?:la|me)?|destapar(?:la|me)?|quitar(?:me)?|despegar(?:la|me)?"
-    r"|echar(?:me|le)?)\b",
+    r"|echar(?:me|le)?)\b"
+    # H. la interrogativa indirecta introducida por "si". "Sí, ya me he podido
+    #    levantarme y caminar, incluso no sé si ya pueda volver al gimnasio"
+    #    (llamada real) no lo veía NINGUNA rama, y por tres motivos a la vez: la
+    #    pregunta va en mitad del turno (las ramas ancladas de `_PREGUNTA` y
+    #    `_cola_interrogativa` miran el inicio del turno y el de la última frase),
+    #    la familia D exige una palabra _WH y "si" no lo es, y la F exige un verbo
+    #    de su lista corta mientras que aquí es "volver".
+    #    El "ya" del arranque es opcional pero está DENTRO del grupo a propósito:
+    #    hace que el match empiece en él y no en "no", de modo que el prefijo que
+    #    inspecciona `_ANTES_AFIRMATIVO` no acabe en "ya " —su rama factiva— y "ya
+    #    no sé si pueda hacer ejercicio" no se descarte como afirmación.
+    #    Dos ramas, porque el paciente pide dos cosas distintas: permiso (modal +
+    #    infinitivo) y valoración (cópula + adjetivo). La segunda recupera "está
+    #    como rojita, no sé si es normal o qué", que es pedir que le miren la
+    #    herida; sin ella caía en `respuesta` y nunca llegaba al RAG.
+    #    La cópula lleva subjuntivo por lo mismo que el modal: "no sé si" lo rige
+    #    ("no sé si SEA posible"), y sin él "camino bien, no se si sea posible que
+    #    vuelva al gimnasio" —llamada real— no la veía nadie. Ojo a la forma: ahí
+    #    el verbo de la actividad va CONJUGADO ("que vuelva"), no en infinitivo,
+    #    así que la rama de permiso tampoco podía cogerla; es la cópula + el
+    #    adjetivo lo que delata la pregunta, y por eso no se exige nada detrás.
+    rf"|(?:(?:ya\s+)?\bno\s+s[eé]|\bno\s+estoy\s+segur[oa]\s+(?:de\s+)?)\s+si\b"
+    rf"(?:(?:\s+\w+){{0,2}}?\s+{_MODAL_SUBJUNTIVO}\b"
+    rf"\s+(?:\w+\s+){{0,2}}\w+(?:ar|er|ir)(?:me|se|lo|la|le)?\b"
+    rf"|(?:\s+\w+){{0,3}}?\s+(?:es|sea|esta|este|sera|estara|seria|fuera|estuviera)"
+    rf"\s+(?:muy\s+|tan\s+|demasiado\s+)?"
+    rf"(?:normal|bien|grave|malo|peligroso|pronto|temprano"
+    rf"|posible|seguro|recomendable|prudente|conveniente|aconsejable|riesgoso)\b)"
+    # I. la misma posibilidad, pero SIN anunciar la duda: "sería posible que
+    #    vuelva al gimnasio", "es posible que pueda tomar acetaminofén" (turno 11
+    #    de la llamada del 10/08). Es la perífrasis impersonal con la que se pide
+    #    permiso sin usar ningún modal en primera persona, así que ni la familia F
+    #    ni la rama de arranque de `_PREGUNTA` la ven. La guarda de negación es lo
+    #    que deja fuera el uso epistémico: "no es posible que me duela tanto" se
+    #    queja, no consulta.
+    r"|(?<!no\s)\b(?:es|sera|seria|sea)\s+posible\s+(?:que|volver|tomar|hacer|ir)\b"
+    r"|\bhay\s+(?:algun\s+)?problema\s+(?:si|con|en)\b",
     re.I,
 )
 

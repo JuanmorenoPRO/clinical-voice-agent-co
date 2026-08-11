@@ -67,13 +67,23 @@ from .ollama_adapter import (
 
 log = logging.getLogger(__name__)
 
-# Mismo esquema de pertinencia que la guarda del RAG (ollama_adapter): "c" y no
-# "r" por el motivo medido ahí — la clave entra en el contexto y arrastra al modelo.
-_SCHEMA_PERTINENCIA = {
-    "type": "object",
-    "required": ["c"],
-    "properties": {"c": {"type": "string", "enum": ["cuidado", "otro"]}},
-}
+# La clave es "c" y no "r" por el motivo medido en `ollama_adapter`: entra en el
+# contexto y arrastra al modelo. La instrucción de salida, en cambio, no puede ser
+# la misma, porque aquí Groq NO es Ollama: allí `format=<esquema>`
+# restringe la generación por gramática y basta con enseñarle el esquema. Aquí
+# `response_format={"type":"json_object"}` solo obliga a que sea JSON válido —
+# cualquiera—, así que volcarle el esquema en el prompt hacía que `llama-3.1-8b`
+# devolviera EL ESQUEMA en vez de una instancia: `{"type":"object","required":
+# ["c"],...}`, 59 tokens de salida. Con `max_tokens=16` eso ni siquiera cerraba,
+# y Groq respondía 400 (`json_validate_failed`) a CADA llamada: el filtro entero
+# caía en su rama de degradación y dejaba pasar toda la evidencia recuperada —
+# medido en la llamada del 11/08, donde el `log.warning` salió en los dos turnos.
+# Pedir la instancia literal baja la salida a 10-11 tokens y acierta: 5/5 en la
+# prueba directa contra Groq, incluidas las tres ajenas al corpus.
+_USER_PERTINENCIA = (
+    "Pregunta: <<<{q}>>>\n"
+    'Responde SOLO con este JSON, sin nada mas: {{"c": "cuidado"}} o {{"c": "otro"}}'
+)
 
 
 def _extraer_json(texto: str) -> dict:
@@ -383,18 +393,12 @@ class GroqAdapter:
             result = await self._chat(
                 messages=[
                     {"role": "system", "content": _SYSTEM_PERTINENCIA},
-                    {
-                        "role": "user",
-                        "content": (
-                            f"Pregunta: <<<{question}>>>\n"
-                            "Devuelve únicamente el JSON de este esquema "
-                            "(ningún otro texto):\n"
-                            + json.dumps(_SCHEMA_PERTINENCIA, ensure_ascii=False)
-                        ),
-                    },
+                    {"role": "user", "content": _USER_PERTINENCIA.format(q=question)},
                 ],
                 temperature=0,
-                max_tokens=16,
+                # 32 y no 16: Groq devuelve el JSON indentado ({\n  "c": ...\n}),
+                # 11 tokens, y el límite anterior no daba ni para eso.
+                max_tokens=32,
                 response_format={"type": "json_object"},
                 timeout=self._timeout * 2,
             )
