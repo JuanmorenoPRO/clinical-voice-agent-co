@@ -547,6 +547,13 @@ _CAMPO_DE_SLOT = {"dolor": "pain_level", "movilidad": "mobility",
         # "¿Ha comido hoy algo completo, o solo porciones pequeñas?"
         ("apetito", "porciones pequeñas", "levemente_disminuido"),
         ("apetito", "poquito", "levemente_disminuido"),
+        # Contestar con la cantidad, con el tipo de comida o con un atenuador,
+        # sin usar nunca la palabra "menos".
+        ("apetito", "he comido porciones pequeñas", "levemente_disminuido"),
+        ("apetito", "porciones chiquitas", "levemente_disminuido"),
+        ("apetito", "he comido suave", "levemente_disminuido"),
+        ("apetito", "comiendo suave", "levemente_disminuido"),
+        ("apetito", "más bien poco", "levemente_disminuido"),
         ("apetito", "algo completo", "normal"),
         # "¿Cuántas veces se despierta...?" / "¿Durmió bien anoche o mal?"
         ("sueno", "bien", "normal"),
@@ -1201,6 +1208,171 @@ def test_la_pregunta_sin_signos_en_mitad_del_turno_se_reconoce(texto):
 )
 def test_la_pregunta_sin_signos_no_atrapa_respuestas(texto):
     assert intent.classify(texto) != "pregunta_clinica"
+
+
+# --- la duda anunciada: el paciente avisa que va a preguntar ----------------------
+# Bug real: "5 me preguntaba si puedo tomar acetaminofén" en el slot de dolor. El 5
+# se anotó y la pregunta se perdió — el agente siguió con la fiebre. No lo veía
+# ninguna rama: el "5" rompe el ancla al inicio del turno de `_PREGUNTA`, "tomar"
+# está fuera de `_ACTIVIDAD_POSTOP` a propósito, y en `_PREGUNTA_SIN_SIGNOS` la
+# familia A no listaba `preguntar` y la D exige una palabra _WH ("si" no lo es).
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # El turno reportado, literal, y su variante con el dolor verbalizado.
+        "5 me preguntaba si puedo tomar acetaminofen",
+        "un 5, me preguntaba si puedo tomar acetaminofén",
+        # "me preguntaba QUE si": el orden colombiano.
+        "me preguntaba que si puedo mojar la herida",
+        "he dormido bien, pero me preguntaba si eso es normal",
+        # La duda declarada.
+        "tengo la duda si puedo bañarme",
+        "un 4, tengo una duda con la herida",
+        # La volición: querer/necesitar saber, preguntar o consultar.
+        "queria preguntarle si puedo tomar acetaminofen",
+        "quisiera saber si puedo manejar",
+        "le queria consultar una cosa de la herida",
+        "necesito saber si esto es normal",
+        # El anuncio pelado, antes de la pregunta.
+        "doctora, una pregunta, cada cuanto me cambio el aposito",
+        # Segunda persona: el turno 11 de la llamada del 10/08, literal. Va
+        # suelto, sin subordinante, porque en "le preguntaba" no hay eco posible.
+        "Le preguntaba si de pronto es posible que pueda tomar acetaminogen "
+        "para el dolor.",
+        "le preguntaba por lo del acetaminofen",
+    ],
+)
+def test_la_duda_anunciada_se_reconoce(texto):
+    assert intent.classify(texto) == "pregunta_clinica"
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Negación de la duda: conformidad, no consulta. Es la guarda `(?<!no\\s)`.
+        "no tengo dudas",
+        "no, ninguna duda",
+        "listo, ya no tengo dudas",
+        # El paciente devuelve el turno, no pregunta. Guarda `(?<!usted\\s)`.
+        "usted quería preguntarme algo más de la herida",
+        # "saber QUE" es completivo: reporta, no pregunta.
+        "un 4, quiero saber que ya no me duele",
+        # "no sé si" sin modal de permiso sigue siendo un reporte con dudas.
+        "no se si eso cuente como fiebre",
+        # Discurso referido: el "si" viene de otro, no del paciente.
+        "el doctor me dijo que si puedo caminar",
+    ],
+)
+def test_la_duda_anunciada_no_atrapa_respuestas(texto):
+    assert intent.classify(texto) != "pregunta_clinica"
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Turnos textuales del corpus: el paciente pide que le repitan la
+        # pregunta. Se contesta repitiéndola, no consultando el RAG — y hasta
+        # ahora el "¿?" los mandaba a `pregunta_clinica`.
+        "¿qué me preguntaba?",
+        "que me preguntaba",
+        "¿Me preguntaba por la herida o qué era?",
+        "Perdón, se me fue la cabeza un momento, ¿qué me preguntaba?",
+    ],
+)
+def test_el_eco_de_la_pregunta_es_meta(texto):
+    assert intent.classify(texto) == "meta"
+
+
+# --- pedir permiso para tomarse algo -------------------------------------------
+# Bug real (llamada del 10/08, 7:12 p. m.): la misma consulta tres veces seguidas
+# —"Podría tomar acetaminofén", "Le preguntaba si de pronto es posible...", "Puedo
+# tomar acetaminofén"— y solo la tercera se contestó, porque empezaba por "Puedo",
+# que sí está en la lista de arranques interrogativos. El paciente tuvo que dar con
+# la forma que el regex reconocía.
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # El turno 10, literal, con el error de transcripción incluido.
+        "Podría tomar acetaminopeno.",
+        "un 4, podria tomar algo para el dolor",
+        "el dolor sigue igual, podria tomar acetaminofen",
+        # No solo medicación: también el cuidado de la herida.
+        "deberia mojar la herida en la ducha",
+        "me puedo quitar el aposito hoy",
+    ],
+)
+def test_el_permiso_de_medicacion_se_reconoce(texto):
+    assert intent.classify(texto) == "pregunta_clinica"
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # El condicional epistémico, que es la razón de exigir la ACCIÓN concreta
+        # detrás del modal en vez de meter "podría" en la lista de arranques.
+        "podria ser el clima",
+        "podria decirse que estoy mejor",
+        "no podria decirle exactamente",
+        # Negación: reporte, no consulta.
+        "no puedo tomar nada solido",
+        "no me puedo tomar nada",
+        # Discurso referido y factivo: el permiso ya se lo dieron.
+        "me dijeron que puedo tomar acetaminofen",
+        "el doctor me dijo que puedo tomar acetaminofen",
+        "me recomendaron que puedo tomar suero",
+        "ya me puedo tomar las pastillas normales",
+        # "tomarse la temperatura" en pasado no pide permiso de nada.
+        "me tome la temperatura y marco 37",
+    ],
+)
+def test_el_permiso_de_medicacion_no_atrapa_respuestas(texto):
+    assert intent.classify(texto) != "pregunta_clinica"
+
+
+# --- "¿quiere preguntarme algo?": leer la respuesta como el tema que propone ----
+# `propone_un_tema` no clasifica por sí solo: el orquestador solo lo consulta tras
+# la invitación abierta del guion (ver test_orchestrator_close.py). Aquí se fija
+# la frontera entre "sí tengo esto" y el cierre puro.
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Elipsis pura: ningún patrón léxico puede verlo, solo el contexto.
+        "Lo del acetaminofén",
+        "el acetaminofen",
+        "era eso del control",
+        "Podría tomar acetaminofén",
+    ],
+)
+def test_propone_un_tema(texto):
+    assert intent.propone_un_tema(texto) is True
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        # Un "sí" pelado dice que sí tiene algo, pero no dice qué: consultar el
+        # RAG con la palabra "sí" no ayuda a nadie.
+        "sí",
+        "Sí.",
+        "si claro",
+        # Negación de más temas y despedida: la llamada cierra, no se abre nada.
+        "no",
+        "No, nada, así está bien.",
+        "Listo, gracias.",
+        "muchas gracias, hasta luego",
+        "no tengo mas dudas",
+        # Todavía está pensando.
+        "ehh...",
+    ],
+)
+def test_propone_un_tema_no_falsos_positivos(texto):
+    assert intent.propone_un_tema(texto) is False
 
 
 # --- reclamo: "no me respondiste la pregunta" ------------------------------------

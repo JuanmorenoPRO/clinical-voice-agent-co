@@ -432,7 +432,7 @@ class OllamaAdapter:
         # timeout habiendo encontrado la respuesta.
         self._reply_timeout = s.llm_reply_timeout_s
         self._host = s.ollama_host
-        self._clients: dict[int, AsyncClient] = {}
+        self._clients: dict[int, tuple[AsyncClient, object]] = {}
 
     @property
     def _client(self) -> AsyncClient:
@@ -443,14 +443,21 @@ class OllamaAdapter:
         closed". En producción hay un solo loop y esto es un dict de un elemento,
         pero los tests abren uno por caso y sin esto fallarían todos menos el
         primero.
+
+        Se compara la **identidad del loop**, no su `id()`: CPython recicla las
+        direcciones al recolectar un loop cerrado, así que la clave numérica sola
+        devolvía clientes muertos que colgaban hasta el timeout. Mismo fallo y
+        misma corrección que en `groq_adapter.py`, donde está el detalle.
         """
         try:
-            key = id(asyncio.get_running_loop())
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            key = 0
-        if key not in self._clients:
-            self._clients[key] = AsyncClient(host=self._host)
-        return self._clients[key]
+            loop = None
+        key = id(loop)
+        cacheado = self._clients.get(key)
+        if cacheado is None or cacheado[1] is not loop:
+            self._clients[key] = (AsyncClient(host=self._host), loop)
+        return self._clients[key][0]
 
     # --- extracción ----------------------------------------------------------
 

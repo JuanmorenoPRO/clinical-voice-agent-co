@@ -396,6 +396,33 @@ async def process_turn_async(
     repetido = hash_turno == estado.ultimo_hash
     progreso = _aporto_dato(del_turno, nuevos_otros, proc_nuevo)
 
+    # El agente acaba de invitar a preguntar ("¿Hay algo más que quiera contarme
+    # o preguntarme?"). Con esa invitación en el aire, lo que diga el paciente ES
+    # la pregunta aunque no tenga forma de tal. Medido en la llamada del 10/08:
+    # la misma consulta reformulada tres veces —"Podría tomar acetaminofén", "Le
+    # preguntaba si de pronto es posible...", "Puedo tomar acetaminofén"— y solo
+    # la tercera, que por casualidad empezaba por "Puedo", casó con el
+    # clasificador. Las dos primeras recibieron otra pregunta de cierre.
+    #
+    # `ultima_pregunta is None` es la condición precisa, no la fase a secas: vale
+    # None exactamente cuando la última acción no preguntó por ningún slot (ver
+    # `phrasing.pregunta_emitida`), que es lo que distingue la invitación abierta
+    # de un seguimiento —donde un "sí" pelado sí habla de un síntoma—.
+    # `not progreso` separa "contarme" de "preguntarme": si el turno dejó un dato
+    # anotado, el paciente está reportando y esa vía ya funciona (fusión, triaje,
+    # alerta); si no dejó nada, lo que trae es una duda.
+    tema_por_invitacion = (
+        extraccion.intent == "respuesta"
+        and estado.phase in (Phase.ABIERTO, Phase.CONFIRMACION, Phase.ESCALAMIENTO)
+        and estado.ultima_pregunta is None
+        and not estado.espera_respuesta_salida
+        and not silencio
+        and not progreso
+        and intent_nlu.propone_un_tema(text)
+    )
+    if tema_por_invitacion:
+        extraccion.intent = "pregunta_clinica"
+
     # `emergencia` distingue las 6 banderas del 123 de la vía de enfermería: ante
     # una emergencia real, retener al paciente en la línea compite con la llamada
     # que de verdad importa, así que ahí sí se cuelga rápido.
@@ -643,7 +670,14 @@ async def process_turn_async(
         # Una pregunta clínica real que se contestó no gasta el presupuesto de
         # MAX_TURNOS_CONFIRMACION (ver el comentario en script.py): el tope
         # frena el relleno indefinido, no a alguien preguntando algo de verdad.
-        pregunta_respondida=extraccion.intent == "pregunta_clinica",
+        #
+        # La inferida de la invitación NO hereda la exención, y es lo que impide
+        # que la fase de confirmación se vuelva infinita: ahí casi cualquier cosa
+        # con contenido pasa por pregunta, así que si además comprara turnos,
+        # el tope dejaría de contar y solo quedaría `SIN_PROGRESO_CERRAR` (5)
+        # como freno. Se le contesta, pero no alarga la llamada.
+        pregunta_respondida=(extraccion.intent == "pregunta_clinica"
+                             and not tema_por_invitacion),
     )
 
     # UNKNOWN explícito: el slot que quedó sin respuesta se anota en el turno en

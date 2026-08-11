@@ -75,10 +75,20 @@ _MULETILLA = re.compile(
 
 # Meta-conversación sobre la llamada. Tiene respuesta determinista (repetir la
 # pregunta, decir cuánto falta): no toca el RAG ni el LLM.
+#
+# Los tres últimos alternantes son el ECO de la pregunta del agente: "¿qué me
+# preguntaba?", "¿me preguntaba por la herida o qué era?". Es el uso MÁS común
+# del verbo en el corpus (7 turnos) y hasta ahora caía en `pregunta_clinica` por
+# el `[¿?]` de `_PREGUNTA` — o sea, disparaba el RAG para algo que se contesta
+# repitiendo la pregunta. Se distingue de la duda anunciada (familia E de
+# `_PREGUNTA_SIN_SIGNOS`) por la posición del "que": aquí va DELANTE del verbo,
+# allí detrás ("me preguntaba que si puedo tomar...").
 _META = re.compile(
     r"me\s+repite|no\s+(le\s+)?(entendi|escuche|oi)|(puede|podria)\s+repetir"
     r"|ya\s+(casi\s+)?terminamos|cuanto\s+(falta|mas)|cuantas\s+preguntas"
-    r"|como\s+asi|que\s+dijo|mas\s+despacio|no\s+se\s+le\s+escucha",
+    r"|como\s+asi|que\s+dijo|mas\s+despacio|no\s+se\s+le\s+escucha"
+    r"|\bque\s+(?:me\s+)?preguntaba\b|\bme\s+preguntaba\s+(?:por|de|lo)\b"
+    r"|\bque\s+(?:me\s+)?(?:pregunto|pregunta)\s+(?:de|por)\b",
     re.I,
 )
 
@@ -210,7 +220,7 @@ def _cola_interrogativa(t: str) -> bool:
 # y ahí el RAG no se consulta nunca (ver el guard de `orchestrator.py`). Como
 # Whisper no devuelve signos, ése es el caso normal en voz, no el raro.
 #
-# Cuatro familias, elegidas midiendo una a una cuántas preguntas recuperan y
+# Cinco familias, elegidas midiendo una a una cuántas preguntas recuperan y
 # cuántas respuestas rompen. Las otras tres que aparecen en el corpus —"eso ya es
 # fiebre", "¿ya acabamos?", "¿fue el lunes o el martes?"— hoy rompen tantas
 # respuestas como preguntas recuperan y se quedan fuera a propósito: necesitan un
@@ -237,7 +247,47 @@ _PREGUNTA_SIN_SIGNOS = re.compile(
     #    donde ninguna de las dos ramas ancladas podía verlo. El lookbehind deja
     #    fuera el relativo libre: "lo que puedo comer me cae mal" no pregunta nada.
     rf"|(?<!lo\s)\b{_WH}\b(?:\s+\w+){{0,3}}?\s+{_MODAL_PERMISO}\b"
-    rf"\s+(?:\w+\s+){{0,2}}\w+(?:ar|er|ir)(?:me|se|lo|la|le)?\b",
+    rf"\s+(?:\w+\s+){{0,2}}\w+(?:ar|er|ir)(?:me|se|lo|la|le)?\b"
+    # E. el marco metadiscursivo: el paciente ANUNCIA la pregunta antes de
+    #    hacerla. "5 me preguntaba si puedo tomar acetaminofén" (llamada real) no
+    #    lo veía ninguna rama: el "5" rompe el ancla al inicio del turno, "si" no
+    #    es palabra _WH y `preguntar` no estaba en la familia A. Cada alternante
+    #    lleva su guarda, todas medidas contra el corpus:
+    #    · el subordinante interrogativo detrás de "me preguntaba" ("que si..."
+    #      es el orden colombiano) deja el eco de la pregunta del agente —"¿qué
+    #      me preguntaba?"— en `_META`, que es su sitio;
+    #    · `(?<!no\s)` en la duda: "ya no tengo dudas" es conformidad, no
+    #      consulta ("no tengo MÁS dudas" ya lo gana `_DESPEDIDA`, antes);
+    #    · `(?<!usted\s)` en la volición: "¿usted quería preguntarme algo más de
+    #      la herida?" es el paciente devolviendo el turno. Y exigir el
+    #      subordinante deja fuera el completivo: "quiero saber QUE ya no me
+    #      duele" es un reporte.
+    r"|\bme\s+preguntaba\s+(?:que\s+)?(?:si|cuando|cuanto|cual|como)\b"
+    # "le/les preguntaba" va suelto, sin subordinante: en segunda persona no hay
+    # eco posible —es el paciente preguntándole al agente, nunca al revés— y así
+    # entra también "le preguntaba por lo del acetaminofén".
+    r"|\b(?:le|les)\s+preguntaba\b"
+    r"|(?<!no\s)\b(?:tengo|tenia|me\s+queda|me\s+quedo)\s+"
+    r"(?:una\s+|la\s+|esa\s+|otra\s+|esta\s+)?duda\b"
+    r"|(?<!usted\s)\b(?:quer[ií]a|quisiera|quiero|me\s+gustar[ií]a|necesito)\s+"
+    r"(?:sab|pregunt|consult)\w*\s+(?:le\s+|me\s+)?"
+    r"(?:si|cuando|cuanto|cual|como|donde|algo|una|otra)\b"
+    r"|\b(?:una|otra)\s+pregunt(?:a|ica)\b"
+    # F. pedir permiso para tomarse o aplicarse algo. `_ACTIVIDAD_POSTOP` deja
+    #    estos verbos fuera a propósito (solapan con el vocabulario de los
+    #    slots), así que "Podría tomar acetaminofén" —turno 10 de una llamada
+    #    real, repetido tres veces hasta que el paciente dio con la forma que el
+    #    regex sí reconocía— no lo veía ninguna rama: "podria" no está en la
+    #    lista de arranques de `_PREGUNTA`, y meterlo ahí convertiría en pregunta
+    #    el condicional epistémico ("podría ser el clima", "podría decirse que
+    #    estoy mejor"). Exigir la ACCIÓN concreta detrás es lo que separa las dos
+    #    cosas. Vive aquí y no en `_PREGUNTA` para heredar la guarda de discurso
+    #    referido de `_ANTES_AFIRMATIVO`: "me dijeron que puedo tomar
+    #    acetaminofén" es un reporte, no una consulta.
+    r"|(?<!no\s)(?<!no\sme\s)\b(?:me\s+)?(?:puedo|podria|podre|deberia|debo)\s+"
+    r"(?:ya\s+)?(?:tomar(?:me)?|aplicar(?:me|le)?|usar|poner(?:me|le)?"
+    r"|mojar(?:la|me)?|destapar(?:la|me)?|quitar(?:me)?|despegar(?:la|me)?"
+    r"|echar(?:me|le)?)\b",
     re.I,
 )
 
@@ -251,10 +301,18 @@ _PREGUNTA_SIN_SIGNOS = re.compile(
 # Los "no sé" que sí son respuesta ("no sé cuánto me marcó", "no sé qué decirle")
 # no llevan modal de permiso, así que no casan con la familia D y no hacen falta
 # aquí.
+#
+# La tercera rama cubre el discurso referido cuando el match NO empieza en el
+# "que". La familia D engancha por la palabra _WH —"me dijeron QUE puedo
+# caminar"—, y ahí el texto previo acaba en el verbo de habla; la familia F
+# engancha por el modal, y el texto previo acaba en "que". Sin este alternante,
+# "me dijeron que puedo tomar acetaminofén" pasaría por consulta.
 _ANTES_AFIRMATIVO = re.compile(
     r"\b(dij(?:o|eron)|dicen|dice|explic\w+|recomend\w+|mand\w+|indic\w+"
     r"|sab[ií]a)\s+(?:me\s+)?$"
-    r"|\b(uno\s+)?ya\s+(lo\s+)?(s[eé]\s+)?$",
+    r"|\b(uno\s+)?ya\s+(lo\s+)?(s[eé]\s+)?$"
+    r"|\b(dij(?:o|eron)|dicen|dice|explic\w+|recomend\w+|mand\w+|indic\w+)"
+    r"\s+(?:me\s+)?que\s+$",
     re.I,
 )
 
@@ -327,6 +385,37 @@ def niega_mas_temas(text: str) -> bool:
     if not all(p in _TOKENS_CIERRE for p in palabras):
         return False
     return bool(_TOKENS_CONFORMIDAD.intersection(palabras))
+
+
+# Lo mismo que `_TOKENS_CIERRE` más lo que tampoco propone ningún tema: el "sí"
+# —que en `niega_mas_temas` no está a propósito— y el relleno. Un "sí" pelado a
+# "¿quiere preguntarme algo?" dice que SÍ tiene algo, pero no dice qué, y
+# mandarlo al RAG sería consultar el corpus con la palabra "sí".
+_TOKENS_SIN_TEMA = _TOKENS_CIERRE | {
+    "si", "sip", "sisi", "pues", "eh", "ah", "mm", "mmm", "este", "y", "o", "que",
+}
+
+
+def propone_un_tema(text: str) -> bool:
+    """¿El turno pone algo sobre la mesa, o es puro cierre?
+
+    Es el complemento exacto de `niega_mas_temas`: aquel reconoce el "no tengo
+    nada", este el "sí tengo esto". Fuera de `classify` y por la misma doctrina
+    que `pide_aclaracion`: NO decide solo. El orquestador únicamente lo consulta
+    cuando el agente ACABA de invitar a preguntar —la fase que `script.py` llama
+    `ABIERTO`, "¿algo más que quiera contarme o preguntarme?"—, y ahí la forma
+    sobra: "Podría tomar acetaminofén" y "Lo del acetaminofén" son la misma
+    pregunta, y ninguna de las dos tiene forma de pregunta.
+    """
+    if es_muletilla_pensando(text) or niega_mas_temas(text):
+        return False
+    if contiene_despedida(text):
+        return False
+    palabras = re.findall(r"[a-zñ]+", _norm(text))
+    # Dos palabras es el suelo: "el acetaminofén" propone un tema, "sí" no.
+    if len(palabras) < 2:
+        return False
+    return not all(p in _TOKENS_SIN_TEMA for p in palabras)
 
 
 def contiene_despedida(text: str) -> bool:

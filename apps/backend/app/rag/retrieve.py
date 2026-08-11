@@ -13,6 +13,7 @@ pgvector a Chroma: lo que llama a este módulo no se enteró.
 """
 from __future__ import annotations
 
+import logging
 import unicodedata
 from collections import defaultdict
 
@@ -23,6 +24,8 @@ from ..models import Document
 from ..schemas import RagResult, Source
 from . import store
 from .embeddings import embed_query
+
+log = logging.getLogger(__name__)
 
 _NO_EVIDENCE = (
     "No tengo evidencia suficiente en los documentos para responder eso con "
@@ -101,10 +104,26 @@ def retrieve(
     if not allowed:
         return RagResult(answer=_NO_EVIDENCE, confidence=0.0, sources=[], has_evidence=False)
 
+    # Embeber es la única parte del RAG que sale a la red (Ollama, ADR-011). Si el
+    # demonio no está en pie, `embed_query` lanza `ConnectionError` y sin esta guarda
+    # el turno entero moría con un 500 — un fallo de infraestructura convertido en
+    # error del paciente. La ruta de abstención ya existe para el caso "no hay
+    # evidencia", que es exactamente lo que ocurre aquí: no se recuperó nada. Se
+    # degrada como `extract` y `reply_grounded` en los adaptadores de LLM.
+    try:
+        embedding = embed_query(query)
+    except Exception as exc:  # noqa: BLE001
+        log.warning(
+            "embeddings no disponibles (%s: %s) — se declara sin evidencia. "
+            "¿Está corriendo Ollama en %s?",
+            type(exc).__name__, exc, s.ollama_host,
+        )
+        return RagResult(answer=_NO_EVIDENCE, confidence=0.0, sources=[], has_evidence=False)
+
     # Se sobre-recupera y luego se filtra en código. Es un reordenamiento barato:
     # sin él, el top-k se llena de fragmentos casi idénticos del mismo PDF.
     hits = store.query(
-        embedding=embed_query(query),
+        embedding=embedding,
         n_results=s.rag_fetch_k,
         allowed_document_ids=allowed,
     )

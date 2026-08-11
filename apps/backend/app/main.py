@@ -54,12 +54,44 @@ app.include_router(console.router)
 app.include_router(voice.router)  # señalización WebRTC (Pipecat se importa perezosamente)
 
 
+def _embeddings_vivos() -> bool:
+    """¿Responde Ollama, que es quien embebe las consultas del RAG (ADR-011)?
+
+    Se listan los modelos en vez de embeber de verdad: es la llamada más barata que
+    distingue "el demonio está en pie" de "no hay nadie escuchando", que es el fallo
+    que de verdad ocurre —`ollama pull` no deja el servicio arrancado, y al reiniciar
+    la máquina nada lo vuelve a levantar—.
+    """
+    try:
+        import ollama
+
+        ollama.Client(host=settings.ollama_host, timeout=2).list()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 @app.get("/health")
 def health() -> dict:
+    """Estado real de las dependencias, no un `ok` fijo.
+
+    Antes esto devolvía `status: ok` mirando solo la configuración: con Ollama caído
+    reportaba verde mientras cada pregunta clínica del paciente se iba en 500. Un
+    health que no comprueba nada es peor que no tenerlo, porque desvía el diagnóstico.
+    """
+    embeddings_ok = _embeddings_vivos()
     return {
-        "status": "ok",
+        "status": "ok" if embeddings_ok else "degraded",
         "llm_provider": settings.llm_provider,
         "embedding_model": settings.embedding_model,
+        "embeddings_ready": embeddings_ok,
+        "ollama_host": settings.ollama_host,
+        # Sin embeddings el agente sigue la llamada y hace su tamizaje; lo que pierde
+        # es responder preguntas con evidencia citada (se abstiene y ofrece escalar).
+        "detail": None if embeddings_ok else (
+            "Ollama no responde: el RAG se abstendrá en vez de citar evidencia. "
+            "Arráncalo con `ollama serve &`."
+        ),
     }
 
 

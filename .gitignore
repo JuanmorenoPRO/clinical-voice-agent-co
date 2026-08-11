@@ -31,5 +31,12 @@ data/piper-voices/
 # Logs y metricas
 logs/
 
+# Video del entregable 04: se aloja fuera y en docs/video/ queda el enlace
+docs/video/*.mp4
+docs/video/*.mov
+
+# Informe exportado (la fuente es INFORME.md)
+informe-final.html
+
 # Base de datos generada (se recrea con scripts/init_db.py)
 data/clinical.db*

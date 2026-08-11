@@ -1,8 +1,8 @@
 # Arquitectura y flujo de decisión
 
-Entregable 02 del reto. Cinco secciones: cómo está montado el sistema, qué pasa en
-un turno, cómo conduce el agente la conversación, cómo decide si alerta y cuándo
-se calla porque no sabe.
+Entregable 02 del reto. Una vista de conjunto y cinco secciones de detalle: cómo
+está montado el sistema, qué pasa en un turno, cómo conduce el agente la
+conversación, cómo decide si alerta y cuándo se calla porque no sabe.
 
 **Cada caja lleva el archivo y la función que la implementan.** El README explica
 *por qué* está construido así; esto explica *dónde* está.
@@ -11,6 +11,68 @@ El principio que ordena todo lo que sigue: **el modelo interpreta, el código
 decide.** Ninguna decisión clínica —el nivel de riesgo, la alerta, el guion de
 seguridad, qué se pregunta ahora— pasa por el LLM. El modelo solo hace dos cosas:
 extraer lo que el paciente quiso decir y redactar la frase.
+
+---
+
+## Vista de conjunto
+
+El recorrido completo de una respuesta, desde que el paciente deja de hablar hasta
+que vuelve a oír al agente. Unos **1.400 ms** típicos.
+
+```mermaid
+flowchart TB
+    VOZ(["🎙️ El paciente habla"])
+    STT["<b>Whisper large v3 turbo</b><br/>reconocimiento de voz · Groq"]
+    ENT["<b>Entender</b><br/>léxico colombiano determinista<br/>+ extracción con el LLM si hace falta"]
+    EST[("<b>Estado del paciente</b><br/>síntomas acumulados + guion en curso")]
+    DEC["<b>Motor de decisión</b><br/>reglas puras · verde / amarillo / rojo"]
+    SCR["<b>Guion</b><br/>qué se pregunta ahora"]
+    PREG{"¿el paciente<br/>preguntó algo clínico?"}
+    RAG["<b>RAG</b><br/>corpus clínico + filtros de abstención"]
+    LLM["<b>Llama 3.3 70B</b> · Groq<br/>redacta la frase"]
+    ADU["<b>Aduana determinista</b><br/>sin cifras inventadas,<br/>sin tranquilizar de más"]
+    GS["<b>Guion de seguridad</b><br/>verbatim, sin modelo"]
+    ALE[/"<b>Alerta a enfermería</b><br/>persistida y visible en la consola"/]
+    RESP["<b>Respuesta</b>"]
+    TTS["<b>Piper TTS</b><br/>voz en español, local"]
+    OIR(["🔊 El paciente escucha"])
+
+    VOZ --> STT --> ENT --> EST --> DEC
+    DEC -->|"sigue la llamada"| SCR --> PREG
+    PREG -->|"sí"| RAG --> LLM
+    PREG -->|"no"| LLM
+    LLM --> ADU --> RESP --> TTS --> OIR
+
+    DEC -->|"rojo"| GS --> RESP
+    DEC -->|"rojo o amarillo"| ALE
+
+    classDef det fill:#dbeafe,stroke:#1e40af,color:#0b1220
+    classDef mod fill:#fef3c7,stroke:#92400e,color:#0b1220
+    classDef crit fill:#fee2e2,stroke:#991b1b,color:#0b1220
+    class DEC,SCR,ADU,PREG det
+    class STT,LLM,RAG mod
+    class GS,ALE crit
+```
+
+<sub>Azul: determinista, el código decide. Ámbar: el modelo. Rojo: la ruta de escalamiento.</sub>
+
+El **estado del paciente** es acumulativo y vive en la base de datos, no en el
+contexto del modelo: cada turno añade lo que se entendió y nada lo baja de nivel.
+Por eso el ciclo vuelve a empezar arriba con todo lo que ya se sabía.
+
+Tres cosas que este dibujo ya dice, y que el resto del documento solo detalla:
+
+- **El motor de decisión va antes que el guion y antes del modelo.** Si el cuadro
+  es rojo, la respuesta es un guion verbatim y la alerta ya está creada: esa rama
+  no toca el LLM ni el RAG, así que ni un modelo caído ni uno manipulado pueden
+  suprimir un escalamiento.
+- **El RAG solo se consulta si el paciente preguntó algo clínico** — de media,
+  0,50 consultas por llamada al modelo. El resto del tiempo el agente está
+  preguntando, no respondiendo.
+- **Nada de lo que redacta el modelo sale sin pasar por la aduana**, que es código
+  y no otro modelo.
+
+Cada pieza, con su archivo y su función, en las cinco secciones que siguen.
 
 ---
 

@@ -135,18 +135,36 @@ class GroqAdapter:
         self._reply_timeout = s.llm_reply_timeout_s
         self._compose_timeout = s.llm_compose_timeout_s
         self._api_key = s.groq_api_key
-        self._clients: dict[int, AsyncGroq] = {}
+        # Se guarda el loop junto al cliente, no solo su `id()`: ver `_client`.
+        self._clients: dict[int, tuple[AsyncGroq, object]] = {}
 
     @property
     def _client(self) -> AsyncGroq:
-        """Un cliente por event loop (httpx se liga al loop de creación)."""
+        """Un cliente por event loop (httpx se liga al loop de creación).
+
+        La clave es `id(loop)`, y **CPython recicla los `id()`**: cuando un loop
+        se cierra y se recolecta, el siguiente puede recibir la misma dirección.
+        Cacheando solo por el número, se devolvía un cliente atado a un loop ya
+        muerto y la petición se colgaba hasta agotar el timeout — degradada, sin
+        error visible.
+
+        No es teórico: `process_turn` llama a `asyncio.run` por turno, así que
+        `scripts/run_dataset_eval.py` abre un loop por turno del paciente. Con
+        el bug, ~3 de cada 5 extracciones del dataset expiraban a los 2,5 s y se
+        resolvían solo con el léxico, hundiendo la exactitud medida de la cadena
+        completa. En producción no se veía: uvicorn tiene un único loop vivo.
+
+        Por eso se compara la identidad del objeto, no el número.
+        """
         try:
-            key = id(asyncio.get_running_loop())
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            key = 0
-        if key not in self._clients:
-            self._clients[key] = AsyncGroq(api_key=self._api_key)
-        return self._clients[key]
+            loop = None
+        key = id(loop)
+        cacheado = self._clients.get(key)
+        if cacheado is None or cacheado[1] is not loop:
+            self._clients[key] = (AsyncGroq(api_key=self._api_key), loop)
+        return self._clients[key][0]
 
     async def _chat(
         self,

@@ -525,7 +525,7 @@ def acuse(semilla: str, usadas: list[str] | None = None, *, preocupante: bool = 
 _REFLEJO_DOLOR: tuple[tuple[int, str], ...] = (
     (0, "Cero, entonces: sin dolor."),
     (2, "Un {n}, bastante llevadero."),
-    (5, "Un {n}, mas o menos"),
+    (5, "Un {n}, más o menos."),
     (7, "Un {n}, un dolor un poco fuerte."),
     (10, "Un {n}, es un dolor fuerte."),
 )

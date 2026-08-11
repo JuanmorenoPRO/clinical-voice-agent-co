@@ -410,6 +410,15 @@ _APETITO: list[tuple[str, re.Pattern[str]]] = [
             r"|no\s+tanto\s+como\s+antes|se\s+me\s+bajo\s+(un\s+poco\s+)?el\s+(hambre|apetito)"
             r"|a\s+ratos\s+me\s+provoca|apetito\s+.{0,14}(bajo|bajito|flojo|regular)"
             r"|no\s+me\s+provoca\s+much|como\s+por\s+obligacion|con\s+desgano"
+            # Comer menos sin decir "menos": la cantidad ("porciones pequeñas"),
+            # el tipo ("he comido suave") y el atenuador ("más bien poco"). Las
+            # tres salieron de turnos reales del dataset y ninguna matcheaba.
+            # Van a leve, no a muy_disminuido: solo `muy_disminuido` cuenta como
+            # señal amarilla (ver decision/rules.py::yellow_signals), así que
+            # esto resuelve el slot sin mover el riesgo — que es exactamente lo
+            # que hace falta, porque un slot sin responder sí lo mueve al cerrar.
+            r"|porcion\w*\s+(muy\s+)?(pequen|chiquit)\w+"
+            r"|com(o|ido|iendo)\s+suave|mas\s+bien\s+poc\w*"
         ),
     ),
     (
@@ -551,7 +560,13 @@ _CORTAS: dict[str, list[tuple[str, re.Pattern[str]]]] = {
         ),
         (
             "levemente_disminuido",
-            re.compile(r"picote\w+|^\W*(poquit|poc)\w*\b|a\s+ratos|regular"),
+            re.compile(r"picote\w+|^\W*(poquit|poc)\w*\b|a\s+ratos|regular"
+                       # La repregunta ("¿ha comido normal, o menos de lo
+                       # habitual?") invita a contestar con la cantidad o con el
+                       # tipo de comida, no con la palabra "menos".
+                       r"|porcion\w*\s+(muy\s+)?(pequen|chiquit)\w+"
+                       r"|com(o|ido|iendo)\s+suave|^\W*suave\b"
+                       r"|mas\s+bien\s+poc\w*"),
         ),
         (
             "normal",
